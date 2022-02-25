@@ -303,7 +303,7 @@ def main():
                     show_dir = osp.join(show_dir, corruption)
                     show_dir = osp.join(show_dir, str(corruption_severity))
                     if not osp.exists(show_dir):
-                        osp.makedirs(show_dir)
+                        os.makedirs(show_dir)
                 outputs = single_gpu_test(model, data_loader, args.show,
                                           show_dir, args.show_score_thr)
             else:
