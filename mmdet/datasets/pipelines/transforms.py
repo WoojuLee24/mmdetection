@@ -12,6 +12,7 @@ from numpy import random
 from mmdet.core import PolygonMasks, find_inside_bboxes
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 from ..builder import PIPELINES
+import pdb
 
 try:
     from imagecorruptions import corrupt
@@ -2735,4 +2736,70 @@ class YOLOXHSVRandomAug:
         repr_str += f'(hue_delta={self.hue_delta}, '
         repr_str += f'saturation_delta={self.saturation_delta}, '
         repr_str += f'value_delta={self.value_delta})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class UniformNoise:
+    """Apply uniform noise to image. It is referenced from
+
+    Args:
+        low (float)
+        high (float)
+    """
+
+    def __init__(self, low=0.0, high=0.01):
+        self.low = low
+        self.high = high
+
+    def __call__(self, results):
+        img = results['img']
+        ori_img = img
+        unoise = np.random.uniform(low=self.low, high=self.high, size=np.shape(img))
+        n_img = img / 255.
+        n_u_img = n_img + unoise
+        img = np.clip(n_u_img, 0, 1) * 255
+        results['img'] = img
+        # pdb.set_trace()
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(hue_delta={self.low}, '
+        repr_str += f'saturation_delta={self.high}, '
+        return repr_str
+
+
+@PIPELINES.register_module()
+class GaussianNoise:
+    """Apply uniform noise to image. It is referenced from
+
+    Args:
+        mean (float): mu
+        scale (float): sigma
+    """
+
+    def __init__(self, mean=0.0, scale=0.08, prob=0.5):
+        self.mean = mean
+        self.scale = scale
+        self.prob = prob
+
+    def __call__(self, results):
+        img = results['img']
+
+        x = random.random()
+        if x < self.prob:
+            gnoise = np.random.normal(loc=self.mean, scale=self.scale, size=np.shape(img))
+            n_img = img / 255.
+            n_u_img = n_img + gnoise
+            img = np.clip(n_u_img, 0, 1) * 255
+
+        results['img'] = img
+        # pdb.set_trace()
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(hue_delta={self.low}, '
+        repr_str += f'saturation_delta={self.high}, '
         return repr_str
