@@ -173,9 +173,30 @@ class AugMix:
         self.aug_prob_coeff = 1.
         self.aug_severity = 1
 
+        self.no_jsd = no_jsd
+
 
     def __call__(self, results):
 
+        if self.no_jsd:
+            return self.aug(results)
+        else:
+            results_2 = self.aug(results)
+            results['img2'] = results_2['img']
+            results_3 = self.aug(results)
+            results['img3'] = results_3['img']
+            results['img_fields'] = ['img', 'img2', 'img3']
+            # for key in results.get('img_fields', ['img']):
+            #     print("key: ", key)
+            return results
+        # return self.aug(results)
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(mean={self.mean}, std={self.std}, to_rgb={self.to_rgb})'
+        return repr_str
+
+    def aug(self, results):
         ws = np.float32(
             np.random.dirichlet([self.aug_prob_coeff] * self.mixture_width))
         m = np.float32(np.random.beta(self.aug_prob_coeff, self.aug_prob_coeff))
@@ -201,11 +222,6 @@ class AugMix:
             mean=self.mean, std=self.std, to_rgb=self.to_rgb)
 
         return results
-
-    def __repr__(self):
-        repr_str = self.__class__.__name__
-        repr_str += f'(mean={self.mean}, std={self.std}, to_rgb={self.to_rgb})'
-        return repr_str
 
 # """
 # augmix with mmdetection
