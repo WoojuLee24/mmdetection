@@ -1,6 +1,7 @@
 # dataset settings
 dataset_type = 'CityscapesDataset'
 data_root = '/ws/data/cityscapes/'
+custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix'], allow_failed_imports=False)
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -9,10 +10,12 @@ train_pipeline = [
     dict(
         type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
+    ###Insert AugMix###
+    dict(type='AugMix', no_jsd=False, **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+    dict(type='Collect', keys=['img', 'img2', 'img3', 'gt_bboxes', 'gt_labels']),
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -50,7 +53,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         ann_file=data_root +
-        'annotations/instancesonly_filtered_gtFine_val.json',
+                 'annotations/instancesonly_filtered_gtFine_val.json',
         img_prefix=data_root + 'leftImg8bit/val/',
         pipeline=test_pipeline))
     # test=dict(
