@@ -1,5 +1,6 @@
 _base_ = [
-    '../_base_/models/faster_rcnn_r50_fpn.py',
+    # '../_base_/models/faster_rcnn_r50_fpn.py',
+'../_base_/models/faster_rcnn_r50_fpn_augmix.py',
     '../_base_/datasets/cityscapes_detection_augmix.py',
     '../_base_/default_runtime.py'
 ]

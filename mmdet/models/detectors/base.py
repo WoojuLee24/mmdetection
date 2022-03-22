@@ -11,6 +11,16 @@ from mmcv.runner import BaseModule, auto_fp16
 
 from mmdet.core.visualization import imshow_det_bboxes
 
+# added by dshong from here.
+class SaveOutput:
+    def __init__(self):
+        self.outputs = []
+    def __call__(self, module, module_in, module_out):
+        self.outputs.append(module_out)
+    def clear(self):
+        self.outputs = []
+# added by dshong to here.
+
 
 class BaseDetector(BaseModule, metaclass=ABCMeta):
     """Base class for detectors."""
@@ -155,7 +165,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             assert 'proposals' not in kwargs
             return self.aug_test(imgs, img_metas, **kwargs)
 
-    @auto_fp16(apply_to=('img', ))
+    @auto_fp16(apply_to=('img',))
     def forward(self, img, img_metas, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
@@ -233,19 +243,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return data
 
-    def compute_jsd_loss(self, layer_name):
-        # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
-        logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name], 3)
-        p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2,
-                                                                                                           dim=1)
-        # Clamp mixture distribution to avoid exploding KL divergence
-        p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-        jsd_loss = 12 * (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                         F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                         F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-        return jsd_loss
-
     def train_step(self, data, optimizer):
         """The iteration step during training.
 
@@ -275,38 +272,23 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         if 'img2' in list(data.keys()):
             # forward original image
-            losses = self(**data)
+            # losses = self(**data) # removed by dshong
 
             # concatenate the original image and augmix images.
             data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
             data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
             data['gt_labels'] += data['gt_labels'] + data['gt_labels']
             data['img_metas'] += data['img_metas'] + data['img_metas']
-            # hook the feature maps
-            self.hook_layer("rpn_head.rpn_reg")
-            self.hook_layer("rpn_head.rpn_cls")
-            self.hook_layer("roi_head.bbox_head.fc_cls")
-            self.hook_layer("roi_head.bbox_head.fc_reg")
 
-            _ = self(**data)
-
-            jsd_loss1 = self.compute_jsd_loss("rpn_head.rpn_reg")
-            jsd_loss2 = self.compute_jsd_loss("rpn_head.rpn_cls")
-            jsd_loss3 = self.compute_jsd_loss("roi_head.bbox_head.fc_cls")
-            jsd_loss4 = self.compute_jsd_loss("roi_head.bbox_head.fc_reg")
-
-            # parsing losses
+            losses = self(**data)
             loss, log_vars = self._parse_losses(losses)
-            loss += jsd_loss1 + jsd_loss2 + jsd_loss3 + jsd_loss4
-            outputs = dict(
-                loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         else:
             losses = self(**data)
             loss, log_vars = self._parse_losses(losses)
 
-            outputs = dict(
-                loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         return outputs
 
@@ -325,7 +307,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return outputs
 
-
     def hook_layer(self, selected_layer):
         def hook_function(module, grad_in, grad_out):
             # Gets output of the selected layer
@@ -333,6 +314,13 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         # Hook the selected layer
         for n, m in self.named_modules():
+            # added by dshong from here.
+            if n == str('rpn_head'):
+                mymyRPNHead = n
+            if n == str('roi_head'):
+                mymyStandardRoIHead = n
+            # added by dshong to here.
+
             if n == str(selected_layer):
                 m.register_forward_hook(hook_function)
         # self.rpn_reg_output = self._modules['rpn_head']._modules['rpn_reg']
@@ -347,7 +335,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         # for n, m in self.named_modules:
         #     if n == str(selected_layer):
         #         m.register_forward_hook(hook_function)
-
 
     def show_result(self,
                     img,
