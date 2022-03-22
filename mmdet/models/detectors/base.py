@@ -6,6 +6,7 @@ import mmcv
 import numpy as np
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from mmcv.runner import BaseModule, auto_fp16
 
 from mmdet.core.visualization import imshow_det_bboxes
@@ -17,6 +18,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
     def __init__(self, init_cfg=None):
         super(BaseDetector, self).__init__(init_cfg)
         self.fp16_enabled = False
+        self.features = dict()
 
     @property
     def with_neck(self):
@@ -218,6 +220,19 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return loss, log_vars
 
+    def prepare_for_augmix(self, data):
+        data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
+        data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
+        data['gt_labels'] += data['gt_labels'] + data['gt_labels']
+        data['img_metas'] += data['img_metas'] + data['img_metas']
+        # hook the feature maps
+        self.hook_layer("rpn_head.rpn_reg")
+        self.hook_layer("rpn_head.rpn_cls")
+        self.hook_layer("roi_head.bbox_head.fc_cls")
+        self.hook_layer("roi_head.bbox_head.fc_reg")
+
+        return data
+
     def train_step(self, data, optimizer):
         """The iteration step during training.
 
@@ -245,11 +260,22 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   DDP, it means the batch size on each GPU), which is used for
                   averaging the logs.
         """
-        # if 'img2' in list(data.keys()):
-        #     data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
+        if 'img2' in list(data.keys()):
+            # forward original image
+            # losses = self(**data) # removed by dshong
 
-        losses = self(**data)
-        loss, log_vars = self._parse_losses(losses)
+            # concatenate the original image and augmix images.
+            data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
+            data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
+            data['gt_labels'] += data['gt_labels'] + data['gt_labels']
+            data['img_metas'] += data['img_metas'] + data['img_metas']
+
+            losses = self(**data)
+            loss, log_vars = self._parse_losses(losses)
+
+        else:
+            losses = self(**data)
+            loss, log_vars = self._parse_losses(losses)
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
@@ -270,6 +296,28 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         return outputs
+
+    def hook_layer(self, selected_layer):
+        def hook_function(module, grad_in, grad_out):
+            # Gets output of the selected layer
+            self.features[selected_layer] = grad_out
+
+        # Hook the selected layer
+        for n, m in self.named_modules():
+            if n == str(selected_layer):
+                m.register_forward_hook(hook_function)
+        # self.rpn_reg_output = self._modules['rpn_head']._modules['rpn_reg']
+        # self.rpn_reg_output.register_forward_hook(hook_function)
+        # self.rpn_cls_output = self._modules['rpn_head']._modules['rpn_cls']
+        # self.rpn_cls_output.register_forward_hook(hook_function)
+
+        # b = a.get('rpn_reg')
+        # c = self._modules.get('rpn_reg')
+
+        # m.register_forward_hook(hook_function)
+        # for n, m in self.named_modules:
+        #     if n == str(selected_layer):
+        #         m.register_forward_hook(hook_function)
 
     def show_result(self,
                     img,
