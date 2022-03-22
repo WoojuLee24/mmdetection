@@ -11,16 +11,6 @@ from mmcv.runner import BaseModule, auto_fp16
 
 from mmdet.core.visualization import imshow_det_bboxes
 
-# added by dshong from here.
-class SaveOutput:
-    def __init__(self):
-        self.outputs = []
-    def __call__(self, module, module_in, module_out):
-        self.outputs.append(module_out)
-    def clear(self):
-        self.outputs = []
-# added by dshong to here.
-
 
 class BaseDetector(BaseModule, metaclass=ABCMeta):
     """Base class for detectors."""
@@ -165,7 +155,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             assert 'proposals' not in kwargs
             return self.aug_test(imgs, img_metas, **kwargs)
 
-    @auto_fp16(apply_to=('img',))
+    @auto_fp16(apply_to=('img', ))
     def forward(self, img, img_metas, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
@@ -314,13 +304,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         # Hook the selected layer
         for n, m in self.named_modules():
-            # added by dshong from here.
-            if n == str('rpn_head'):
-                mymyRPNHead = n
-            if n == str('roi_head'):
-                mymyStandardRoIHead = n
-            # added by dshong to here.
-
             if n == str(selected_layer):
                 m.register_forward_hook(hook_function)
         # self.rpn_reg_output = self._modules['rpn_head']._modules['rpn_reg']
