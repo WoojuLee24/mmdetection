@@ -295,7 +295,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             self.hook_multi_layer(layer_list)
 
             losses = self(**data)
+            jsd_loss = self.compute_jsd_loss(layer_list)
             loss, log_vars = self._parse_losses(losses)
+            loss += jsd_loss
+            log_vars['jsd_loss'] = jsd_loss
 
         else:
             losses = self(**data)
