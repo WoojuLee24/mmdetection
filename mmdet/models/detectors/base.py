@@ -290,12 +290,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             data['img_metas'] += data['img_metas'] + data['img_metas']
 
             # hook layer
-            layer_list = ["rpn_head.rpn_reg", "rpn_head.rpn_cls",
-                          "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]
-            self.hook_multi_layer(layer_list)
+            self.hook_multi_layer(self.train_cfg.augmix.layer_list)
 
             losses = self(**data)
-            jsd_loss = self.compute_jsd_loss(layer_list)
+            jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list)
             loss, log_vars = self._parse_losses(losses)
             loss += jsd_loss
             log_vars['jsd_loss'] = jsd_loss.item()

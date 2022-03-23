@@ -94,7 +94,12 @@ model = dict(
                 neg_pos_ub=-1,
                 add_gt_as_proposals=True),
             pos_weight=-1,
-            debug=False)),
+            debug=False),
+        augmix=dict(
+            layer_list=["rpn_head.rpn_reg",
+                        "rpn_head.rpn_cls",
+                        "roi_head.bbox_head.fc_cls",
+                        "roi_head.bbox_head.fc_reg"])),
     test_cfg=dict(
         rpn=dict(
             nms_pre=1000,
