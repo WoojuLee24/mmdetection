@@ -22,7 +22,7 @@ def smooth_l1_loss_augmix(pred, target, beta=1.0):
     Returns:
         torch.Tensor: Calculated loss
     """
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    pred_orig, _, _ = torch.chunk(pred, 3)
     target, _, _ = torch.chunk(target,3)
 
     assert beta > 0
@@ -34,15 +34,7 @@ def smooth_l1_loss_augmix(pred, target, beta=1.0):
     loss_orig = torch.where(diff < beta, 0.5 * diff * diff / beta,
                        diff - 0.5 * beta)
 
-    p_orig = F.softmax(pred_orig, dim=1)
-    p_aug1 = F.softmax(pred_aug1, dim=1)
-    p_aug2 = F.softmax(pred_aug2, dim=1)
-    p_mixture = torch.clamp((p_orig + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss_aug = (F.kl_div(p_mixture, p_orig, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-    return loss_orig, loss_aug
+    return loss_orig
 
 
 @mmcv.jit(derivate=True, coderize=True)
@@ -57,7 +49,7 @@ def l1_loss_augmix(pred, target):
     Returns:
         torch.Tensor: Calculated loss
     """
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    pred_orig, _, _ = torch.chunk(pred, 3)
     target, _, _ = torch.chunk(target, 3)
 
     if target.numel() == 0:
@@ -66,15 +58,7 @@ def l1_loss_augmix(pred, target):
     assert pred_orig.size() == target.size()
     loss_orig = torch.abs(pred_orig - target)
 
-    p_orig = F.softmax(pred_orig, dim=1)
-    p_aug1 = F.softmax(pred_aug1, dim=1)
-    p_aug2 = F.softmax(pred_aug2, dim=1)
-    p_mixture = torch.clamp((p_orig + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss_aug = (F.kl_div(p_mixture, p_orig, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-    return loss_orig, loss_aug
+    return loss_orig
 
 
 @LOSSES.register_module()

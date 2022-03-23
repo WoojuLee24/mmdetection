@@ -220,18 +220,40 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return loss, log_vars
 
-    def prepare_for_augmix(self, data):
-        data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
-        data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
-        data['gt_labels'] += data['gt_labels'] + data['gt_labels']
-        data['img_metas'] += data['img_metas'] + data['img_metas']
-        # hook the feature maps
-        self.hook_layer("rpn_head.rpn_reg")
-        self.hook_layer("rpn_head.rpn_cls")
-        self.hook_layer("roi_head.bbox_head.fc_cls")
-        self.hook_layer("roi_head.bbox_head.fc_reg")
+    def hook_multi_layer(self, layer_list):
+        for layer_name in layer_list:
+            self.hook_layer(layer_name)
 
-        return data
+    def hook_layer(self, selected_layer):
+        def hook_function(module, grad_in, grad_out):
+            # Gets output of the selected layer
+            self.features[selected_layer] = grad_out
+
+        # Hook the selected layer
+        for n, m in self.named_modules():
+            if n == str(selected_layer):
+                m.register_forward_hook(hook_function)
+
+        # # Hook the selected layer
+        # for n, m in self.named_modules():
+        #     if n in selected_layer:
+        #         m.register_forward_hook(hook_function)
+
+    def compute_jsd_loss(self, layer_list):
+        # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
+        jsd_loss = 0
+        for layer_name in layer_list:
+            logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name], 3)
+            p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2,
+                                                                                                               dim=1)
+            # Clamp mixture distribution to avoid exploding KL divergence
+            p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
+            jsd_loss += (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
+                         F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+                         F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+
+        return jsd_loss
+
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -261,14 +283,16 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   averaging the logs.
         """
         if 'img2' in list(data.keys()):
-            # forward original image
-            # losses = self(**data) # removed by dshong
-
             # concatenate the original image and augmix images.
             data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
             data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
             data['gt_labels'] += data['gt_labels'] + data['gt_labels']
             data['img_metas'] += data['img_metas'] + data['img_metas']
+
+            # hook layer
+            layer_list = ["rpn_head.rpn_reg", "rpn_head.rpn_cls",
+                          "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]
+            self.hook_multi_layer(layer_list)
 
             losses = self(**data)
             loss, log_vars = self._parse_losses(losses)
@@ -296,28 +320,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         return outputs
-
-    def hook_layer(self, selected_layer):
-        def hook_function(module, grad_in, grad_out):
-            # Gets output of the selected layer
-            self.features[selected_layer] = grad_out
-
-        # Hook the selected layer
-        for n, m in self.named_modules():
-            if n == str(selected_layer):
-                m.register_forward_hook(hook_function)
-        # self.rpn_reg_output = self._modules['rpn_head']._modules['rpn_reg']
-        # self.rpn_reg_output.register_forward_hook(hook_function)
-        # self.rpn_cls_output = self._modules['rpn_head']._modules['rpn_cls']
-        # self.rpn_cls_output.register_forward_hook(hook_function)
-
-        # b = a.get('rpn_reg')
-        # c = self._modules.get('rpn_reg')
-
-        # m.register_forward_hook(hook_function)
-        # for n, m in self.named_modules:
-        #     if n == str(selected_layer):
-        #         m.register_forward_hook(hook_function)
 
     def show_result(self,
                     img,

@@ -34,7 +34,7 @@ def cross_entropy_augmix(pred,
     # The default value of ignore_index is the same as F.cross_entropy
     ignore_index = -100 if ignore_index is None else ignore_index
 
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    pred_orig, _, _ = torch.chunk(pred, 3)
     label, _, _ = torch.chunk(label, 3)
 
     loss_orig = F.cross_entropy(
@@ -44,24 +44,14 @@ def cross_entropy_augmix(pred,
         reduction='none',
         ignore_index=ignore_index)
 
-    p_orig = F.softmax(pred_orig, dim=1)
-    p_aug1 = F.softmax(pred_aug1, dim=1)
-    p_aug2 = F.softmax(pred_aug2, dim=1)
-    p_mixture = torch.clamp((p_orig + p_aug1 + p_aug2)/3., 1e-7, 1).log()
-    loss_aug = (F.kl_div(p_mixture, p_orig, reduction='batchmean')+
-                 F.kl_div(p_mixture, p_aug1, reduction='batchmean')+
-                 F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
     # apply weights and do the reduction
     weight, _, _ = torch.chunk(weight, 3)
     if weight is not None:
         weight = weight.float()
     loss_orig = weight_reduce_loss(
         loss_orig, weight=weight, reduction=reduction, avg_factor=avg_factor)
-    loss_aug = weight_reduce_loss(
-        loss_aug, weight=weight, reduction=reduction, avg_factor=avg_factor)
 
-    return loss_orig + loss_aug
+    return loss_orig
 
 
 def _expand_onehot_labels(labels, label_weights, label_channels, ignore_index):
@@ -120,27 +110,17 @@ def binary_cross_entropy_augmix(pred,
     if weight is not None:
         weight = weight.float()
 
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    pred_orig, _, _ = torch.chunk(pred, 3)
     label, _, _ = torch.chunk(label, 3)
 
     loss_orig = F.binary_cross_entropy_with_logits(
         pred_orig, label.float(), pos_weight=class_weight, reduction='none')
 
-    p_orig = F.softmax(pred_orig, dim=1)
-    p_aug1 = F.softmax(pred_aug1, dim=1)
-    p_aug2 = F.softmax(pred_aug2, dim=1)
-    p_mixture = torch.clamp((p_orig + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss_aug = (F.kl_div(p_mixture, p_orig, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
     # do the reduction for the weighted loss
     loss_orig = weight_reduce_loss(
         loss_orig, weight, reduction=reduction, avg_factor=avg_factor)
-    loss_aug = weight_reduce_loss(
-        loss_aug, weight, reduction=reduction, avg_factor=avg_factor)
 
-    return loss_orig + loss_aug
+    return loss_orig
 
 
 def mask_cross_entropy_augmix(pred,
@@ -191,21 +171,13 @@ def mask_cross_entropy_augmix(pred,
     inds = torch.arange(0, num_rois, dtype=torch.long, device=pred.device)
     pred_slice = pred[inds, label].squeeze(1)
 
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred_slice, 3)
+    pred_orig, _, _ = torch.chunk(pred_slice, 3)
     label, _, _ = torch.chunk(label, 3)
 
     loss_orig = F.binary_cross_entropy_with_logits(
         pred_orig, target, weight=class_weight, reduction='mean')[None]
 
-    p_orig = F.softmax(pred_orig, dim=1)
-    p_aug1 = F.softmax(pred_aug1, dim=1)
-    p_aug2 = F.softmax(pred_aug2, dim=1)
-    p_mixture = torch.clamp((p_orig + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss_aug = (F.kl_div(p_mixture, p_orig, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-    return loss_orig + loss_aug
+    return loss_orig
 
 
 @LOSSES.register_module()
