@@ -298,7 +298,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             jsd_loss = self.compute_jsd_loss(layer_list)
             loss, log_vars = self._parse_losses(losses)
             loss += jsd_loss
-            log_vars['jsd_loss'] = jsd_loss
+            log_vars['jsd_loss'] = jsd_loss.item()
 
         else:
             losses = self(**data)
