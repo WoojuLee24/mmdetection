@@ -78,7 +78,7 @@ def l1_loss_augmix(pred, target):
 
 
 @LOSSES.register_module()
-class SmoothL1LossAugmix(nn.Module):
+class SmoothL1LossAugMix(nn.Module):
     """Smooth L1 loss.
 
     Args:
@@ -90,7 +90,7 @@ class SmoothL1LossAugmix(nn.Module):
     """
 
     def __init__(self, beta=1.0, reduction='mean', loss_weight=1.0):
-        super(SmoothL1LossAugmix, self).__init__()
+        super(SmoothL1LossAugMix, self).__init__()
         self.beta = beta
         self.reduction = reduction
         self.loss_weight = loss_weight
