@@ -1,6 +1,6 @@
 _base_ = [
     # '../_base_/models/faster_rcnn_r50_fpn.py',
-'../_base_/models/faster_rcnn_r50_fpn_augmix.py',
+    '../_base_/models/faster_rcnn_r50_fpn_augmix.py',
     '../_base_/datasets/cityscapes_detection_augmix.py',
     '../_base_/default_runtime.py'
 ]
@@ -19,8 +19,8 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))))
+                type='CrossEntropyLossAugMix', use_sigmoid=False, loss_weight=1.0),
+            loss_bbox=dict(type='SmoothL1LossAugMix', beta=1.0, loss_weight=1.0))))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)

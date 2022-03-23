@@ -19,6 +19,10 @@ from .smooth_l1_loss import L1Loss, SmoothL1Loss, l1_loss, smooth_l1_loss
 from .utils import reduce_loss, weight_reduce_loss, weighted_loss
 from .varifocal_loss import VarifocalLoss
 
+from .cross_entropy_loss_augmix import (CrossEntropyLossAugMix, binary_cross_entropy_augmix,
+                                 cross_entropy_augmix, mask_cross_entropy_augmix)
+from .smooth_l1_loss_augmix import smooth_l1_loss_augmix, l1_loss_augmix, SmoothL1LossAugMix, L1LossAugMix
+
 __all__ = [
     'accuracy', 'Accuracy', 'cross_entropy', 'binary_cross_entropy',
     'mask_cross_entropy', 'CrossEntropyLoss', 'sigmoid_focal_loss',
@@ -28,5 +32,7 @@ __all__ = [
     'GHMR', 'reduce_loss', 'weight_reduce_loss', 'weighted_loss', 'L1Loss',
     'l1_loss', 'isr_p', 'carl_loss', 'AssociativeEmbeddingLoss',
     'GaussianFocalLoss', 'QualityFocalLoss', 'DistributionFocalLoss',
-    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss', 'DiceLoss'
+    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss', 'DiceLoss',
+    'CrossEntropyLossAugMix', 'binary_cross_entropy_augmix', 'cross_entropy_augmix', 'mask_cross_entropy_augmix',
+    'smooth_l1_loss_augmix', 'l1_loss_augmix', 'SmoothL1LossAugMix', 'L1LossAugMix'
 ]
