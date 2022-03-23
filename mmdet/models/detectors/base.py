@@ -251,6 +251,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             jsd_loss += (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
                          F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
                          F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+            jsd_loss = torch.clamp(jsd_loss, 0)
 
         return jsd_loss
 
