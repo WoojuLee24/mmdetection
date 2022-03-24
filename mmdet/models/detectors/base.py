@@ -239,13 +239,19 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         #     if n in selected_layer:
         #         m.register_forward_hook(hook_function)
 
-    def compute_jsd_loss(self, layer_list):
+    def compute_jsd_loss(self, layer_list, batch_size):
         # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
         jsd_loss = 0
         for layer_name in layer_list:
             logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name], 3)
-            p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2,
-                                                                                                               dim=1)
+            p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2, dim=1)
+
+            # expand dim of roi_head.bbox_head.fc_cls and fc_reg
+            if len(p_clean.size()) == 2:
+                p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, 512, p_clean.size()[-1]),\
+                                          p_aug1.reshape(batch_size, 512, p_aug1.size()[-1]),\
+                                          p_aug2.reshape(batch_size, 512, p_aug2.size()[-1])
+
             # Clamp mixture distribution to avoid exploding KL divergence
             p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
             jsd_loss += (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
@@ -285,6 +291,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         if 'img2' in list(data.keys()):
             # concatenate the original image and augmix images.
+            batch_size = data['img'].size()[0]
             data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
             data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
             data['gt_labels'] += data['gt_labels'] + data['gt_labels']
@@ -294,7 +301,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             self.hook_multi_layer(self.train_cfg.augmix.layer_list)
 
             losses = self(**data)
-            jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list)
+            jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
             loss, log_vars = self._parse_losses(losses)
             loss += jsd_loss
             log_vars['jsd_loss'] = jsd_loss.item()
