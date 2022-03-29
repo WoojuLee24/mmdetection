@@ -11,6 +11,7 @@ from mmcv.runner import BaseModule, auto_fp16
 
 from mmdet.core.visualization import imshow_det_bboxes
 
+import wandb
 
 class BaseDetector(BaseModule, metaclass=ABCMeta):
     """Base class for detectors."""
@@ -257,8 +258,13 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             jsd_loss += (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
                          F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
                          F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+            wandb.log({"p_clean(" + layer_name + ")": p_clean})
+            wandb.log({"p_aug1(" + layer_name + ")": p_aug1})
+            wandb.log({"p_aug2(" + layer_name + ")": p_aug2})
+            wandb.log({"p_mixture(" + layer_name + ")": p_mixture})
+            wandb.log({"jsd_loss(" + layer_name + ")": jsd_loss})
             jsd_loss = torch.clamp(jsd_loss, 0)
-
+        wandb.log({"jsd_loss": jsd_loss})
         return jsd_loss
 
 
@@ -303,12 +309,16 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             losses = self(**data)
             jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
             loss, log_vars = self._parse_losses(losses)
+            for name, value in log_vars.items():
+                wandb.log({name: np.mean(value)})
             loss += jsd_loss
             log_vars['jsd_loss'] = jsd_loss.item()
 
         else:
             losses = self(**data)
             loss, log_vars = self._parse_losses(losses)
+            for name, value in log_vars.items():
+                wandb.log({name: np.mean(value)})
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
