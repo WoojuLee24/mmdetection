@@ -99,7 +99,11 @@ model = dict(
             layer_list=["rpn_head.rpn_reg",
                         "rpn_head.rpn_cls",
                         "roi_head.bbox_head.fc_cls",
-                        "roi_head.bbox_head.fc_reg"])),
+                        "roi_head.bbox_head.fc_reg",
+                        "neck.fpn_convs.0.conv",
+                        "neck.fpn_convs.1.conv",
+                        "neck.fpn_convs.2.conv",
+                        "neck.fpn_convs.3.conv"])),
     test_cfg=dict(
         rpn=dict(
             nms_pre=1000,

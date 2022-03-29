@@ -1,6 +1,6 @@
 _base_ = [
     # '../_base_/models/faster_rcnn_r50_fpn.py',
-    '../_base_/models/faster_rcnn_r50_fpn_augmix.py',
+    '../_base_/models/faster_rcnn_r50_fpn_augmix_jsdfpn.py',
     '../_base_/datasets/cityscapes_detection_augmix.py',
     '../_base_/default_runtime.py'
 ]
@@ -37,4 +37,4 @@ runner = dict(
     type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
 log_config = dict(interval=100)
 # For better, more stable performance initialize from COCO
-# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
