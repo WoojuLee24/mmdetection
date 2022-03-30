@@ -22,8 +22,7 @@ def smooth_l1_loss_augmix(pred, target, beta=1.0):
     Returns:
         torch.Tensor: Calculated loss
     """
-    pred_orig, _, _ = torch.chunk(pred, 3)
-    target, _, _ = torch.chunk(target,3)
+    pred_orig = pred
 
     assert beta > 0
     if target.numel() == 0:

@@ -143,7 +143,6 @@ def weighted_loss2(loss_func):
                 **kwargs):
         # get element-wise loss
         loss_orig = loss_func(pred, target, **kwargs)
-        weight, _, _ = torch.chunk(weight, 3)
         loss_orig = weight_reduce_loss(loss_orig, weight, reduction, avg_factor)
         return loss_orig
 
