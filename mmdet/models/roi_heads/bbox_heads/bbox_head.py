@@ -286,6 +286,7 @@ class BBoxHead(BaseModule):
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
             pos_inds = (labels >= 0) & (labels < bg_class_ind)
+            pos_inds[int(pos_inds.size()[0]/3):] = False
             # do not perform bounding box regression for BG anymore.
             if pos_inds.any():
                 if self.reg_decoded_bbox:
