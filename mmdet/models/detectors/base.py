@@ -249,9 +249,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
             # expand dim of roi_head.bbox_head.fc_cls and fc_reg
             if len(p_clean.size()) == 2:
-                p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, 512, p_clean.size()[-1]),\
-                                          p_aug1.reshape(batch_size, 512, p_aug1.size()[-1]),\
-                                          p_aug2.reshape(batch_size, 512, p_aug2.size()[-1])
+                p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, p_clean.size()[-2], p_clean.size()[-1]),\
+                                          p_aug1.reshape(batch_size, p_aug1.size()[-2], p_aug1.size()[-1]),\
+                                          p_aug2.reshape(batch_size, p_aug2.size()[-2], p_aug2.size()[-1])
 
             # Clamp mixture distribution to avoid exploding KL divergence
             p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
