@@ -86,7 +86,9 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
             sampling_results = []
-            for i in range(num_imgs):
+            assert divmod(num_imgs, 3)[1] == 0
+            sampling_results_tmp = []
+            for i in range(int(num_imgs/3)):
                 assign_result = self.bbox_assigner.assign(
                     proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
                     gt_labels[i])
@@ -96,7 +98,10 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                     gt_bboxes[i],
                     gt_labels[i],
                     feats=[lvl_feat[i][None] for lvl_feat in x])
-                sampling_results.append(sampling_result)
+                sampling_results_tmp.append(sampling_result)
+            sampling_results.extend(sampling_results_tmp)
+            sampling_results.extend(sampling_results_tmp)
+            sampling_results.extend(sampling_results_tmp)
 
         losses = dict()
         # bbox head forward and loss
