@@ -47,11 +47,11 @@ log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "dnwn24"},
+                           wandb_init_kwargs={'project': "AI28", 'entity': "dnwn24", 'name': "augmix_jsd-roi_cls_wandb_test"},
                            interval=10,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,
                            num_eval_images=10),
                   ])
 # For better, more stable performance initialize from COCO
-load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa

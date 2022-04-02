@@ -203,8 +203,12 @@ class WandbLogger(WandbLoggerHook):
         if self.every_n_iters(runner, self.interval):
             # self.eval_hook.after_train_epoch(runner)
             # results = self.eval_hook.results # bug
-            results = single_gpu_test(runner.model, self.eval_hook.dataloader, show=False)
-            self.eval_hook.evaluate(runner, results)
+            results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+            eval_results = self.val_dataset.evaluate(results, logger='silent')
+            print("eval_results: ", eval_results)
+            for key, value in eval_results.items():
+                self.wandb.log({key: value})
+
             # Initialize evaluation table
             self._init_pred_table()
             # Log predictions
