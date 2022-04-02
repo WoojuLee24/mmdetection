@@ -13,7 +13,7 @@ from mmdet.core.visualization import imshow_det_bboxes
 
 import wandb
 
-use_wandb = True
+use_wandb = False # False True
 
 class BaseDetector(BaseModule, metaclass=ABCMeta):
     """Base class for detectors."""
@@ -230,7 +230,11 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
     def hook_layer(self, selected_layer):
         def hook_function(module, grad_in, grad_out):
             # Gets output of the selected layer
-            self.features[selected_layer] = grad_out
+            if not selected_layer in self.features:
+                self.features[selected_layer] = []
+            if len(self.features[selected_layer]) >= 5:
+                self.features[selected_layer].clear()
+            self.features[selected_layer].append(grad_out)
 
         # Hook the selected layer
         for n, m in self.named_modules():
@@ -246,32 +250,38 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
         jsd_loss = 0
         for layer_name in layer_list:
-            logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name], 3)
-            p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2, dim=1)
-            # expand dim of roi_head.bbox_head.fc_cls and fc_reg
-            if len(p_clean.size()) == 2:
-                p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, -1, p_clean.size()[-1]), \
-                                          p_aug1.reshape(batch_size, -1, p_aug1.size()[-1]), \
-                                          p_aug2.reshape(batch_size, -1, p_aug2.size()[-1])
+            jsd_loss_layer = 0
+            for i in range(len(self.features[layer_name])):
+                logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name][i], 3)
+                p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2, dim=1)
+                # expand dim of roi_head.bbox_head.fc_cls and fc_reg
+                if len(p_clean.size()) == 2:
+                    p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, -1, p_clean.size()[-1]), \
+                                              p_aug1.reshape(batch_size, -1, p_aug1.size()[-1]), \
+                                              p_aug2.reshape(batch_size, -1, p_aug2.size()[-1])
 
-            # Clamp mixture distribution to avoid exploding KL divergence
-            p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-            jsd_loss_tmp = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                         F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                         F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-            jsd_loss += self.train_cfg.jsd_loss_parameter * jsd_loss_tmp
+                # Clamp mixture distribution to avoid exploding KL divergence
+                p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
+                jsd_loss_layer_i = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
+                             F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+                             F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+                if use_wandb:
+                    try:
+                        wandb.log({"p_clean(" + layer_name + "["+str(i)+"])": p_clean})
+                        wandb.log({"p_aug1(" + layer_name + "["+str(i)+"])": p_aug1})
+                        wandb.log({"p_aug2(" + layer_name + "["+str(i)+"])": p_aug2})
+                        wandb.log({"p_mixture(" + layer_name + "["+str(i)+"])": p_mixture})
+                        wandb.log({"jsd_loss(" + layer_name + "["+str(i)+"])": jsd_loss_layer_i})
+                    except:
+                        print('[i]=', str(i))
+                        print('self.features[layer_name].shape:', self.features[layer_name][i].shape)
+                        print('logits_clean:', logits_clean, ', logits_aug1:', logits_aug1, ', logits_aug2:')
+                        print('p_clean:', p_clean, ', p_aug1:', p_aug1, ', p_aug2:', p_aug2, 'p_mixture:', p_mixture, 'jsd_loss:', jsd_loss_layer_i)
+                jsd_loss_layer += jsd_loss_layer_i
+                jsd_loss_layer = torch.clamp(jsd_loss_layer, 0)
             if use_wandb:
-                try:
-                    wandb.log({"p_clean(" + layer_name + ")": p_clean})
-                    wandb.log({"p_aug1(" + layer_name + ")": p_aug1})
-                    wandb.log({"p_aug2(" + layer_name + ")": p_aug2})
-                    wandb.log({"p_mixture(" + layer_name + ")": p_mixture})
-                    wandb.log({"jsd_loss(" + layer_name + ")": jsd_loss_tmp})
-                except:
-                    print('self.features[layer_name].shape:', self.features[layer_name].shape)
-                    print('logits_clean:', logits_clean, ', logits_aug1:', logits_aug1, ', logits_aug2:')
-                    print('p_clean:', p_clean, ', p_aug1:', p_aug1, ', p_aug2:', p_aug2, 'p_mixture:', p_mixture, 'jsd_loss:', jsd_loss_tmp)
-            jsd_loss = torch.clamp(jsd_loss, 0)
+                wandb.log({"jsd_loss(" + layer_name + ")": jsd_loss_layer})
+            jsd_loss += self.train_cfg.jsd_loss_parameter * jsd_loss_layer
         if use_wandb:
             wandb.log({"jsd_loss": jsd_loss})
         return jsd_loss
@@ -304,6 +314,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   DDP, it means the batch size on each GPU), which is used for
                   averaging the logs.
         """
+        self.features.clear()
         if 'img2' in list(data.keys()):
             # concatenate the original image and augmix images.
             batch_size = data['img'].size()[0]
