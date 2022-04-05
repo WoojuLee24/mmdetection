@@ -12,8 +12,28 @@ from mmcv.runner import BaseModule, auto_fp16
 from mmdet.core.visualization import imshow_det_bboxes
 
 import wandb
+from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import os
+
 
 use_wandb = False # False True
+
+def images_to_levels(target, num_levels):
+    """Convert targets by image to targets by feature level.
+
+    [target_img0, target_img1] -> [target_level0, target_level1, ...]
+    """
+    target = torch.stack(target, 0)
+    level_targets = []
+    start = 0
+    for n in num_levels:
+        end = start + n
+        # level_targets.append(target[:, start:end].squeeze(0))
+        level_targets.append(target[:, start:end])
+        start = end
+    return level_targets
 
 class BaseDetector(BaseModule, metaclass=ABCMeta):
     """Base class for detectors."""
@@ -265,6 +285,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 jsd_loss_layer_i = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
                              F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
                              F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+
                 if use_wandb:
                     try:
                         wandb.log({"p_clean(" + layer_name + "["+str(i)+"])": p_clean})
@@ -286,6 +307,102 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             wandb.log({"jsd_loss": jsd_loss})
         return jsd_loss
 
+    def save_the_result_img(self, data):
+        cls_scores_all = self.features['rpn_head.rpn_cls']  # {list:5}  (3, 3, H', W')
+
+        # Get gt_scores
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores_all]
+        anchor_list, valid_flag_list = self.rpn_head.get_anchors(
+            featmap_sizes, data['img_metas'])
+        label_channels = 1
+        cls_reg_targets = self.rpn_head.get_targets(
+            anchor_list,
+            valid_flag_list,
+            data['gt_bboxes'],
+            data['img_metas'],
+            # gt_bboxes_ignore_list=gt_bboxes_ignore,
+            gt_labels_list=data['gt_labels'],
+            label_channels=label_channels)
+        del anchor_list, valid_flag_list
+        labels_flatten = cls_reg_targets[0] # {list:5}  (num_types, H' * W' * num_priors)
+        # print(labels_flatten)
+        labels_all = []
+        for i in range(5):
+            label = labels_flatten[i] # (num_types, H' * W' * num_priors)
+            label = label.reshape(3, featmap_sizes[i][0], featmap_sizes[i][1], -1)  # (num_types, H', W', num_priors)
+            label = label.permute(0, 3, 1, 2)  # (num_types, num_priors, H', W')
+            labels_all.append(label)
+        del featmap_sizes, cls_reg_targets, labels_flatten, label
+        # labels_all : {list:5}  (num_types, num_priors, H', W')
+
+        # Let's visualize
+        H, W = int(cls_scores_all[0].size()[2]), int(cls_scores_all[0].size()[3])
+        for i in range(1, 5):
+            cls_scores_all[i] = F.interpolate(cls_scores_all[i], size=(H, W), mode='nearest')
+            labels_all[i] = F.interpolate(labels_all[i].type(torch.cuda.FloatTensor), size=(H, W), mode='nearest') # labels_all : (num_types, num_priors, H, W)
+        cls_scores_all = torch.stack([cls_scores for cls_scores in cls_scores_all], dim=0)  # (num_lev, num_type, num_priors, H, W)
+        cls_scores_all = cls_scores_all.permute(2, 1, 0, 3, 4)   # (num_priors, num_type, num_lev, H, W)
+        labels_all = torch.stack([labels for labels in labels_all], dim=0)                  # (num_lev, num_type, num_priors, H, W)
+        labels_all = labels_all.permute(2, 1, 0, 3, 4)   # (num_priors, num_type, num_lev, H, W)
+
+        num_priors = 3
+        num_type = 3
+        num_lev = 5
+        plt.figure(figsize=(5 * (num_type + 1), 4 * num_priors))
+        for p in range(num_priors):         # [0, 1, 2]
+            labels = labels_all[p]          # (num_type, num_lev, H, W)
+            # if torch.all(torch.all(torch.all(torch.eq(labels[0], labels[1]), dim=0), dim=0), dim=0):  # if equal
+            #     print('Right!')
+            # if torch.all(torch.all(torch.all(torch.eq(labels[0], labels[1]), dim=1), dim=0), dim=0):  # if equal
+            #     print('Right!')
+
+            label = labels[0]  # (num_lev, H, W)
+            # label = torch.clamp(label.sum(axis=0) / num_lev, min=0)  # (H,W), range=[0,1]
+            label = label.sum(axis=0) / num_lev  # (H,W), range=[0,1]
+            label = label.to('cpu').detach().numpy()
+            #
+            label_min, label_max = np.min(label), np.max(label)
+            if not label_max==label_min:
+                label = (label-label_min)/(label_max-label_min)
+            #
+            label = (label * 255).astype(np.uint8)
+            plt.subplot(num_priors, num_type + 1, p * (num_type + 1) + 1)
+            plt.imshow(label, interpolation='nearest')
+            plt.axis("off")
+
+            cls_scores = cls_scores_all[p]  # (num_type, num_lev, H, W)
+            for t in range(num_type):        # [clean, aug1, aug2]
+                cls_score = cls_scores[t]    # (num_lev, H, W)
+                cls_score = cls_score.sum(axis=0) / num_lev  # (H,W), range=[0,1]
+                cls_score = cls_score.to('cpu').detach().numpy()
+                # normalize
+                cls_score_min, cls_score_max = np.min(cls_score), np.max(cls_score)
+                if not cls_score_min == cls_score_max:
+                    cls_score = (cls_score - cls_score_min)/(cls_score_max-cls_score_min)
+                cls_score = (cls_score*255).astype(np.uint8)
+
+                plt.subplot(num_priors, num_type+1, p * (num_type+1) + t + 2)
+                plt.imshow(cls_score, interpolation='nearest')
+                plt.axis("off")
+
+        ori_filename = data['img_metas'][0]['ori_filename']
+        dir_name = ori_filename.split('/')[0]
+        # if dir_name == 'dusseldorf': # 'bremen':
+        #     if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
+        #         os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
+        #     plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
+        #     plt.close()
+        if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
+            os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
+        plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
+        plt.close()
+
+        if use_wandb:
+            wandb.log({
+                f"map[{i}]": [
+                    wandb.Image(f"/ws/external/tools/imgs/test_{i}.png")
+                ]
+            })
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -327,6 +444,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             self.hook_multi_layer(self.train_cfg.augmix.layer_list)
 
             losses = self(**data)
+
+            self.save_the_result_img(data)
             jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
             loss, log_vars = self._parse_losses(losses)
             if use_wandb:
