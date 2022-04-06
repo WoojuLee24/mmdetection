@@ -197,12 +197,26 @@ class WandbLogger(WandbLoggerHook):
 
     # edited by dnwn24
     def after_train_iter(self, runner):
-        from mmdet.apis import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
+        from mmdet.apis import single_gpu_test
+
+        # print("runner: ", runner)
+        # print("runner.model.module:", runner.model.module)
+        # print("runner.model.module.features: ", runner.model.module.features)
+        # print("##########################################3")
 
         if self.every_n_iters(runner, self.interval):
-            # self.eval_hook.after_train_epoch(runner)
-            # results = self.eval_hook.results # bug
+            # save the rpn feature maps
+            data = runner.model.module.wandb_data
+            plt = runner.model.module.save_the_result_img(data)
+            self.wandb.log({
+                f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
+            })
+            plt.close()
+            # save the loss and jsd loss log
+            for wandb_feature, value in runner.model.module.wandb_features.items():
+                self.wandb.log({wandb_feature: value})
+            # measure mAP and save the results on the validation dataset
             results = single_gpu_test(runner.model, self.val_dataloader, show=False)
             eval_results = self.val_dataset.evaluate(results, logger='silent')
             print("eval_results: ", eval_results)
@@ -259,7 +273,7 @@ class WandbLogger(WandbLoggerHook):
             metadata (dict, optional): Metadata associated with this artifact.
         """
         model_artifact = self.wandb.Artifact(
-            f'run_{self.wandb.run.id}_model', type='model', metadata=metadata)
+            f'run_{self.wandb.run.name}_model', type='model', metadata=metadata)
         model_artifact.add_file(f'{path_to_model}/epoch_{epoch+1}.pth')
         self.wandb.log_artifact(model_artifact, aliases=aliases)
 
@@ -475,6 +489,6 @@ class WandbLogger(WandbLoggerHook):
         to compare models at different intervals interactively.
         """
         pred_artifact = self.wandb.Artifact(
-            f'run_{self.wandb.run.id}_pred', type='evaluation')
+            f'run_{self.wandb.run.name}_pred', type='evaluation')
         pred_artifact.add(self.eval_table, 'eval_data')
         self.wandb.run.log_artifact(pred_artifact)

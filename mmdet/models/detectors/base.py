@@ -18,7 +18,7 @@ import matplotlib.patches as patches
 import os
 
 
-use_wandb = False # False True
+# use_wandb = True # False True
 
 def images_to_levels(target, num_levels):
     """Convert targets by image to targets by feature level.
@@ -42,6 +42,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         super(BaseDetector, self).__init__(init_cfg)
         self.fp16_enabled = False
         self.features = dict()
+        self.wandb_data = dict()
+        self.wandb_features=dict()
+        self.index = 0 # check current iteration for save log image
 
     @property
     def with_neck(self):
@@ -261,14 +264,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             if n == str(selected_layer):
                 m.register_forward_hook(hook_function)
 
-        # # Hook the selected layer
-        # for n, m in self.named_modules():
-        #     if n in selected_layer:
-        #         m.register_forward_hook(hook_function)
-
     def compute_jsd_loss(self, layer_list, batch_size):
         # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
         jsd_loss = 0
+        jsd_loss_layer = 0
         for layer_name in layer_list:
             jsd_loss_layer = 0
             for i in range(len(self.features[layer_name])):
@@ -286,25 +285,21 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                              F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
                              F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
 
-                if use_wandb:
-                    try:
-                        wandb.log({"p_clean(" + layer_name + "["+str(i)+"])": p_clean})
-                        wandb.log({"p_aug1(" + layer_name + "["+str(i)+"])": p_aug1})
-                        wandb.log({"p_aug2(" + layer_name + "["+str(i)+"])": p_aug2})
-                        wandb.log({"p_mixture(" + layer_name + "["+str(i)+"])": p_mixture})
-                        wandb.log({"jsd_loss(" + layer_name + "["+str(i)+"])": jsd_loss_layer_i})
-                    except:
-                        print('[i]=', str(i))
-                        print('self.features[layer_name].shape:', self.features[layer_name][i].shape)
-                        print('logits_clean:', logits_clean, ', logits_aug1:', logits_aug1, ', logits_aug2:')
-                        print('p_clean:', p_clean, ', p_aug1:', p_aug1, ', p_aug2:', p_aug2, 'p_mixture:', p_mixture, 'jsd_loss:', jsd_loss_layer_i)
+                self.wandb_features["p_clean(" + layer_name + "["+str(i)+"])"] = p_clean
+                self.wandb_features["p_aug1(" + layer_name + "["+str(i)+"])"] = p_aug1
+                self.wandb_features["p_aug2(" + layer_name + "["+str(i)+"])"] = p_aug2
+                self.wandb_features["p_mixture(" + layer_name + "["+str(i)+"])"] = p_mixture
+                self.wandb_features["jsd_loss(" + layer_name + "["+str(i)+"])"] = jsd_loss_layer_i
+
                 jsd_loss_layer += jsd_loss_layer_i
                 jsd_loss_layer = torch.clamp(jsd_loss_layer, 0)
-            if use_wandb:
-                wandb.log({"jsd_loss(" + layer_name + ")": jsd_loss_layer})
+
+            self.wandb_features["jsd_loss(" + layer_name + ")"] = jsd_loss_layer
+
             jsd_loss += self.train_cfg.jsd_loss_parameter * jsd_loss_layer
-        if use_wandb:
-            wandb.log({"jsd_loss": jsd_loss})
+
+        self.wandb_features["jsd_loss(" + layer_name + ")"] = jsd_loss_layer
+
         return jsd_loss
 
     def save_the_result_img(self, data):
@@ -324,12 +319,26 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             gt_labels_list=data['gt_labels'],
             label_channels=label_channels)
         del anchor_list, valid_flag_list
-        labels_flatten = cls_reg_targets[0] # {list:5}  (num_types, H' * W' * num_priors)
+        # edited by dnwn24
+        labels_flatten, labels_flatten_weight = cls_reg_targets[0], cls_reg_targets[1] # {list:5}  (num_types, H' * W' * num_priors)
+        labels_flatten = cls_reg_targets[0]
+
+        num_priors = 3
+        num_type = data['img'].size()[0]
+        num_lev = 5
+
         # print(labels_flatten)
         labels_all = []
         for i in range(5):
             label = labels_flatten[i] # (num_types, H' * W' * num_priors)
-            label = label.reshape(3, featmap_sizes[i][0], featmap_sizes[i][1], -1)  # (num_types, H', W', num_priors)
+            label = label.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)  # (num_types, H', W', num_priors)
+            # edited by dnwn24
+            label_weight = labels_flatten_weight[i]
+            label_weight = label_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)
+            label = torch.ones_like(label) - label
+            label = label.type(torch.cuda.FloatTensor)
+            label = torch.ones_like(label) - label
+            label *= label_weight
             label = label.permute(0, 3, 1, 2)  # (num_types, num_priors, H', W')
             labels_all.append(label)
         del featmap_sizes, cls_reg_targets, labels_flatten, label
@@ -346,7 +355,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         labels_all = labels_all.permute(2, 1, 0, 3, 4)   # (num_priors, num_type, num_lev, H, W)
 
         num_priors = 3
-        num_type = 3
+        num_type = data['img'].size()[0]
         num_lev = 5
         plt.figure(figsize=(5 * (num_type + 1), 4 * num_priors))
         for p in range(num_priors):         # [0, 1, 2]
@@ -385,24 +394,31 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 plt.imshow(cls_score, interpolation='nearest')
                 plt.axis("off")
 
-        ori_filename = data['img_metas'][0]['ori_filename']
-        dir_name = ori_filename.split('/')[0]
+        # ori_filename = data['img_metas'][0]['ori_filename']
+        # dir_name = ori_filename.split('/')[0]
         # if dir_name == 'dusseldorf': # 'bremen':
         #     if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
         #         os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
         #     plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
         #     plt.close()
-        if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
-            os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
-        plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
-        plt.close()
+        # if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
+        #     os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
+        # plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
+        # plt.savefig(f"/ws/data/log/jsd_log /{data['img_metas'][0]['ori_filename']}")
+        # if use_wandb:
+        #     wandb.log({
+        #         f"map[{i}]": [
+        #             wandb.Image(f"/ws/external/tools/imgs/test_{i}.png")
+        #         ]
+        #     })
+        return plt
 
-        if use_wandb:
-            wandb.log({
-                f"map[{i}]": [
-                    wandb.Image(f"/ws/external/tools/imgs/test_{i}.png")
-                ]
-            })
+        # if use_wandb:
+        #     wandb.log({
+        #         f"map[{i}]": wandb.Image(plt)
+        #     })
+        #
+        # plt.close()
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -432,7 +448,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   averaging the logs.
         """
         self.features.clear()
-        if 'img2' in list(data.keys()):
+        self.wandb_features.clear()
+
+        # if 'img2' in list(data.keys()):
+        if 'jsd_loss_parameter' in list(self.train_cfg.keys()):
             # concatenate the original image and augmix images.
             batch_size = data['img'].size()[0]
             data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
@@ -440,26 +459,38 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             data['gt_labels'] += data['gt_labels'] + data['gt_labels']
             data['img_metas'] += data['img_metas'] + data['img_metas']
 
-            # hook layer
+            # hook layer for augmix
             self.hook_multi_layer(self.train_cfg.augmix.layer_list)
-
+            # hook layer for wandb debug
+            self.hook_layer("rpn_head.rpn_cls")
             losses = self(**data)
 
-            self.save_the_result_img(data)
+            # self.save_the_result_img(data)
+            self.wandb_data = data
             jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
+
+
             loss, log_vars = self._parse_losses(losses)
-            if use_wandb:
-                for name, value in log_vars.items():
-                    wandb.log({name: np.mean(value)})
+            # if use_wandb:
+            #     for name, value in log_vars.items():
+            #         wandb.log({name: np.mean(value)})
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
             loss += jsd_loss
             log_vars['jsd_loss'] = jsd_loss.item()
 
         else:
+            self.hook_layer("rpn_head.rpn_cls")
             losses = self(**data)
+            # self.save_the_result_img(data)
+
+            self.wandb_data = data
             loss, log_vars = self._parse_losses(losses)
-            if use_wandb:
-                for name, value in log_vars.items():
-                    wandb.log({name: np.mean(value)})
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+            # if use_wandb:
+            #     for name, value in log_vars.items():
+            #         wandb.log({name: np.mean(value)})
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
