@@ -19,7 +19,11 @@ model = dict(
             reg_class_agnostic=False,
             loss_cls=dict(
                 type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))))
+            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
+    train_cfg = dict(
+        augmix=dict(
+            layer_list=[]),
+        is_debugging=True))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -33,13 +37,13 @@ lr_config = dict(
     # [7] yields higher performance than [6]
     step=[7])
 runner = dict(
-    type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
+    type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "dnwn24",
-                                              'name': "augmix without jsd"},
+                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
+                                              'name': "augmix_without_jsd"},
                            interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,

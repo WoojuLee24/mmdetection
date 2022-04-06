@@ -33,12 +33,12 @@ lr_config = dict(
     # [7] yields higher performance than [6]
     step=[7])
 runner = dict(
-    type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
+    type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "dnwn24",
+                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
                                               'name': "original"},
                            interval=500,
                            log_checkpoint=True,

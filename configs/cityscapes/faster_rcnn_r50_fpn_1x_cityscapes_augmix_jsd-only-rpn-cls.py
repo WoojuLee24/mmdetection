@@ -1,11 +1,14 @@
 _base_ = [
-    # '../_base_/models/faster_rcnn_r50_fpn.py',
-    '../_base_/models/faster_rcnn_r50_fpn_augmix_jsd-only-rpn-cls.py',
+    '../_base_/models/faster_rcnn_r50_fpn.py',
     '../_base_/datasets/cityscapes_detection_augmix.py',
     '../_base_/default_runtime.py'
 ]
 model = dict(
     backbone=dict(init_cfg=None),
+    rpn_head=dict(
+        loss_cls=dict(
+            type='CrossEntropyLossAugMix', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='L1Loss', loss_weight=1.0)),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -19,8 +22,13 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLossAugMix', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='SmoothL1LossAugMix', beta=1.0, loss_weight=1.0))))
+                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
+    train_cfg=dict(
+        augmix=dict(
+            layer_list=["rpn_head.rpn_cls"]),
+        jsd_loss_parameter=0.001,
+        is_debugging=True))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -37,4 +45,4 @@ runner = dict(
     type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
 log_config = dict(interval=100)
 # For better, more stable performance initialize from COCO
-# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
