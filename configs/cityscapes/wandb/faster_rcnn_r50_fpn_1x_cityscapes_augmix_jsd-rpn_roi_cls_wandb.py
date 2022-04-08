@@ -7,8 +7,8 @@ model = dict(
     backbone=dict(init_cfg=None),
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
-        loss_bbox=dict(type='L1LossAugMix', loss_weight=1.0)),
+            type='CrossEntropyLossAugMix', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='L1Loss', loss_weight=1.0)),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -22,11 +22,11 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+                type='CrossEntropyLossAugMix', use_sigmoid=False, loss_weight=1.0),
             loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
         augmix=dict(
-            layer_list=["rpn_head.rpn_reg"]),
+            layer_list=["rpn_head.rpn_cls", "roi_head.bbox_head.fc_cls"]),
         jsd_loss_parameter=0.001,
         is_debugging=True))
 # optimizer
@@ -48,7 +48,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': "augmix_with_jsd-rpn-cls"},
+                                              'name': "augmix_with_jsd-rpn-roi-cls"},
                            interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,
