@@ -81,6 +81,7 @@ class WandbLogger(WandbLoggerHook):
     def __init__(self,
                  wandb_init_kwargs=None,
                  interval=10,
+                 log_map_every_iter=True,
                  log_checkpoint=False,
                  log_checkpoint_metadata=False,
                  num_eval_images=100,
@@ -92,6 +93,7 @@ class WandbLogger(WandbLoggerHook):
         self.log_checkpoint_metadata = log_checkpoint_metadata
         self.num_eval_images = num_eval_images
         self.log_eval_metrics = True
+        self.log_map_every_iter = log_map_every_iter
         self.best_score = 0
         self.val_step = 0
 
@@ -151,84 +153,88 @@ class WandbLogger(WandbLoggerHook):
 
     @master_only
     def after_train_epoch(self, runner):
-        if self.log_eval_metrics:
-            if self.eval_hook.by_epoch:
-                if self.every_n_epochs(
-                        runner,
-                        self.eval_hook.interval) or self.is_last_epoch(runner):
-                    results = self.eval_hook.results
-                    eval_results = self.val_dataset.evaluate(
-                        results, logger='silent')
-                    for key, val in eval_results.items():
-                        if isinstance(val, str):
-                            continue
-                        self.wandb.log({f'val/{key}': val}, commit=False)
-                    self.wandb.log({'val/val_step': self.val_step})
-                    self.val_step += 1
+        from mmdet.apis.test import single_gpu_test
+        if not self.log_map_every_iter:
+            if self.log_eval_metrics:
+                if self.eval_hook.by_epoch:
+                    if self.every_n_epochs(
+                            runner,
+                            self.eval_hook.interval) or self.is_last_epoch(runner):
+                        results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+                        eval_results = self.val_dataset.evaluate(results, logger='silent')
+                        # results = self.eval_hook.results
+                        # eval_results = self.val_dataset.evaluate(
+                        #     results, logger='silent')
+                        for key, val in eval_results.items():
+                            if isinstance(val, str):
+                                continue
+                            self.wandb.log({f'val/{key}': val}, commit=False)
+                        self.wandb.log({'val/val_step': self.val_step})
+                        self.val_step += 1
 
-        if self.log_checkpoint:
-            if self.ckpt_hook.by_epoch:
-                if self.every_n_epochs(runner, self.ckpt_hook.interval) or (
-                        self.ckpt_hook.save_last
-                        and self.is_last_epoch(runner)):
-                    if self.log_checkpoint_metadata and self.eval_hook:
-                        metadata = self._get_ckpt_metadata(runner)
-                        aliases = [f'epoch_{runner.epoch+1}', 'latest']
-                        if self._is_best_ckpt(metadata):
-                            aliases.append('best')
-                        self._log_ckpt_as_artifact(self.ckpt_hook.out_dir,
-                                                   runner.epoch, aliases,
-                                                   metadata)
-                    else:
-                        aliases = [f'epoch_{runner.epoch+1}', 'latest']
-                        self._log_ckpt_as_artifact(self.ckpt_hook.out_dir,
-                                                   runner.epoch, aliases)
+            if self.log_checkpoint:
+                if self.ckpt_hook.by_epoch:
+                    if self.every_n_epochs(runner, self.ckpt_hook.interval) or (
+                            self.ckpt_hook.save_last
+                            and self.is_last_epoch(runner)):
+                        if self.log_checkpoint_metadata and self.eval_hook:
+                            metadata = self._get_ckpt_metadata(runner)
+                            aliases = [f'epoch_{runner.epoch+1}', 'latest']
+                            if self._is_best_ckpt(metadata):
+                                aliases.append('best')
+                            self._log_ckpt_as_artifact(self.ckpt_hook.out_dir,
+                                                       runner.epoch, aliases,
+                                                       metadata)
+                        else:
+                            aliases = [f'epoch_{runner.epoch+1}', 'latest']
+                            self._log_ckpt_as_artifact(self.ckpt_hook.out_dir,
+                                                       runner.epoch, aliases)
 
-        if self.num_eval_images > 0:
-            if self.eval_hook.by_epoch:
-                if self.every_n_epochs(runner, self.eval_hook.interval) or self.is_last_epoch(runner):
-                    results = self.eval_hook.results
-                    # Initialize evaluation table
-                    self._init_pred_table()
-                    # Log predictions
-                    self._log_predictions(results, runner.epoch + 1)
-                    # Log the table
-                    self._log_eval_table()
+            if self.num_eval_images > 0:
+                if self.eval_hook.by_epoch:
+                    if self.every_n_epochs(runner, self.eval_hook.interval) or self.is_last_epoch(runner):
+                        results = self.eval_hook.results
+                        # Initialize evaluation table
+                        self._init_pred_table()
+                        # Log predictions
+                        self._log_predictions(results, runner.epoch + 1)
+                        # Log the table
+                        self._log_eval_table()
 
     # edited by dnwn24
     def after_train_iter(self, runner):
-        super(WandbLogger, self).after_train_iter(runner)
-        from mmdet.apis import single_gpu_test
+        from mmdet.apis.test import single_gpu_test
+        if self.log_map_every_iter:
+            super(WandbLogger, self).after_train_iter(runner)
+            # print("runner: ", runner)
+            # print("runner.model.module:", runner.model.module)
+            # print("runner.model.module.features: ", runner.model.module.features)
+            # print("##########################################3")
 
-        # print("runner: ", runner)
-        # print("runner.model.module:", runner.model.module)
-        # print("runner.model.module.features: ", runner.model.module.features)
-        # print("##########################################3")
+            if self.every_n_iters(runner, self.interval):
+                # save the rpn feature maps
+                data = runner.model.module.wandb_data
+                plt = runner.model.module.save_the_result_img(data)
+                self.wandb.log({
+                    f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
+                })
+                plt.close()
+                # save the loss and jsd loss log
+                for wandb_feature, value in runner.model.module.wandb_features.items():
+                    self.wandb.log({wandb_feature: value})
+                # measure mAP and save the results on the validation dataset
+                results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+                eval_results = self.val_dataset.evaluate(results, logger='silent')
+                print("eval_results: ", eval_results)
+                for key, value in eval_results.items():
+                    self.wandb.log({key: value})
 
-        if self.every_n_iters(runner, self.interval):
-            # save the rpn feature maps
-            data = runner.model.module.wandb_data
-            plt = runner.model.module.save_the_result_img(data)
-            self.wandb.log({
-                f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
-            })
-            plt.close()
-            # save the loss and jsd loss log
-            for wandb_feature, value in runner.model.module.wandb_features.items():
-                self.wandb.log({wandb_feature: value})
-            # measure mAP and save the results on the validation dataset
-            results = single_gpu_test(runner.model, self.val_dataloader, show=False)
-            eval_results = self.val_dataset.evaluate(results, logger='silent')
-            print("eval_results: ", eval_results)
-            for key, value in eval_results.items():
-                self.wandb.log({key: value})
-
-            # Initialize evaluation table
-            self._init_pred_table()
-            # Log predictions
-            self._log_predictions(results, runner.iter + 1)
-            # Log the table
-            self._log_eval_table()
+                # Initialize evaluation table
+                self._init_pred_table()
+                # Log predictions
+                self._log_predictions(results, runner.iter + 1)
+                # Log the table
+                self._log_eval_table()
 
     @master_only
     def after_run(self, runner):
