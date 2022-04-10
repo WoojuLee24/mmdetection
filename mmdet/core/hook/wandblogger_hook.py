@@ -204,8 +204,8 @@ class WandbLogger(WandbLoggerHook):
     # edited by dnwn24
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
+        super(WandbLogger, self).after_train_iter(runner)
         if self.log_map_every_iter:
-            super(WandbLogger, self).after_train_iter(runner)
             # print("runner: ", runner)
             # print("runner.model.module:", runner.model.module)
             # print("runner.model.module.features: ", runner.model.module.features)
