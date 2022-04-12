@@ -279,10 +279,11 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                                               p_aug2.reshape(batch_size, -1, p_aug2.size()[-1])
 
                 # Clamp mixture distribution to avoid exploding KL divergence
-                p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-                jsd_loss_layer_i = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                                    F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                                    F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+                p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1)
+                p_mixture_log = p_mixture.log()
+                jsd_loss_layer_i = (F.kl_div(p_mixture_log, p_clean, reduction='batchmean') +
+                                    F.kl_div(p_mixture_log, p_aug1, reduction='batchmean') +
+                                    F.kl_div(p_mixture_log, p_aug2, reduction='batchmean')) / 3.
 
                 self.wandb_features["p_clean(" + layer_name + "["+str(i)+"])"] = p_clean
                 self.wandb_features["p_aug1(" + layer_name + "["+str(i)+"])"] = p_aug1
