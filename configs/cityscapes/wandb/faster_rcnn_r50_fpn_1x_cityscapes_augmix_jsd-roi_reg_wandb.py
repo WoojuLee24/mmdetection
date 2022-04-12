@@ -23,7 +23,7 @@ model = dict(
             reg_class_agnostic=False,
             loss_cls=dict(
                 type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='SmoothL1LossAugMix', beta=1.0, loss_weight=1.0))),
+            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
         augmix=dict(
             layer_list=["roi_head.bbox_head.fc_reg"]),

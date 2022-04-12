@@ -1,6 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABCMeta, abstractmethod
-from collections import OrderedDict
 
 import mmcv
 import numpy as np
@@ -11,11 +10,11 @@ from mmcv.runner import BaseModule, auto_fp16
 
 from mmdet.core.visualization import imshow_det_bboxes
 
-import wandb
-from PIL import Image
+# import wandb
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import os
+import pdb
+from collections import OrderedDict
 
 
 # use_wandb = True # False True
@@ -282,8 +281,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 # Clamp mixture distribution to avoid exploding KL divergence
                 p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
                 jsd_loss_layer_i = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                             F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                             F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+                                    F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+                                    F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
 
                 self.wandb_features["p_clean(" + layer_name + "["+str(i)+"])"] = p_clean
                 self.wandb_features["p_aug1(" + layer_name + "["+str(i)+"])"] = p_aug1
@@ -394,31 +393,37 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 plt.imshow(cls_score, interpolation='nearest')
                 plt.axis("off")
 
-        # ori_filename = data['img_metas'][0]['ori_filename']
-        # dir_name = ori_filename.split('/')[0]
-        # if dir_name == 'dusseldorf': # 'bremen':
-        #     if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
-        #         os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
-        #     plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
-        #     plt.close()
-        # if not os.path.exists(f"/ws/external/tools/imgs/{dir_name}"):
-        #     os.makedirs(f"/ws/external/tools/imgs/{dir_name}")
-        # plt.savefig(f"/ws/external/tools/imgs/{data['img_metas'][0]['ori_filename']}")
-        # plt.savefig(f"/ws/data/log/jsd_log /{data['img_metas'][0]['ori_filename']}")
-        # if use_wandb:
-        #     wandb.log({
-        #         f"map[{i}]": [
-        #             wandb.Image(f"/ws/external/tools/imgs/test_{i}.png")
-        #         ]
-        #     })
         return plt
 
-        # if use_wandb:
-        #     wandb.log({
-        #         f"map[{i}]": wandb.Image(plt)
-        #     })
-        #
-        # plt.close()
+    def save_the_fpn_img(self):
+        fpn_features = {k: v[0].detach().cpu() for k, v in self.features.items() if 'neck.fpn' in k}
+        fpn_level = len(fpn_features)
+        fpn_sizes = {k: v.size()[:] for k, v in fpn_features.items()}
+        B, C, H, W = fpn_sizes[list(fpn_sizes.keys())[0]]
+        plt.figure(figsize=(fpn_level, B))
+        i = 1
+        for key, feats in fpn_features.items():
+            # feats: [B, C, H, W], single level features
+            if B > 1:
+                with torch.no_grad():
+                    loss = F.mse_loss(feats[1], feats[0], reduction='mean')
+                    self.wandb_features[key + ".p_aug1.mse_loss"] = loss
+                    loss = F.mse_loss(feats[2], feats[0], reduction='mean')
+                    self.wandb_features[key + ".p_aug2.mse_loss"] = loss
+            # plt show
+            feats_mean = feats.mean(dim=1, keepdim=True)
+            feats_mean_inp = F.interpolate(feats_mean, size=(H, W), mode='nearest')
+            for feat_mean_inp in feats_mean_inp:
+                feat_mean_inp = torch.squeeze(feat_mean_inp)
+                feat_mean_inp = feat_mean_inp.detach().cpu().numpy()
+                plt.subplot(fpn_level, B, i)
+                plt.imshow(feat_mean_inp, interpolation='bilinear')
+                plt.axis("off")
+                i += 1
+        # plt.savefig("/ws/data/debug_test/test.jpg")
+
+        return plt
+
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -462,35 +467,32 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             # hook layer for augmix
             self.hook_multi_layer(self.train_cfg.augmix.layer_list)
             # hook layer for wandb debug
-            self.hook_layer("rpn_head.rpn_cls")
+            self.hook_layer("rpn_head.rpn_cls")     # will be deprecated later
+            self.hook_multi_layer(self.train_cfg.wandb.layer_list)
             losses = self(**data)
 
-            # self.save_the_result_img(data)
             self.wandb_data = data
+            # self.save_the_result_img(data)
+            # self.save_the_fpn_img()
             jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
-
-
             loss, log_vars = self._parse_losses(losses)
-            # if use_wandb:
-            #     for name, value in log_vars.items():
-            #         wandb.log({name: np.mean(value)})
             for name, value in log_vars.items():
                 self.wandb_features[name] = np.mean(value)
             loss += jsd_loss
             log_vars['jsd_loss'] = jsd_loss.item()
 
         else:
-            self.hook_layer("rpn_head.rpn_cls")
+            # hook layer for wandb debug
+            self.hook_layer("rpn_head.rpn_cls")  # will be deprecated later
+            self.hook_multi_layer(self.train_cfg.wandb.layer_list)
             losses = self(**data)
-            # self.save_the_result_img(data)
 
             self.wandb_data = data
+            # self.save_the_result_img(data)
+            # self.save_the_fpn_img()
             loss, log_vars = self._parse_losses(losses)
             for name, value in log_vars.items():
                 self.wandb_features[name] = np.mean(value)
-            # if use_wandb:
-            #     for name, value in log_vars.items():
-            #         wandb.log({name: np.mean(value)})
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
