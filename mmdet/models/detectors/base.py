@@ -44,6 +44,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.wandb_data = dict()
         self.wandb_features=dict()
         self.index = 0 # check current iteration for save log image
+        self.loss_type_list = dict()
 
     @property
     def with_neck(self):
@@ -263,12 +264,57 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             if n == str(selected_layer):
                 m.register_forward_hook(hook_function)
 
-    def compute_jsd_loss(self, layer_list, batch_size):
-        # logits_clean, logits_aug1, logits_aug2 = torch.split(self.features[layer_name], 1)
+    def get_cls_reg_targets(self, featmap_sizes, data):
+        anchor_list, valid_flag_list = self.rpn_head.get_anchors(
+            featmap_sizes, data['img_metas'])
+        label_channels = 1
+        cls_reg_targets = self.rpn_head.get_targets(
+            anchor_list,
+            valid_flag_list,
+            data['gt_bboxes'],
+            data['img_metas'],
+            # gt_bboxes_ignore_list=gt_bboxes_ignore,
+            gt_labels_list=data['gt_labels'],
+            label_channels=label_channels)
+        return cls_reg_targets
+    def compute_jsd_loss(self, layer_list, batch_size, data):
+        def get_rpn_y(layer_name):
+            cls_scores_all = self.features[layer_name]
+            featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores_all]
+            (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
+             num_total_pos, num_total_neg) = self.get_cls_reg_targets(featmap_sizes, data)
+            # labels_list = {list:5} ∋ (num_types, num_priors * H' * W')
+            if layer_name == 'rpn_head.rpn_cls':
+                y_list = labels_list
+                y_weights_list = label_weights_list
+            elif layer_name == 'rpn_head.rpn_reg':
+                y_list = bbox_targets_list
+                y_weights_list = bbox_weights_list
+            num_type = y_list[0].shape[0]
+            for i in range(len(y_list)):
+                y = y_list[i]  # (num_types, H' * W' * num_priors)
+                y = y.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1],
+                                      -1)  # (num_types, H', W', num_priors)
+                y_weight = y_weights_list[i]
+                y_weight = y_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)
+                y = torch.ones_like(y) - y
+                y = y.type(torch.cuda.FloatTensor)
+                y = torch.ones_like(y) - y
+                y *= y_weight
+                y = y.permute(0, 3, 1, 2)  # (num_types, num_priors, H', W')
+                y_list[i] = y
+            return y_list
+
         jsd_loss = 0
-        jsd_loss_layer = 0
-        for layer_name in layer_list:
+        for layer_name in layer_list:   # layer['rpn_head.rpn_cls'
             jsd_loss_layer = 0
+
+            # Get y value
+            y_list = None
+            if self.loss_type_list[layer_name] == 'jsd_new':
+                if (layer_name == 'rpn_head.rpn_cls') or (layer_name == 'rpn_head.rpn_reg'):
+                    y_list = get_rpn_y(layer_name)
+
             for i in range(len(self.features[layer_name])):
                 logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name][i], 3)
                 p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2, dim=1)
@@ -279,12 +325,20 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                                               p_aug2.reshape(batch_size, -1, p_aug2.size()[-1])
 
                 # Clamp mixture distribution to avoid exploding KL divergence
-                p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1)
-                p_mixture_log = p_mixture.log()
-                jsd_loss_layer_i = (F.kl_div(p_mixture_log, p_clean, reduction='batchmean') +
-                                    F.kl_div(p_mixture_log, p_aug1, reduction='batchmean') +
-                                    F.kl_div(p_mixture_log, p_aug2, reduction='batchmean')) / 3.
-
+                if self.loss_type_list[layer_name] == 'jsd_new':
+                    y, _, _ = torch.chunk(y_list[i], 3)
+                    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2 + y.contiguous()) / 4., 1e-7, 1)
+                    p_mixture_log = p_mixture.log()
+                    jsd_loss_layer_i = (F.kl_div(p_mixture_log, p_clean, reduction='batchmean') +
+                                        F.kl_div(p_mixture_log, p_aug1, reduction='batchmean') +
+                                        F.kl_div(p_mixture_log, p_aug2, reduction='batchmean') +
+                                        F.kl_div(p_mixture_log, y, reduction='batchmean')) / 4.
+                else:
+                    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1)
+                    p_mixture_log = p_mixture.log()
+                    jsd_loss_layer_i = (F.kl_div(p_mixture_log, p_clean, reduction='batchmean') +
+                                        F.kl_div(p_mixture_log, p_aug1, reduction='batchmean') +
+                                        F.kl_div(p_mixture_log, p_aug2, reduction='batchmean')) / 3.
                 self.wandb_features["p_clean(" + layer_name + "["+str(i)+"])"] = p_clean
                 self.wandb_features["p_aug1(" + layer_name + "["+str(i)+"])"] = p_aug1
                 self.wandb_features["p_aug2(" + layer_name + "["+str(i)+"])"] = p_aug2
@@ -295,10 +349,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 jsd_loss_layer = torch.clamp(jsd_loss_layer, 0)
 
             self.wandb_features["jsd_loss(" + layer_name + ")"] = jsd_loss_layer
-
             jsd_loss += self.train_cfg.jsd_loss_parameter * jsd_loss_layer
 
-        self.wandb_features["jsd_loss(" + layer_name + ")"] = jsd_loss_layer
+        self.wandb_features["jsd_loss"] = jsd_loss
 
         return jsd_loss
 
@@ -475,7 +528,13 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             self.wandb_data = data
             # self.save_the_result_img(data)
             # self.save_the_fpn_img()
-            jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
+
+            # edited by dshong from here.
+            self.loss_type_list = self.train_cfg.loss_type_list
+            # jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
+            jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size, data)
+            # edited by dshong to here.
+
             loss, log_vars = self._parse_losses(losses)
             for name, value in log_vars.items():
                 self.wandb_features[name] = np.mean(value)
