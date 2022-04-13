@@ -220,11 +220,12 @@ class WandbLogger(WandbLoggerHook):
                 })
                 plt.close()
                 # save the fpn feature maps
-                plt = runner.model.module.save_the_fpn_img()
-                self.wandb.log({
-                    f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
-                })
-                plt.close()
+                if len(runner.model.module.train_cfg.wandb.layer_list) > 0 :
+                    plt = runner.model.module.save_the_fpn_img()
+                    self.wandb.log({
+                        f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
+                    })
+                    plt.close()
 
                 # save the loss and jsd loss log
                 for wandb_feature, value in runner.model.module.wandb_features.items():
