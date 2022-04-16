@@ -311,6 +311,14 @@ class BBoxHead(BaseModule):
                     reduction_override=reduction_override)
             else:
                 losses['loss_bbox'] = bbox_pred[pos_inds].sum()
+
+        if (cls_score is not None) and (bbox_pred is not None):
+            # hook the roi_head targets
+            self.roi_targets = (labels,
+                                label_weights,
+                                bbox_targets,
+                                bbox_weights)
+
         return losses
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
