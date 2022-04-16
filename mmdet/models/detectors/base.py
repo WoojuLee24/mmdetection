@@ -40,11 +40,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
     def __init__(self, init_cfg=None):
         super(BaseDetector, self).__init__(init_cfg)
         self.fp16_enabled = False
-        self.features = dict()
+        self.features = dict() # self.features are values of hook_layer_list
         self.wandb_data = dict()
-        self.wandb_features=dict()
+        self.wandb_features=dict() # self.wandb_features has values of wandb.layer_list, accuracy, and values
         self.index = 0 # check current iteration for save log image
         self.loss_type_list = dict()
+
 
     @property
     def with_neck(self):
@@ -246,28 +247,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return loss, log_vars
 
-    def hook_multi_layer(self, layer_list):
-        for layer_name in layer_list:
-            self.hook_layer(layer_name)
-
-    def hook_layer(self, selected_layer):
-        def hook_function(module, grad_in, grad_out):
-            # Gets output of the selected layer
-            if not selected_layer in self.features:
-                self.features[selected_layer] = []
-            if len(self.features[selected_layer]) >= 5:
-                self.features[selected_layer].clear()
-            self.features[selected_layer].append(grad_out)
-
-        # Hook the selected layer
-        for n, m in self.named_modules():
-            if n == str(selected_layer):
-                m.register_forward_hook(hook_function)
 
     def get_cls_reg_targets(self, featmap_sizes, data):
         anchor_list, valid_flag_list = self.rpn_head.get_anchors(
             featmap_sizes, data['img_metas'])
         label_channels = 1
+        e1 = torch.equal(anchor_list[0][0], anchor_list[1][0])
         cls_reg_targets = self.rpn_head.get_targets(
             anchor_list,
             valid_flag_list,
@@ -277,12 +262,16 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             gt_labels_list=data['gt_labels'],
             label_channels=label_channels)
         return cls_reg_targets
+
     def compute_jsd_loss(self, layer_list, batch_size, data):
+
         def get_rpn_y(layer_name):
             cls_scores_all = self.features[layer_name]
             featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores_all]
+            # (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
+            #  num_total_pos, num_total_neg) = self.get_cls_reg_targets(featmap_sizes, data)
             (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
-             num_total_pos, num_total_neg) = self.get_cls_reg_targets(featmap_sizes, data)
+             num_total_pos, num_total_neg) = self.rpn_head.rpn_targets
             # labels_list = {list:5} ∋ (num_types, num_priors * H' * W')
             if layer_name == 'rpn_head.rpn_cls':
                 y_list = labels_list
@@ -293,40 +282,70 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             num_type = y_list[0].shape[0]
             for i in range(len(y_list)):
                 y = y_list[i]  # (num_types, H' * W' * num_priors)
-                y = y.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1],
-                                      -1)  # (num_types, H', W', num_priors)
+                y = y.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()  # (num_types, H', W', num_priors)
                 y_weight = y_weights_list[i]
-                y_weight = y_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)
-                y = torch.ones_like(y) - y
+                y_weight = y_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()
                 y = y.type(torch.cuda.FloatTensor)
-                y = torch.ones_like(y) - y
                 y *= y_weight
-                y = y.permute(0, 3, 1, 2)  # (num_types, num_priors, H', W')
+                y = y.permute(0, 3, 1, 2).contiguous()  # (num_types, num_priors, H', W')
                 y_list[i] = y
+
+            return y_list
+
+        def get_roi_y(layer_name):
+            (labels_list, label_weights_list,
+             bbox_targets_list, bbox_weights_list) = self.roi_head.bbox_head.roi_targets
+            if layer_name == 'roi_head.bbox_head.fc_cls':
+                y_list = labels_list
+                y_weights_list = label_weights_list.unsqueeze(dim=1)
+                # y_list *= y_weights_list
+                # feats = self.features[layer_name][0]
+                y_list = F.one_hot(y_list, num_classes=9)
+                y_list = y_list * y_weights_list
+                y_list = [y_list.type(torch.cuda.FloatTensor)]
+
+            elif layer_name == 'roi_head.bbox_head.fc_reg':
+                # object class index of roi_cls
+                pos_inds = (labels_list >= 0) & (labels_list < 8)  # num_classes: 8
+                y_list = bbox_targets_list
+                y_weights_list = bbox_weights_list
+                # get feats, y and y_weights based on the roi_cls
+                feats = self.features[layer_name][0]
+                feats = [feats.view(feats.size(0), -1, 4)[pos_inds.type(torch.bool), labels_list[pos_inds.type(torch.bool)]]]
+                y_list = y_list[pos_inds.type(torch.bool)]
+                assert feats[0].size() == y_list.size(), "feats size is not equal to the y_list size"
+                self.features.update({'roi_head.bbox_head.fc_reg': feats})
+                y_weights_list = y_weights_list[pos_inds.type(torch.bool)]
+                y_list *= y_weights_list
+                y_list = [y_list.type(torch.cuda.FloatTensor)]
+
             return y_list
 
         jsd_loss = 0
-        for layer_name in layer_list:   # layer['rpn_head.rpn_cls'
+        for layer_name in layer_list:
             jsd_loss_layer = 0
-
             # Get y value
             y_list = None
-            if self.loss_type_list[layer_name] == 'jsd_new':
-                if (layer_name == 'rpn_head.rpn_cls') or (layer_name == 'rpn_head.rpn_reg'):
-                    y_list = get_rpn_y(layer_name)
+            # if self.loss_type_list[layer_name] == 'jsd_new':
+            if (layer_name == 'rpn_head.rpn_cls') or (layer_name == 'rpn_head.rpn_reg'):
+                y_list = get_rpn_y(layer_name)
+            elif (layer_name == 'roi_head.bbox_head.fc_cls') or (layer_name == 'roi_head.bbox_head.fc_reg'):
+                y_list = get_roi_y(layer_name)
 
             for i in range(len(self.features[layer_name])):
                 logits_clean, logits_aug1, logits_aug2 = torch.chunk(self.features[layer_name][i], 3)
                 p_clean, p_aug1, p_aug2 = F.softmax(logits_clean, dim=1), F.softmax(logits_aug1, dim=1), F.softmax(logits_aug2, dim=1)
+                y, y2, y3 = torch.chunk(y_list[i], 3)
+
                 # expand dim of roi_head.bbox_head.fc_cls and fc_reg
                 if len(p_clean.size()) == 2:
-                    p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, -1, p_clean.size()[-1]), \
-                                              p_aug1.reshape(batch_size, -1, p_aug1.size()[-1]), \
-                                              p_aug2.reshape(batch_size, -1, p_aug2.size()[-1])
+                    p_clean, p_aug1, p_aug2 = p_clean.reshape(batch_size, -1, p_clean.size()[-1]).contiguous(), \
+                                              p_aug1.reshape(batch_size, -1, p_aug1.size()[-1]).contiguous(), \
+                                              p_aug2.reshape(batch_size, -1, p_aug2.size()[-1]).contiguous()
+                    y = y.reshape(batch_size, -1, y.size()[-1]).contiguous()
 
                 # Clamp mixture distribution to avoid exploding KL divergence
                 if self.loss_type_list[layer_name] == 'jsd_new':
-                    y, _, _ = torch.chunk(y_list[i], 3)
                     p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2 + y.contiguous()) / 4., 1e-7, 1)
                     p_mixture_log = p_mixture.log()
                     jsd_loss_layer_i = (F.kl_div(p_mixture_log, p_clean, reduction='batchmean') +
@@ -384,15 +403,15 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         labels_all = []
         for i in range(5):
             label = labels_flatten[i] # (num_types, H' * W' * num_priors)
-            label = label.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)  # (num_types, H', W', num_priors)
+            label = label.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()  # (num_types, H', W', num_priors)
             # edited by dnwn24
             label_weight = labels_flatten_weight[i]
-            label_weight = label_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1)
+            label_weight = label_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()
             label = torch.ones_like(label) - label
             label = label.type(torch.cuda.FloatTensor)
             label = torch.ones_like(label) - label
             label *= label_weight
-            label = label.permute(0, 3, 1, 2)  # (num_types, num_priors, H', W')
+            label = label.permute(0, 3, 1, 2).contiguous()  # (num_types, num_priors, H', W')
             labels_all.append(label)
         del featmap_sizes, cls_reg_targets, labels_flatten, label
         # labels_all : {list:5}  (num_types, num_priors, H', W')
@@ -403,9 +422,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             cls_scores_all[i] = F.interpolate(cls_scores_all[i], size=(H, W), mode='nearest')
             labels_all[i] = F.interpolate(labels_all[i].type(torch.cuda.FloatTensor), size=(H, W), mode='nearest') # labels_all : (num_types, num_priors, H, W)
         cls_scores_all = torch.stack([cls_scores for cls_scores in cls_scores_all], dim=0)  # (num_lev, num_type, num_priors, H, W)
-        cls_scores_all = cls_scores_all.permute(2, 1, 0, 3, 4)   # (num_priors, num_type, num_lev, H, W)
+        cls_scores_all = cls_scores_all.permute(2, 1, 0, 3, 4).contiguous()   # (num_priors, num_type, num_lev, H, W)
         labels_all = torch.stack([labels for labels in labels_all], dim=0)                  # (num_lev, num_type, num_priors, H, W)
-        labels_all = labels_all.permute(2, 1, 0, 3, 4)   # (num_priors, num_type, num_lev, H, W)
+        labels_all = labels_all.permute(2, 1, 0, 3, 4).contiguous()   # (num_priors, num_type, num_lev, H, W)
 
         num_priors = 3
         num_type = data['img'].size()[0]
@@ -518,11 +537,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             data['gt_labels'] += data['gt_labels'] + data['gt_labels']
             data['img_metas'] += data['img_metas'] + data['img_metas']
 
-            # hook layer for augmix
-            self.hook_multi_layer(self.train_cfg.augmix.layer_list)
-            # hook layer for wandb debug
-            self.hook_layer("rpn_head.rpn_cls")     # will be deprecated later
-            self.hook_multi_layer(self.train_cfg.wandb.layer_list)
+
+
+            # # hook layer for augmix
+            # self.hook_multi_layer(self.train_cfg.augmix.layer_list)
+            # # hook layer for wandb debug
+            # self.hook_multi_layer(self.train_cfg.wandb.layer_list)  # deprecated by custom_hooks option
             losses = self(**data)
 
             self.wandb_data = data
@@ -533,8 +553,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             self.loss_type_list = self.train_cfg.loss_type_list
             # jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size)
             jsd_loss = self.compute_jsd_loss(self.train_cfg.augmix.layer_list, batch_size, data)
-            # edited by dshong to here.
 
+            # edited by dshong to here.
+            for name in self.train_cfg.wandb.layer_list:
+                self.wandb_features[name] = self.features[name]
             loss, log_vars = self._parse_losses(losses)
             for name, value in log_vars.items():
                 self.wandb_features[name] = np.mean(value)
@@ -543,8 +565,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         else:
             # hook layer for wandb debug
-            self.hook_layer("rpn_head.rpn_cls")  # will be deprecated later
-            self.hook_multi_layer(self.train_cfg.wandb.layer_list)
+            # self.hook_multi_layer(self.train_cfg.wandb.layer_list) # deprecated by custom_hooks option
             losses = self(**data)
 
             self.wandb_data = data
