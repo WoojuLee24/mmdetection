@@ -8,7 +8,7 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossAugMix', use_sigmoid=True, loss_weight=1.0),
-        loss_bbox=dict(type='L1Loss', loss_weight=1.0)),
+        loss_bbox=dict(type='L1LossAugMix', loss_weight=1.0)),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -26,12 +26,15 @@ model = dict(
             loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
         augmix=dict(
-            layer_list=["rpn_head.rpn_cls", "roi_head.bbox_head.fc_cls"]),
+            layer_list=["rpn_head.rpn_cls", "rpn_head.rpn_reg",
+                        "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]),
+        wandb=dict(),
         jsd_loss_parameter=0.001,
         is_debugging=True,
-        loss_type_list={'rpn_head.rpn_cls': 'jsd',
-                        'roi_head.bbox_head.fc_cls': 'jsd'}))
-
+        loss_type_list={'rpn_head.rpn_cls': 'jsd_new',
+                        'rpn_head.rpn_reg': 'jsd_new',
+                        'roi_head.bbox_head.fc_cls': 'jsd_new',
+                        'roi_head.bbox_head.fc_reg': 'jsd_new'}))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -56,7 +59,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': "augmix_with_jsd-rpn-roi-cls"},
+                                              'name': "augmix_with_jsdy-all"},
                            interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,
