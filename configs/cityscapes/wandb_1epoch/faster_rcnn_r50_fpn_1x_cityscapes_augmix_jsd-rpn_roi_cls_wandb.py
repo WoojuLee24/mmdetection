@@ -28,7 +28,10 @@ model = dict(
         augmix=dict(
             layer_list=["rpn_head.rpn_cls", "roi_head.bbox_head.fc_cls"]),
         jsd_loss_parameter=0.001,
-        is_debugging=True))
+        is_debugging=True,
+        loss_type_list={'rpn_head.rpn_cls': 'jsd',
+                        'roi_head.bbox_head.fc_cls': 'jsd'}))
+
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -43,6 +46,11 @@ lr_config = dict(
     step=[7])
 runner = dict(
     type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
+custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=["rpn_head.rpn_cls", "rpn_head.rpn_reg",
+                    "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]),
+]
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),

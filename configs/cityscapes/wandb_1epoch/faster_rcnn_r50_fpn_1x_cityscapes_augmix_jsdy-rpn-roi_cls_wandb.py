@@ -7,8 +7,8 @@ model = dict(
     backbone=dict(init_cfg=None),
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
-        loss_bbox=dict(type='L1Loss', loss_weight=1.0)),
+            type='CrossEntropyLossAugMix', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='L1LossAugMix', loss_weight=1.0)),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -26,9 +26,13 @@ model = dict(
             loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
         augmix=dict(
-            layer_list=["roi_head.bbox_head.fc_cls"]),
+            layer_list=["rpn_head.rpn_cls",
+                        "roi_head.bbox_head.fc_cls",]),
+        wandb=dict(),
         jsd_loss_parameter=0.001,
-        is_debugging=True))
+        is_debugging=True,
+        loss_type_list={'rpn_head.rpn_cls': 'jsd_new',
+                        'roi_head.bbox_head.fc_cls': 'jsd_new'}))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -43,12 +47,17 @@ lr_config = dict(
     step=[7])
 runner = dict(
     type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
+custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=["rpn_head.rpn_cls", "rpn_head.rpn_reg",
+                    "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]),
+]
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': "augmix_with_jsd-roi-cls"},
+                                              'name': "augmix_with_jsdy-rpn-roi-cls"},
                            interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,

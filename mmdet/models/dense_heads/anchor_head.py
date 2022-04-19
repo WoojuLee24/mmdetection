@@ -493,6 +493,9 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             label_channels=label_channels)
         if cls_reg_targets is None:
             return None
+        else:
+            # hook the rpn targets
+            self.rpn_targets = cls_reg_targets
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_targets
         num_total_samples = (
