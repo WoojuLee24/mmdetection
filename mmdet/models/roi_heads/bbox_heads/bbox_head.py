@@ -286,7 +286,20 @@ class BBoxHead(BaseModule):
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
             pos_inds = (labels >= 0) & (labels < bg_class_ind)
-            pos_inds[int(pos_inds.size()[0]/3):] = False
+            # print(f'[bbox_head] pos_ids = {pos_inds.shape}')
+            # pos_inds_ones = (pos_inds == 1).sum(dim=0)
+            # pos_inds_zeros = (pos_inds == 0).sum(dim=0)
+            # print(f'[bbox_head] >> pos_inds_ones = {pos_inds_ones}')
+            # print(f'[bbox_head] >> pos_inds_zeros = {pos_inds_zeros}')
+
+            # # remove the pos_inds of aug1 and aug2 in consideration of errors caused by some augmentations such as translate, rotate, and shear...
+            # pos_inds[int(pos_inds.size()[0]/3):] = False
+            # print(f'[bbox_head] pos_ids -> {pos_inds.shape}')
+            # pos_inds_ones = (pos_inds == 1).sum(dim=0)
+            # pos_inds_zeros = (pos_inds == 0).sum(dim=0)
+            # print(f'[bbox_head] >> pos_inds_ones = {pos_inds_ones}')
+            # print(f'[bbox_head] >> pos_inds_zeros = {pos_inds_zeros}')
+
             # do not perform bounding box regression for BG anymore.
             if pos_inds.any():
                 if self.reg_decoded_bbox:
