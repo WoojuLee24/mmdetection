@@ -8,11 +8,14 @@ import time
 import mmcv
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
 
 from mmdet.core import encode_mask_results
+from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 
+import pdb
 
 def single_gpu_test(model,
                     data_loader,
@@ -55,6 +58,137 @@ def single_gpu_test(model,
                     show=show,
                     out_file=out_file,
                     score_thr=show_score_thr)
+
+        # encode mask results
+        if isinstance(result[0], tuple):
+            result = [(bbox_results, encode_mask_results(mask_results))
+                      for bbox_results, mask_results in result]
+        results.extend(result)
+
+        for _ in range(batch_size):
+            prog_bar.update()
+    return results
+
+
+def single_gpu_test_fpn(model,
+                        data_loader,
+                        show=False,
+                        out_dir=None,
+                        show_score_thr=0.3):
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    prog_bar = mmcv.ProgressBar(len(dataset))
+    prev = dict()
+    # mot_tracker = Sort(max_age=1,
+    #                    min_hits=3,
+    #                    iou_threshold=0.3)
+
+    for i, data in enumerate(data_loader):
+        with torch.no_grad():
+            result = model(return_loss=False, rescale=True, **data)
+
+        batch_size = len(result)
+        if show or out_dir:
+            if batch_size == 1 and isinstance(data['img'][0], torch.Tensor):
+                img_tensor = data['img'][0]
+            else:
+                img_tensor = data['img'][0].data[0]
+            img_metas = data['img_metas'][0].data[0]
+            imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
+            x1_tensor, x2_tensor, x3_tensor, x4_tensor, x5_tensor = model.module.fpn_features
+            x1_tensor = x1_tensor.mean(axis=1, keepdims=True)
+            x1_tensor_show = torch.cat([x1_tensor, x1_tensor, x1_tensor], dim=1)
+
+            assert len(imgs) == len(img_metas)
+
+            for i, (img, img_meta) in enumerate(zip(imgs, img_metas)):
+                h, w, _ = img_meta['img_shape']
+                img_show = img[:h, :w, :]
+                ori_h, ori_w = img_meta['ori_shape'][:-1]
+                img_show = mmcv.imresize(img_show, (ori_w, ori_h))
+
+                ## get results
+                import numpy as np
+                if isinstance(result[i], tuple):
+                    bbox_result, segm_result = result[i]
+                    if isinstance(segm_result, tuple):
+                        segm_result = segm_result[0]  # ms rcnn
+                else:
+                    bbox_result, segm_result = result[i], None
+                bboxes = np.vstack(bbox_result)
+
+                labels = [np.full(bbox.shape[0], i, dtype=np.int32) for i, bbox in enumerate(bbox_result)]
+                labels = np.concatenate(labels)
+                # draw segmentation masks
+                segms = None
+                if segm_result is not None and len(labels) > 0:  # non empty
+                    segms = mmcv.concat_list(segm_result)
+                    if isinstance(segms[0], torch.Tensor):
+                        segms = torch.stack(segms, dim=0).detach().cpu().numpy()
+                    else:
+                        segms = np.stack(segms, axis=0)
+
+                if show_score_thr > 0:
+                    assert bboxes.shape[1] == 5
+                    scores = bboxes[:, -1]
+                    inds = scores > show_score_thr
+                    bboxes = bboxes[inds, :]
+                    labels = labels[inds]
+                    if segms is not None:
+                        segms = segms[inds, ...]
+
+                mask = segms.astype(np.int32)
+
+                x1_tensor = F.interpolate(x1_tensor, (h, w), mode='nearest')
+                x1_tensor = torch.squeeze(x1_tensor, 1)
+                x1_npy = x1_tensor.detach().cpu().numpy()
+
+                pres = {"bboxes": bboxes, "mask": mask, "labels": labels, "x1_npy": x1_npy}
+
+                # trackers = mot_tracker.update(bboxes)
+                # matched = mot_tracker.matched
+                if len(prev) > 0:
+                    # get matched bboxes between prev and pres boxes
+                    pres_prev_matched, unmatched_pres_dets, unmatched_prev_dets = \
+                        associate_detections_to_trackers(pres['bboxes'], prev['bboxes'], iou_threshold=0.3)
+
+                    pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
+                    pres_matched_feat = pres["x1_npy"] * pres_matched_mask
+
+                    prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
+                    prev_matched_feat = prev["x1_npy"] * prev_matched_mask
+
+                    pdb.set_trace()
+
+                    if out_dir:
+                        out_file = osp.join(out_dir, img_meta['ori_filename'])
+                        ### mask jpg save ###
+                        import os
+                        import matplotlib.pyplot as plt
+                        folder, file = img_meta['ori_filename'].split("/")
+                        folder_path = os.path.join(out_dir, folder)
+                        if not os.path.exists(folder_path):
+                            os.mkdir(folder_path)
+                        for idx in range(len(pres_matched_feat)):
+                            pres_jpg_file = file[:-4] + "_f{}_pres.jpg".format(idx)
+                            pres_jpg_file_path = os.path.join(folder_path, pres_jpg_file)
+                            prev_jpg_file = file[:-4] + "_f{}_prev.jpg".format(idx)
+                            prev_jpg_file_path = os.path.join(folder_path, prev_jpg_file)
+                            plt.imsave(prev_jpg_file_path, prev_matched_feat[idx])
+                            plt.imsave(pres_jpg_file_path, pres_matched_feat[idx])
+                    else:
+                        out_file = None
+
+                    ### save the mask prediction results ###
+                    model.module.show_result(
+                        img_show,
+                        result[i],
+                        show=show,
+                        out_file=out_file,
+                        score_thr=show_score_thr)
+
+                prev = pres
 
         # encode mask results
         if isinstance(result[0], tuple):
