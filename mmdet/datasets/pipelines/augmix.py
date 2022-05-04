@@ -199,21 +199,21 @@ class AugMix:
             results['img3'] = self.aug(img)
             results['img_fields'] = ['img', 'img2', 'img3']
 
-            ''' Save the result '''
-            img_orig = Image.fromarray(results['img'])
-            img_orig.save('/ws/external/data/augmix_orig.png')
-            # img_augmix1 = torch.tensor(results['img2'].clone().detach() * 255, dtype=torch.uint8).numpy()
-            img_augmix1 = results['img2']
-            img_augmix1 = torch.tensor(img_augmix1, dtype=torch.uint8)
-            img_augmix1 = img_augmix1.numpy()
-            img_augmix1= Image.fromarray(img_augmix1)
-            img_augmix1.save('/ws/external/data/augmix_1.png')
-
-            img_augmix2 = results['img3']
-            img_augmix2 = torch.tensor(img_augmix2, dtype=torch.uint8)
-            img_augmix2 = img_augmix2.numpy()
-            img_augmix2 = Image.fromarray(img_augmix2)
-            img_augmix2.save('/ws/external/data/augmix_2.png')
+            # ''' Save the result '''
+            # img_orig = Image.fromarray(results['img'])
+            # img_orig.save('/ws/external/data/augmix_orig.png')
+            # # img_augmix1 = torch.tensor(results['img2'].clone().detach() * 255, dtype=torch.uint8).numpy()
+            # img_augmix1 = results['img2']
+            # img_augmix1 = torch.tensor(img_augmix1, dtype=torch.uint8)
+            # img_augmix1 = img_augmix1.numpy()
+            # img_augmix1= Image.fromarray(img_augmix1)
+            # img_augmix1.save('/ws/external/data/augmix_1.png')
+            #
+            # img_augmix2 = results['img3']
+            # img_augmix2 = torch.tensor(img_augmix2, dtype=torch.uint8)
+            # img_augmix2 = img_augmix2.numpy()
+            # img_augmix2 = Image.fromarray(img_augmix2)
+            # img_augmix2.save('/ws/external/data/augmix_2.png')
 
             return results
         # return self.aug(results)
