@@ -326,11 +326,9 @@ def jsdv2(pred,
         if pred_orig.shape[-1] is 1:  # if rpn
             ignore_index = -100 if ignore_index is None else ignore_index
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
-            rpn_weight = weight
         else: # else roi
-            # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # TO-DO: need to check
+            # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
-            roi_weight = weight
 
     # sigmoid and softmax function for rpn_cls and roi_cls
     if pred_orig.shape[-1] is 1: # if rpn
@@ -342,9 +340,6 @@ def jsdv2(pred,
 
     label = label.float()
 
-    assert p_clean.size() == label.size() == weight.size(), \
-        "The size of tensors does not match"
-
     # Clamp mixture distribution to avoid exploding KL divergence
     p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
     loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
@@ -354,6 +349,16 @@ def jsdv2(pred,
     # apply weights and do the reduction
     loss = weight_reduce_loss(
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    if weight is not None:
+        assert p_clean.size() == label.size() == weight.size(), \
+            "The size of tensors does not match"
+        # get valid predictions for wandb log
+        p_clean, p_aug1, p_aug2, p_mixture, label = p_clean[weight!=0], \
+                                                    p_aug1[weight!=0], \
+                                                    p_aug2[weight!=0], \
+                                                    p_mixture[weight!=0], \
+                                                    label[weight!=0]
 
     # logging
     p_distribution = {'p_clean': p_clean,
@@ -376,6 +381,7 @@ class CrossEntropyLossPlus(nn.Module):
                  ignore_index=None,
                  loss_weight=1.0,
                  additional_loss='jsd',
+                 additional_loss_weight_reduce=False,
                  lambda_weight=0.0001,
                  wandb_name=None):
         """CrossEntropyLossPlus.
@@ -402,6 +408,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.class_weight = class_weight
         self.ignore_index = ignore_index
         self.additional_loss = additional_loss
+        self.additional_loss_weight_reduce = additional_loss_weight_reduce
         self.lambda_weight = lambda_weight
         self.wandb_name = wandb_name
 
@@ -470,6 +477,8 @@ class CrossEntropyLossPlus(nn.Module):
 
         loss_additional = 0
         if self.cls_additional is not None:
+            if self.additional_loss_weight_reduce == False:
+                weight = None
             loss_additional, p_distribution = self.cls_additional(
                 cls_score,
                 label,

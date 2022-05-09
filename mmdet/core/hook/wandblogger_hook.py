@@ -235,6 +235,8 @@ class WandbLogger(WandbLoggerHook):
                 # save the loss and jsd loss log
                 for wandb_feature, value in runner.model.module.wandb_features.items():
                     self.wandb.log({wandb_feature: value})
+                for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
+                    self.wandb.log({wandb_feature: value})
                 for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
                     self.wandb.log({wandb_feature: value})
 
