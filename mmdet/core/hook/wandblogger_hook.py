@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import pdb
 import warnings
 
 from mmcv.runner import HOOKS
@@ -97,9 +98,25 @@ class WandbLogger(WandbLoggerHook):
         self.best_score = 0
         self.val_step = 0
 
-    @master_only
+    # If you use multiple GPU using wandb group,
+    #   don't use "@master_only".
+    #   This is because, all processes should be inited.
+    # Else if, you use multiple GPU without group,
+    #   please, use "@master_only".
+    #   This is because, only master process should be inited,
+    #   and others don't log anything.
+    # @master_only
     def before_run(self, runner):
-        super(WandbLogger, self).before_run(runner)
+        # super(WandbLogger, self).before_run(runner)
+        super(WandbLoggerHook, self).before_run(runner)
+        if self.wandb is None:
+            self.import_wandb()
+        if self.init_kwargs:
+            self.wandb.init(**self.init_kwargs)
+        else:
+            self.wandb.init()
+
+
         self.cfg = self.wandb.config
         # Check if configuration is passed to wandb.
         if len(dict(self.cfg)) == 0:
@@ -151,7 +168,14 @@ class WandbLogger(WandbLoggerHook):
             self.wandb.define_metric('val/val_step')
             self.wandb.define_metric('val/*', step_metric='val/val_step')
 
-    @master_only
+    # If you use multiple GPU using wandb group,
+    #   don't use "@master_only".
+    #   This is because, all processes should be inited.
+    # Else if, you use multiple GPU without group,
+    #   please, use "@master_only".
+    #   This is because, only master process should be inited,
+    #   and others don't log anything.
+    # @master_only
     def after_train_epoch(self, runner):
         from mmdet.apis.test import single_gpu_test
         if not self.log_map_every_iter:
@@ -160,17 +184,25 @@ class WandbLogger(WandbLoggerHook):
                     if self.every_n_epochs(
                             runner,
                             self.eval_hook.interval) or self.is_last_epoch(runner):
-                        results = single_gpu_test(runner.model, self.val_dataloader, show=False)
-                        eval_results = self.val_dataset.evaluate(results, logger='silent')
-                        # results = self.eval_hook.results
-                        # eval_results = self.val_dataset.evaluate(
-                        #     results, logger='silent')
-                        for key, val in eval_results.items():
-                            if isinstance(val, str):
-                                continue
-                            self.wandb.log({f'val/{key}': val}, commit=False)
-                        self.wandb.log({'val/val_step': self.val_step})
-                        self.val_step += 1
+
+                        import torch.distributed as dist
+                        from mmdet.apis.test import multi_gpu_test
+                        distributed = True if dist.get_world_size() > 1 else False
+                        if not distributed:
+                            results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+                        else:
+                            results = multi_gpu_test(runner.model, self.val_dataloader)
+
+                        print(f"[dshong] : results' type is {type(results)} at rank {runner.rank}")
+                        if runner.rank == 0:
+                            eval_results = self.val_dataset.evaluate(results, logger='silent')
+
+                            for key, val in eval_results.items():
+                                if isinstance(val, str):
+                                    continue
+                                self.wandb.log({f'val/{key}': val}, commit=False)
+                            self.wandb.log({'val/val_step': self.val_step})
+                            self.val_step += 1
 
             if self.log_checkpoint:
                 if self.ckpt_hook.by_epoch:
@@ -201,15 +233,10 @@ class WandbLogger(WandbLoggerHook):
                         # Log the table
                         self._log_eval_table()
 
-    # edited by dnwn24
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
         if self.log_map_every_iter:
-            # print("runner: ", runner)
-            # print("runner.model.module:", runner.model.module)
-            # print("runner.model.module.features: ", runner.model.module.features)
-            # print("##########################################3")
 
             if self.every_n_iters(runner, self.interval):
                 # save the rpn feature maps
@@ -239,20 +266,37 @@ class WandbLogger(WandbLoggerHook):
                     self.wandb.log({wandb_feature: value})
 
                 # measure mAP and save the results on the validation dataset
-                results = single_gpu_test(runner.model, self.val_dataloader, show=False)
-                eval_results = self.val_dataset.evaluate(results, logger='silent')
-                print("eval_results: ", eval_results)
-                for key, value in eval_results.items():
-                    self.wandb.log({key: value})
+                import torch.distributed as dist
+                from mmdet.apis.test import multi_gpu_test
 
-                # Initialize evaluation table
-                self._init_pred_table()
-                # Log predictions
-                self._log_predictions(results, runner.iter + 1)
-                # Log the table
-                self._log_eval_table()
+                distributed = True if dist.get_world_size() > 1 else False
+                if not distributed:
+                    results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+                else:
+                    results = multi_gpu_test(runner.model, self.val_dataloader)
 
-    @master_only
+                print(f"results' type is {type(results)} at rank {runner.rank}")
+                if runner.rank == 0:
+                    eval_results = self.val_dataset.evaluate(results, logger='silent')
+                    print("eval_results: ", eval_results)
+                    for key, value in eval_results.items():
+                        self.wandb.log({key: value})
+
+                    # Initialize evaluation table
+                    self._init_pred_table()
+                    # Log predictions
+                    self._log_predictions(results, runner.iter + 1)
+                    # Log the table
+                    self._log_eval_table()
+
+    # If you use multiple GPU using wandb group,
+    #   don't use "@master_only".
+    #   This is because, all processes should be inited.
+    # Else if, you use multiple GPU without group,
+    #   please, use "@master_only".
+    #   This is because, only master process should be inited,
+    #   and others don't log anything.
+    # @master_only
     def after_run(self, runner):
         self.wandb.finish()
 
