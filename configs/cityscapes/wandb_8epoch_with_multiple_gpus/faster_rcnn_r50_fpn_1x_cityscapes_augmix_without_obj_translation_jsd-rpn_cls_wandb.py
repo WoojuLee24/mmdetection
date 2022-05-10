@@ -73,7 +73,7 @@ log_config = dict(interval=100,
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
                                               'name': name,
-                                              # 'group': name,
+                                              'group': name,
                                               'config': {
                                                   'loss_type(rpn_cls)': f"{rpn_loss_cls['type']}({rpn_loss_cls['additional_loss']})",
                                                   'loss_type(rpn_bbox)': f"{rpn_loss_bbox['type']}({rpn_loss_bbox['additional_loss']})",
