@@ -354,17 +354,17 @@ def jsdv2(pred,
         assert p_clean.size() == label.size() == weight.size(), \
             "The size of tensors does not match"
         # get valid predictions for wandb log
-        p_clean, p_aug1, p_aug2, p_mixture, label = p_clean[weight!=0], \
-                                                    p_aug1[weight!=0], \
-                                                    p_aug2[weight!=0], \
+        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight!=0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug1[weight!=0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug2[weight!=0], 1e-7, 1).log(), \
                                                     p_mixture[weight!=0], \
-                                                    label[weight!=0]
+                                                    torch.clamp(label[weight!=0], 1e-7, 1).log()
 
     # logging
     p_distribution = {'p_clean': p_clean,
                       'p_aug1': p_aug1,
                       'p_aug2': p_aug2,
-                      'p_mixture': p_mixture.exp(),
+                      'p_mixture': p_mixture,
                       'label': label,}
 
     return loss, p_distribution
