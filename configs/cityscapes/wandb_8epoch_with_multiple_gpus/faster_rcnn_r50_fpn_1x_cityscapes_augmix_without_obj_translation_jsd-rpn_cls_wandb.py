@@ -70,7 +70,7 @@ name = f"augmix.{aug_list}_rpn.{rpn_loss_cls['additional_loss']}.{rpn_loss_bbox[
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      dict(type='WandbLogger',
+                      dict(type='WandbMultiLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
                                               'name': name,
                                               'group': name,
