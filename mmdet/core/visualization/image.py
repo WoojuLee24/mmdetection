@@ -88,6 +88,9 @@ def imshow_det_bboxes(img,
         if segms is not None:
             segms = segms[inds, ...]
 
+    ## save numpy bbox, segms, labels, gtFine_instanceIds made by dongkyu
+    # make_gt(out_file, bboxes, segms, labels)
+    
     mask_colors = []
     if labels.shape[0] > 0:
         if mask_color is None:
