@@ -213,12 +213,14 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=cfg.gpu_ids)
-        if 'demo' in cfg.data.test.img_prefix:
-            outputs = single_gpu_test_fpn(model, data_loader, args.show, args.show_dir,
-                                          args.show_score_thr)
-        else:
-            outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
-                                      args.show_score_thr)
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
+                                  args.show_score_thr)
+        # if 'demo' in cfg.data.test.img_prefix:
+        #     outputs = single_gpu_test_fpn(model, data_loader, args.show, args.show_dir,
+        #                                   args.show_score_thr)
+        # else:
+        #     outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
+        #                               args.show_score_thr)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),

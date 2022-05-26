@@ -402,6 +402,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.features.clear()
         self.wandb_features.clear()
 
+        if 'demo' in data.keys():
+            # settings
+            self.prev_data = data
+
         if 'img2' in list(data.keys()) or 'img3' in list(data.keys()):
             # settings
             self.wandb_data = data
@@ -430,8 +434,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
-            for layer_name in self.train_cfg.wandb.log.features_list:
-                self.wandb_features[layer_name] = self.features[layer_name]
+            # for layer_name in self.train_cfg.wandb.log.features_list:
+            #     self.wandb_features[layer_name] = self.features[layer_name]
             if 'log_vars' in self.train_cfg.wandb.log.vars:
                 for name, value in log_vars.items():
                     self.wandb_features[name] = np.mean(value)
