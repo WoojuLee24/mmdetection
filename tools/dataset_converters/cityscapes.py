@@ -120,6 +120,7 @@ def parse_args():
     parser.add_argument('-o', '--out-dir', help='output path')
     parser.add_argument(
         '--nproc', default=1, type=int, help='number of process')
+    parser.add_argument('--ordered', action='store_true', help='ordered file name')
     args = parser.parse_args()
     return args
 
@@ -144,6 +145,8 @@ def main():
                 print_tmpl='It took {}s to convert Cityscapes annotation'):
             files = collect_files(
                 osp.join(img_dir, split), osp.join(gt_dir, split))
+            if args.ordered:
+                files = sorted(files)
             image_infos = collect_annotations(files, nproc=args.nproc)
             cvt_annotations(image_infos, osp.join(out_dir, json_name))
 
