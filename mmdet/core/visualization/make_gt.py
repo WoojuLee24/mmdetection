@@ -3,47 +3,63 @@ import numpy as np
 from PIL import Image
 
 def make_gt(out_file=None,
-             bboxes=None,
-             segms=None,
-             labels=None):
-    path_bbox = os.path.join('/ws/external', 'outputs', 'cityscapes', 'bbox')
-    path_mask = os.path.join('/ws/external', 'outputs', 'cityscapes', 'mask')
-    path_label = os.path.join('/ws/external', 'outputs', 'cityscapes', 'label')
+            bboxes=None,
+            segms=None,
+            labels=None,
+            save_npy=False,
+            ):
 
-    if not(os.path.exists(path_bbox)):
-        os.mkdir(path_bbox)
-    if not(os.path.exists(path_mask)):
-        os.mkdir(path_mask)
-    if not(os.path.exists(path_label)):
-        os.mkdir(path_label)
+    name = out_file[:-15]
 
-    name = out_file[72:78]
-    # save numpy output
-    np.save(os.path.join(path_bbox, 'bbox_%s' % name), bboxes)
-    np.save(os.path.join(path_mask, 'mask_%s' % name), segms)
-    np.save(os.path.join(path_label, 'label_%s' % name), labels)
+    if save_npy == True:
+        path_bbox = os.path.join('/ws/external', 'outputs', 'cityscapes', 'bbox')
+        path_mask = os.path.join('/ws/external', 'outputs', 'cityscapes', 'mask')
+        path_label = os.path.join('/ws/external', 'outputs', 'cityscapes', 'label')
+
+        if not(os.path.exists(path_bbox)):
+            os.mkdir(path_bbox)
+        if not(os.path.exists(path_mask)):
+            os.mkdir(path_mask)
+        if not(os.path.exists(path_label)):
+            os.mkdir(path_label)
+
+        # save numpy output
+        np.save(os.path.join(path_bbox, 'bbox_%s' % name), bboxes)
+        np.save(os.path.join(path_mask, 'mask_%s' % name), segms)
+        np.save(os.path.join(path_label, 'label_%s' % name), labels)
 
     # make gtFine_instanceIds
     instance_id = np.zeros((1024, 2048), dtype=np.int32)
+    # id_count edited
+    id_count = {'person': 0, 'rider': 0, 'car': 0, 'truck': 0, 'bus': 0, 'train': 0, 'motorcycle': 0, 'bicycle': 0}
     for i, seg in enumerate(segms):
         temp = seg * 1
         seg_idx = np.where(temp == 1)
+        id_ = 0
         if labels[i] == 0:
-            id_ = 24001  # person
+            id_count['person'] += 1
+            id_ = 24000 + id_count['person']  # # 93 for png
         elif labels[i] == 1:
-            id_ = 25001  # rider
+            id_count['rider'] += 1
+            id_ = 25000 + id_count['rider']
         elif labels[i] == 2:
-            id_ = 26001  # car
+            id_count['car'] += 1
+            id_ = 26000 + id_count['car']
         elif labels[i] == 3:
-            id_ = 27001  # truck
+            id_count['truck'] += 1
+            id_ = 27000 + id_count['truck']
         elif labels[i] == 4:
-            id_ = 28001  # bus
+            id_count['bus'] += 1
+            id_ = 28000 + id_count['bus']
         elif labels[i] == 5:
-            id_ = 31001  # train
+            id_count['train'] += 1
+            id_ = 31000 + id_count['train']
         elif labels[i] == 6:
-            id_ = 32001  # motorcycle
+            id_count['motorcycle'] += 1
+            id_ = 32000 + id_count['motorcycle']
         elif labels[i] == 7:
-            id_ = 33001  # bicycle
+            id_count['bicycle'] += 1
+            id_ = 33000 + id_count['bicycle']
         else:
             id_ = 0
 
@@ -51,9 +67,12 @@ def make_gt(out_file=None,
             instance_id[seg_idx[0][j], seg_idx[1][j]] = id_
 
     instance_id = (instance_id).astype(np.int32)
-    ins_out = Image.fromarray(instance_id, 'I')
-    ins_name = out_file[:78] + '_gtFine_instanceIds.png'
-    ins_out.save(ins_name)
+    # np_elem = np.unique(instance_id.flatten())
+    lab = Image.fromarray(instance_id, 'I')
+    instance_name = name + 'gtFine_instanceIds.png'
+    color_name = name + 'gtFine_color.png'
+    label_name = name + 'gtFine_labelIds.png'
 
-    # test = Image.open(lab_name)
-    # np_test = np.array(test)
+    lab.save(instance_name)
+    lab.save(color_name)
+    lab.save(label_name)

@@ -5,6 +5,7 @@ import numpy as np
 import pycocotools.mask as mask_util
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
+from mmdet.core.visualization.make_gt import make_gt
 
 from ..utils import mask2ndarray
 
@@ -87,9 +88,6 @@ def imshow_det_bboxes(img,
         labels = labels[inds]
         if segms is not None:
             segms = segms[inds, ...]
-
-    ## save numpy bbox, segms, labels, gtFine_instanceIds made by dongkyu
-    # make_gt(out_file, bboxes, segms, labels)
     
     mask_colors = []
     if labels.shape[0] > 0:
@@ -188,7 +186,9 @@ def imshow_det_bboxes(img,
             plt.show(block=False)
             plt.pause(wait_time)
     if out_file is not None:
-        mmcv.imwrite(img, out_file)
+        # mmcv.imwrite(img, out_file)
+        ## save numpy bbox, segms, labels, gtFine_instanceIds made by dongkyu
+        make_gt(out_file, bboxes, segms, labels)
 
     plt.close()
 
