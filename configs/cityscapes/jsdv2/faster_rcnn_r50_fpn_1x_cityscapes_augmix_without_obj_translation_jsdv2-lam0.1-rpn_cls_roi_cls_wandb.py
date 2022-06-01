@@ -17,17 +17,19 @@ _base_ = [
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv2', additional_loss_weight_reduce=False, lambda_weight=0.0001, wandb_name='rpn_cls'),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss='None', lambda_weight=0.0001, wandb_name='rpn_bbox')),
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
+            additional_loss='jsdv2', additional_loss_weight_reduce=False,
+            lambda_weight=0.1, temper=1, wandb_name='rpn_cls'),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0,
+                       additional_loss='None', lambda_weight=0.1, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv2', additional_loss_weight_reduce=False, lambda_weight=0.0001, wandb_name='roi_cls'),
-            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss='None', lambda_weight=0.0001, wandb_name='roi_bbox'))),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
+                additional_loss='jsdv2', additional_loss_weight_reduce=False,
+                lambda_weight=0.1, temper=1, wandb_name='roi_cls'),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0,
+                           additional_loss='None', lambda_weight=0.1, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
