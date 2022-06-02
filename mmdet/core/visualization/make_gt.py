@@ -3,6 +3,7 @@ import os
 import numpy as np
 from PIL import Image
 import pandas as pd
+import time
 
 def make_gt(out_file=None,
             bboxes=None,
@@ -118,8 +119,12 @@ def main():
     filtered = args.filtered
 
     path_data = os.path.join(arg_dataset, arg_scene)
+    if not (os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
+    path_out = os.path.join(arg_outdir, arg_scene)
+    if not (os.path.exists(path_out)):   os.mkdir(path_out)
 
     nyu40class, nyu40id = get_scannet_label_table(arg_gt_label)
+
     ##### Show 40 class text.
     # print(nyu40class)
 
@@ -135,14 +140,25 @@ def main():
 
     num_data = len(os.listdir(path_label))
     for frame in range(num_data):
+
+        start = time.time() # start time checker
+
+        ##### make name & pass the existed file
+        instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
+        color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
+        label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
+        if os.path.isfile(instance_name) and os.path.isfile(color_name) and os.path.isfile(label_name):
+            print("Pass {:0>6} frame".format(frame))
+            continue
+
         img_label = Image.open(path_label + '{}.png'.format(frame))       # mode=I
         img_instance = Image.open(path_instance + '{}.png'.format(frame)) # mode=L
         img_instance = img_instance.convert("I")
-        np_label = np.array(img_label)          # 968 * 1296, dtype int32
-        np_instance = np.array(img_instance)    # 968 * 1296, dtype uint8
+        np_label = np.array(img_label)                                    # 968 * 1296, dtype int32
+        np_instance = np.array(img_instance)                              # 968 * 1296, dtype uint8
         np_instance.astype(np.int32)
 
-        h, w = np_label.shape[0], np_label.shape[1]
+        h, w = np_label.shape[0], np_label.shape[1]                       # height, width
 
         ##### convert format scanNet to cityscapes. label format is nyu40id
         output = np.zeros((h, w), dtype=np.int32)
@@ -157,19 +173,15 @@ def main():
         output = output.astype(np.int32)
         img_output = Image.fromarray(output, 'I')
 
-        if not(os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
-        path_out = os.path.join(arg_outdir, arg_scene)
-        if not(os.path.exists(path_out)):   os.mkdir(path_out)
 
-        instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
-        color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
-        label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
 
         img_output.save(instance_name)
         img_output.save(color_name)
         img_output.save(label_name)
 
         print("save {:0>6} frame".format(frame))
+        end = time.time()
+        print(f"{end - start:.5f} sec")
 
         ##### check image overflow for debugging ################################
         img_debug = Image.open(instance_name)
