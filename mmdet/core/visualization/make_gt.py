@@ -11,7 +11,8 @@ def make_gt(out_file=None,
 
     name = out_file[:-15]
 
-    if save_npy == True:
+    if save_npy:
+        npy_name = out_file[72:78]  # stuttgart
         path_bbox = os.path.join('/ws/external', 'outputs', 'cityscapes', 'bbox')
         path_mask = os.path.join('/ws/external', 'outputs', 'cityscapes', 'mask')
         path_label = os.path.join('/ws/external', 'outputs', 'cityscapes', 'label')
@@ -24,9 +25,9 @@ def make_gt(out_file=None,
             os.mkdir(path_label)
 
         # save numpy output
-        np.save(os.path.join(path_bbox, 'bbox_%s' % name), bboxes)
-        np.save(os.path.join(path_mask, 'mask_%s' % name), segms)
-        np.save(os.path.join(path_label, 'label_%s' % name), labels)
+        np.save(os.path.join(path_bbox, 'bbox_%s' % npy_name), bboxes)
+        np.save(os.path.join(path_mask, 'mask_%s' % npy_name), segms)
+        np.save(os.path.join(path_label, 'label_%s' % npy_name), labels)
 
     # make gtFine_instanceIds
     instance_id = np.zeros((1024, 2048), dtype=np.int32)
@@ -66,7 +67,7 @@ def make_gt(out_file=None,
         for j in range(len(seg_idx[0])):
             instance_id[seg_idx[0][j], seg_idx[1][j]] = id_
 
-    instance_id = (instance_id).astype(np.int32)
+    instance_id = instance_id.astype(np.int32)
     # np_elem = np.unique(instance_id.flatten())
     lab = Image.fromarray(instance_id, 'I')
     instance_name = name + 'gtFine_instanceIds.png'
@@ -76,3 +77,15 @@ def make_gt(out_file=None,
     lab.save(instance_name)
     lab.save(color_name)
     lab.save(label_name)
+
+# def scan_make_gt():
+#
+#
+#
+# def par
+#
+# def main():
+#
+#
+# if __name__ == '__main__':
+#     main()
