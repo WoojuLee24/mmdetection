@@ -1,5 +1,4 @@
 from mmcv.runner import HOOKS, Hook
-import pdb
 
 @HOOKS.register_module()
 class FeatureHook(Hook):

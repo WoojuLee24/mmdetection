@@ -1,7 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import random
 import warnings
-import os # added by dshong
 
 import numpy as np
 import torch
@@ -15,8 +14,6 @@ from mmdet.core import DistEvalHook, EvalHook
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.utils import find_latest_checkpoint, get_root_logger
-
-import wandb
 
 
 def init_random_seed(seed=None, device='cuda'):
