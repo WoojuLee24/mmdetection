@@ -1,6 +1,8 @@
+import argparse
 import os
 import numpy as np
 from PIL import Image
+import pandas as pd
 
 def make_gt(out_file=None,
             bboxes=None,
@@ -78,14 +80,106 @@ def make_gt(out_file=None,
     lab.save(color_name)
     lab.save(label_name)
 
-# def scan_make_gt():
-#
-#
-#
-# def par
-#
-# def main():
-#
-#
-# if __name__ == '__main__':
-#     main()
+
+
+def get_scannet_label_table(path):
+    file = path + "scannetv2-labels.combined.tsv"
+    table = pd.read_csv(file, delimiter='\t', keep_default_na=False)
+    table = table.to_numpy()
+    table = sorted(table, key=lambda table: table[0])
+
+    ## raw label to nyu40id format label
+    ## https://github.com/facebookresearch/votenet/blob/main/scannet/meta_data/scannetv2-labels.combined.tsv
+    ## http://kaldir.vc.in.tum.de/scannet_benchmark/labelids_all.txt
+
+    nyu40id = {0: 0}
+    nyu40class = {0: 'unannotated'}
+    for i, row in enumerate(table):
+        nyu40class[table[i][0]] = table[i][7]   # class name
+        nyu40id[table[i][0]] = table[i][4]      # id
+    return nyu40class, nyu40id
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='ScanNet dataset to cityscapes format')
+    parser.add_argument("--dataset", help="input dataset dir path", type=str, default="/ws/data/scannet")
+    parser.add_argument("--scene", help="scene dir name", type=str, default="scene0000_00")
+    parser.add_argument("--filtered", help="true: smoothing data, false: raw data", type=bool, default=True)
+    parser.add_argument("--gtLabel", help="scannetv2-labels.combined.tsv path", type=str, default="/ws/data/scannet/")
+    parser.add_argument("--outdir", help="output directory path", type=str, default="/ws/data/scannet/cityscapes_format")
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = parse_args()
+    arg_dataset = args.dataset
+    arg_scene = args.scene
+    arg_gt_label = args.gtLabel
+    arg_outdir = args.outdir
+    filtered = args.filtered
+
+    path_data = os.path.join(arg_dataset, arg_scene)
+
+    nyu40class, nyu40id = get_scannet_label_table(arg_gt_label)
+    ##### Show 40 class text.
+    # print(nyu40class)
+
+    if filtered:
+        dir_label = args.scene + "_2d-label-filt/label-filt/"
+        dir_instance = args.scene + "_2d-instance-filt/instance-filt/"
+    else:
+        dir_label = args.scene + "2d-label/label"
+        dir_instance = args.scene + "2d-instance/instance"
+
+    path_label = os.path.join(path_data, dir_label)
+    path_instance = os.path.join(path_data, dir_instance)
+
+    num_data = len(os.listdir(path_label))
+    for frame in range(num_data):
+        img_label = Image.open(path_label + '{}.png'.format(frame))       # mode=I
+        img_instance = Image.open(path_instance + '{}.png'.format(frame)) # mode=L
+        img_instance = img_instance.convert("I")
+        np_label = np.array(img_label)          # 968 * 1296, dtype int32
+        np_instance = np.array(img_instance)    # 968 * 1296, dtype uint8
+        np_instance.astype(np.int32)
+
+        h, w = np_label.shape[0], np_label.shape[1]
+
+        ##### convert format scanNet to cityscapes. label format is nyu40id
+        output = np.zeros((h, w), dtype=np.int32)
+
+        for i, row in enumerate(output):
+            if not any(np_label[i]):
+                continue
+            for j, column in enumerate(row):
+                output[i][j] = nyu40id[np_label[i][j]] * 1000 + np_instance[i][j]
+
+        ##### save gtFine
+        output = output.astype(np.int32)
+        img_output = Image.fromarray(output, 'I')
+
+        if not(os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
+        path_out = os.path.join(arg_outdir, arg_scene)
+        if not(os.path.exists(path_out)):   os.mkdir(path_out)
+
+        instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
+        color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
+        label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
+
+        img_output.save(instance_name)
+        img_output.save(color_name)
+        img_output.save(label_name)
+
+        print("save {:0>6} frame".format(frame))
+
+        ##### check image overflow for debugging ################################
+        img_debug = Image.open(instance_name)
+        pixels = np.array(img_debug)
+        if 65535 in np.unique(pixels):
+            print('Failed')
+            print('origin pixel: ', np.unique(output))
+            print('reopen pixel: ', np.unique(pixels))
+            print('origin instance: ', np.unique(np_instance))
+
+
+if __name__ == '__main__':
+    main()
