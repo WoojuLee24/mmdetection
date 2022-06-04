@@ -9,7 +9,7 @@ _base_ = [
 [OPTIONS]
   model
   * loss_cls/loss_bbox.additional_loss
-    : [None, 'jsd', 'jsdy']
+    : [None, 'jsd', 'jsdy', 'jsdsy']
   * train_cfg.wandb.log.features_list 
     : [None, "rpn_head.rpn_cls", "neck.fpn_convs.0.conv", "neck.fpn_convs.1.conv", "neck.fpn_convs.2.conv", "neck.fpn_convs.3.conv"] 
 '''
@@ -17,21 +17,23 @@ _base_ = [
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsd', lambda_weight=0.0001, wandb_name='rpn_cls'),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss='jsd', lambda_weight=0.0001, wandb_name='rpn_bbox')),
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
+            additional_loss='jsd', additional_loss_weight_reduce=False,
+            lambda_weight=0.001, temper=1, wandb_name='rpn_cls'),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0,
+                       additional_loss='None', lambda_weight=1, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsd', lambda_weight=0.0001, wandb_name='roi_cls'),
-            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss='jsd', lambda_weight=0.0001, wandb_name='roi_bbox'))),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
+                additional_loss='jsd', additional_loss_weight_reduce=False,
+                lambda_weight=0.001, temper=1, wandb_name='roi_cls'),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0,
+                           additional_loss='None', lambda_weight=1, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
-                features_list=["rpn_head.rpn_cls"],
+                features_list=[],
                 vars=['log_vars'],
                 ))))
 
@@ -71,7 +73,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': f"augmix.{aug_list}_rpn.{rpn_loss_cls['additional_loss']}.{rpn_loss_bbox['additional_loss']}_"
+                                              'name': f"augmix.{aug_list}_lambda{rpn_loss_cls['lambda_weight']}_rpn.{rpn_loss_cls['additional_loss']}.{rpn_loss_bbox['additional_loss']}_"
                                                       f"roi.{roi_loss_cls['additional_loss']}.{roi_loss_bbox['additional_loss']}",
                                               'config': {
                                                   'loss_type(rpn_cls)': f"{rpn_loss_cls['type']}({rpn_loss_cls['additional_loss']})",
@@ -86,7 +88,5 @@ log_config = dict(interval=100,
                            num_eval_images=5),
                   ]
                   )
-runner = dict(
-    type='EpochBasedRunner', max_epochs=8)
 # For better, more stable performance initialize from COCO
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
