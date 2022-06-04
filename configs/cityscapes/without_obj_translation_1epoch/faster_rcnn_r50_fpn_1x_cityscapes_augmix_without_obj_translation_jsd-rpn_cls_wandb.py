@@ -57,7 +57,7 @@ log_config = dict(interval=100,
                                                   'loss_type(rpn_bbox)': f"{rpn_loss_bbox['type']}({rpn_loss_bbox['additional_loss']})",
                                                   'loss_type(roi_cls)': f"{roi_loss_cls['type']}({roi_loss_cls['additional_loss']})",
                                                   'loss_type(roi_bbox)': f"{roi_loss_bbox['type']}({roi_loss_bbox['additional_loss']})",
-                                                  'aug_list': f"augmentations_without_obj_translation"
+                                                  'aug_list': f"augmix_wo_trans"
                                               }},
                            interval=500,
                            log_checkpoint=True,
