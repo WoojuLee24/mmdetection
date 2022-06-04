@@ -45,19 +45,79 @@ rpn_loss_bbox = model['rpn_head']['loss_bbox']
 roi_loss_cls = model['roi_head']['bbox_head']['loss_cls']
 roi_loss_bbox = model['roi_head']['bbox_head']['loss_bbox']
 
+# dataset settings
+dataset_type = 'CityscapesDataset'
+data_root = '/ws/data/cityscapes/'
+custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix'], allow_failed_imports=False)
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
+    dict(
+        type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.5),
+    ###Insert AugMix###
+    dict(type='AugMix', no_jsd=False, aug_list='copy', **img_norm_cfg),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size_divisor=32),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'img2', 'img3', 'gt_bboxes', 'gt_labels']),
+]
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=(2048, 1024),
+        flip=False,
+        transforms=[
+            dict(type='Resize', keep_ratio=True),
+            dict(type='RandomFlip'),
+            dict(type='Normalize', **img_norm_cfg),
+            dict(type='Pad', size_divisor=32),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img']),
+        ])
+]
+data = dict(
+    samples_per_gpu=1,
+    workers_per_gpu=2,
+    train=dict(
+        type='RepeatDataset',
+        times=8,
+        dataset=dict(
+            type=dataset_type,
+            ann_file=data_root +
+            'annotations/instancesonly_filtered_gtFine_train.json',
+            img_prefix=data_root + 'leftImg8bit/train/',
+            pipeline=train_pipeline)),
+    val=dict(
+        type=dataset_type,
+        ann_file=data_root +
+        'annotations/instancesonly_filtered_gtFine_val.json',
+        img_prefix=data_root + 'leftImg8bit/val/',
+        pipeline=test_pipeline),
+    test=dict(
+        type=dataset_type,
+        ann_file=data_root +
+                 'annotations/instancesonly_filtered_gtFine_val.json',
+        img_prefix=data_root + 'leftImg8bit/val/',
+        pipeline=test_pipeline))
+evaluation = dict(interval=1, metric='bbox')
+
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': f"augmix_wo_trans.rpn.{rpn_loss_cls['additional_loss']}.{rpn_loss_bbox['additional_loss']}_"
+                                              'name': f"augmix_copy.rpn.{rpn_loss_cls['additional_loss']}.{rpn_loss_bbox['additional_loss']}_"
                                                       f"roi.{roi_loss_cls['additional_loss']}.{roi_loss_bbox['additional_loss']}_",
                                               'config': {
                                                   'loss_type(rpn_cls)': f"{rpn_loss_cls['type']}({rpn_loss_cls['additional_loss']})",
                                                   'loss_type(rpn_bbox)': f"{rpn_loss_bbox['type']}({rpn_loss_bbox['additional_loss']})",
                                                   'loss_type(roi_cls)': f"{roi_loss_cls['type']}({roi_loss_cls['additional_loss']})",
                                                   'loss_type(roi_bbox)': f"{roi_loss_bbox['type']}({roi_loss_bbox['additional_loss']})",
-                                                  'aug_list': f"augmix_wo_trans"
+                                                  'aug_list': f"augmix_copy"
                                               }},
                            interval=500,
                            log_checkpoint=True,
