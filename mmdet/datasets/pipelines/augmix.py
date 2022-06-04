@@ -184,6 +184,8 @@ class AugMix:
             self.aug_list = augmentations
         elif aug_list == 'augmentations_all':
             self.aug_list = augmentations_all
+        elif aug_list == 'copy':
+            self.aug_list = aug_list
         else: # default = 'augmentations'
             self.aug_list = augmentations
 
@@ -193,6 +195,11 @@ class AugMix:
         if self.no_jsd:
             img = results['img'].copy()
             return self.aug(img)
+        elif self.aug_list == 'copy':
+            img = results['img'].copy()
+            results['img2'] = img
+            results['img3'] = img
+            results['img_fields'] = ['img', 'img2', 'img3']
         else:
             img = results['img'].copy()
             results['img2'] = self.aug(img)
