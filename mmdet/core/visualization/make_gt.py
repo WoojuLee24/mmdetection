@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import pandas as pd
 import time
+import shutil
 
 def make_gt(out_file=None,
             bboxes=None,
@@ -102,11 +103,12 @@ def get_scannet_label_table(path):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='ScanNet dataset to cityscapes format')
-    parser.add_argument("--dataset", help="input dataset dir path", type=str, default="/ws/data/scannet")
+    parser.add_argument("--dataset", help="input dataset dir path", type=str, default="/ws/data/scannet/scans/")
     parser.add_argument("--scene", help="scene dir name", type=str, default="scene0000_00")
     parser.add_argument("--filtered", help="true: smoothing data, false: raw data", type=bool, default=True)
     parser.add_argument("--gtLabel", help="scannetv2-labels.combined.tsv path", type=str, default="/ws/data/scannet/")
-    parser.add_argument("--outdir", help="output directory path", type=str, default="/ws/data/scannet/cityscapes_format")
+    parser.add_argument("--outrgb", help="output rgb directory path", type=str, default="/ws/data/scannet/leftImg8bit/train/")
+    parser.add_argument("--outdir", help="output directory path", type=str, default="/ws/data/scannet/gtFine/train/")
     args = parser.parse_args()
     return args
 
@@ -115,6 +117,7 @@ def main():
     arg_dataset = args.dataset
     arg_scene = args.scene
     arg_gt_label = args.gtLabel
+    arg_rgb_frame = args.outrgb
     arg_outdir = args.outdir
     filtered = args.filtered
 
@@ -122,6 +125,8 @@ def main():
     if not (os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
     path_out = os.path.join(arg_outdir, arg_scene)
     if not (os.path.exists(path_out)):   os.mkdir(path_out)
+    rgb_out = os.path.join(arg_rgb_frame, arg_scene)
+    if not (os.path.exists(rgb_out)):   os.mkdir(rgb_out)
 
     nyu40class, nyu40id = get_scannet_label_table(arg_gt_label)
 
@@ -135,6 +140,7 @@ def main():
         dir_label = args.scene + "2d-label/label"
         dir_instance = args.scene + "2d-instance/instance"
 
+    path_rgb = os.path.join(path_data, "color")
     path_label = os.path.join(path_data, dir_label)
     path_instance = os.path.join(path_data, dir_instance)
 
@@ -144,9 +150,17 @@ def main():
         start = time.time() # start time checker
 
         ##### make name & pass the existed file
+        rgb_name = rgb_out + '/' + arg_scene + '_{:0>6}_leftImg8bit.png'.format(frame)
         instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
         color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
         label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
+
+        if os.path.isfile(rgb_name):
+            print("Pass {:0>6} rgb frame".format(frame))
+        else:
+            file_rgb = os.path.join(path_rgb, str(frame) + ".jpg")
+            shutil.copy(file_rgb, rgb_name)
+
         if os.path.isfile(instance_name) and os.path.isfile(color_name) and os.path.isfile(label_name):
             print("Pass {:0>6} frame".format(frame))
             continue
@@ -161,19 +175,20 @@ def main():
         h, w = np_label.shape[0], np_label.shape[1]                       # height, width
 
         ##### convert format scanNet to cityscapes. label format is nyu40id
-        output = np.zeros((h, w), dtype=np.int32)
+        # output = np.zeros((h, w), dtype=np.int32)
+        # for i, row in enumerate(output):
+        #     if not any(np_label[i]):
+        #         continue
+        #     for j, column in enumerate(row):
+        #         output[i][j] = nyu40id[np_label[i][j]] * 1000 + np_instance[i][j]
 
-        for i, row in enumerate(output):
-            if not any(np_label[i]):
-                continue
-            for j, column in enumerate(row):
-                output[i][j] = nyu40id[np_label[i][j]] * 1000 + np_instance[i][j]
+        ## improve inference speed
+        np_mapped_label = np.vectorize(nyu40id.get)(np_label)
+        output = np_mapped_label * 1000 + np_instance
 
         ##### save gtFine
         output = output.astype(np.int32)
         img_output = Image.fromarray(output, 'I')
-
-
 
         img_output.save(instance_name)
         img_output.save(color_name)
