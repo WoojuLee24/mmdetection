@@ -416,11 +416,15 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
-            for layer_name in self.train_cfg.wandb.log.features_list:
-                self.wandb_features[layer_name] = self.features[layer_name]
-            if 'log_vars' in self.train_cfg.wandb.log.vars:
-                for name, value in log_vars.items():
-                    self.wandb_features[name] = np.mean(value)
+            if 'wandb' in self.train_cfg:
+                if 'log' in self.train_cfg.wandb:
+                    if 'features_list' in self.train_cfg.wandb.log:
+                        for layer_name in self.train_cfg.wandb.log.features_list:
+                            self.wandb_features[layer_name] = self.features[layer_name]
+                    if 'vars' in self.train_cfg.wandb.log:
+                        if 'log_vars' in self.train_cfg.wandb.log.vars:
+                            for name, value in log_vars.items():
+                                self.wandb_features[name] = np.mean(value)
         else:
             # settings
             self.wandb_data = data
@@ -430,11 +434,15 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
-            for layer_name in self.train_cfg.wandb.log.features_list:
-                self.wandb_features[layer_name] = self.features[layer_name]
-            if 'log_vars' in self.train_cfg.wandb.log.vars:
-                for name, value in log_vars.items():
-                    self.wandb_features[name] = np.mean(value)
+            if 'wandb' in self.train_cfg:
+                if 'log' in self.train_cfg.wandb:
+                    if 'features_list' in self.train_cfg.wandb.log:
+                        for layer_name in self.train_cfg.wandb.log.features_list:
+                            self.wandb_features[layer_name] = self.features[layer_name]
+                    if 'vars' in self.train_cfg.wandb.log:
+                        if 'log_vars' in self.train_cfg.wandb.log.vars:
+                            for name, value in log_vars.items():
+                                self.wandb_features[name] = np.mean(value)
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))

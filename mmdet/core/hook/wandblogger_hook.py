@@ -213,32 +213,36 @@ class WandbLogger(WandbLoggerHook):
 
             if self.every_n_iters(runner, self.interval):
                 # save the rpn feature maps
-                if 'rpn_head.rpn_cls' in runner.model.module.train_cfg.wandb.log.features_list:
-                    data = runner.model.module.wandb_data
-                    plt = runner.model.module.save_the_result_img(data)
-                    self.wandb.log({
-                        f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
-                    })
-                    plt.close()
-
-                # save the fpn feature maps
-                if ('neck.fpn_convs.0.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
-                    or ('neck.fpn_convs.1.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
-                    or ('neck.fpn_convs.2.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
-                    or ('neck.fpn_convs.3.conv' in runner.model.module.train_cfg.wandb.log.features_list):
-                    plt = runner.model.module.save_the_fpn_img()
-                    self.wandb.log({
-                        f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
-                    })
-                    plt.close()
+                if 'wandb' in runner.model.module.train_cfg:
+                    if 'log' in runner.model.module.train_cfg.wandb:
+                        if 'features_list' in runner.model.module.train_cfg.wandb.log:
+                            if 'rpn_head.rpn_cls' in runner.model.module.train_cfg.wandb.log.features_list:
+                                data = runner.model.module.wandb_data
+                                plt = runner.model.module.save_the_result_img(data)
+                                self.wandb.log({
+                                    f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
+                                })
+                                plt.close()
+                            # save the fpn feature maps
+                            if ('neck.fpn_convs.0.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
+                                or ('neck.fpn_convs.1.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
+                                or ('neck.fpn_convs.2.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
+                                or ('neck.fpn_convs.3.conv' in runner.model.module.train_cfg.wandb.log.features_list):
+                                plt = runner.model.module.save_the_fpn_img()
+                                self.wandb.log({
+                                    f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
+                                })
+                                plt.close()
 
                 # save the loss and jsd loss log
                 for wandb_feature, value in runner.model.module.wandb_features.items():
                     self.wandb.log({wandb_feature: value})
-                for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
-                    self.wandb.log({wandb_feature: value})
-                for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
-                    self.wandb.log({wandb_feature: value})
+                if hasattr(runner.model.module.rpn_head.loss_cls, 'wandb_features'):
+                    for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
+                        self.wandb.log({wandb_feature: value})
+                if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
+                    for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
+                        self.wandb.log({wandb_feature: value})
 
                 # measure mAP and save the results on the validation dataset
                 results = single_gpu_test(runner.model, self.val_dataloader, show=False)

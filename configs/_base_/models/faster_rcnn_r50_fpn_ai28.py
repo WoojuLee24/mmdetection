@@ -10,6 +10,7 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=True,
         style='pytorch',
+        # init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')
         init_cfg=None),
     neck=dict(
         type='FPN',
@@ -44,6 +45,7 @@ model = dict(
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
+            # num_classes=80,
             num_classes=8,
             bbox_coder=dict(
                 type='DeltaXYWHBBoxCoder',
@@ -52,7 +54,8 @@ model = dict(
             reg_class_agnostic=False,
             loss_cls=dict(
                 type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='L1Loss', loss_weight=1.0))),
+            # loss_bbox=dict(type='L1Loss', loss_weight=1.0)
+            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     # model training and testing settings
     train_cfg=dict(
         rpn=dict(
