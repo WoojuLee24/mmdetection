@@ -5,6 +5,8 @@ from PIL import Image
 import pandas as pd
 import time
 import shutil
+import zipfile
+import glob
 
 def make_gt(out_file=None,
             bboxes=None,
@@ -104,7 +106,8 @@ def get_scannet_label_table(path):
 def parse_args():
     parser = argparse.ArgumentParser(description='ScanNet dataset to cityscapes format')
     parser.add_argument("--dataset", help="input dataset dir path", type=str, default="/ws/data/scannet/scans/")
-    parser.add_argument("--scene", help="scene dir name", type=str, default="scene0000_00")
+    # parser.add_argument("--scene", help="scene dir name", type=str, default="scene0000_00")
+    parser.add_argument("--scenes", help="scene dir name", type=str, nargs='+', default="none")
     parser.add_argument("--filtered", help="true: smoothing data, false: raw data", type=bool, default=True)
     parser.add_argument("--gtLabel", help="scannetv2-labels.combined.tsv path", type=str, default="/ws/data/scannet/")
     parser.add_argument("--outrgb", help="output rgb directory path", type=str, default="/ws/data/scannet/leftImg8bit/train/")
@@ -115,97 +118,107 @@ def parse_args():
 def main():
     args = parse_args()
     arg_dataset = args.dataset
-    arg_scene = args.scene
+    arg_scenes = args.scenes
     arg_gt_label = args.gtLabel
     arg_rgb_frame = args.outrgb
     arg_outdir = args.outdir
     filtered = args.filtered
 
-    path_data = os.path.join(arg_dataset, arg_scene)
-    if not (os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
-    path_out = os.path.join(arg_outdir, arg_scene)
-    if not (os.path.exists(path_out)):   os.mkdir(path_out)
-    rgb_out = os.path.join(arg_rgb_frame, arg_scene)
-    if not (os.path.exists(rgb_out)):   os.mkdir(rgb_out)
+    if arg_scenes == 'none':
+        arg_scenes = sorted(os.listdir(arg_dataset))
 
-    nyu40class, nyu40id = get_scannet_label_table(arg_gt_label)
+    for arg_scene in arg_scenes:
+        path_data = os.path.join(arg_dataset, arg_scene)
+        if not (os.path.exists(arg_outdir)): os.mkdir(arg_outdir)
+        path_out = os.path.join(arg_outdir, arg_scene)
+        if not (os.path.exists(path_out)):   os.mkdir(path_out)
+        rgb_out = os.path.join(arg_rgb_frame, arg_scene)
+        if not (os.path.exists(rgb_out)):   os.mkdir(rgb_out)
 
-    ##### Show 40 class text.
-    # print(nyu40class)
+        nyu40class, nyu40id = get_scannet_label_table(arg_gt_label)
 
-    if filtered:
-        dir_label = args.scene + "_2d-label-filt/label-filt/"
-        dir_instance = args.scene + "_2d-instance-filt/instance-filt/"
-    else:
-        dir_label = args.scene + "2d-label/label"
-        dir_instance = args.scene + "2d-instance/instance"
+        ##### Show 40 class text.
+        # print(nyu40class)
 
-    path_rgb = os.path.join(path_data, "color")
-    path_label = os.path.join(path_data, dir_label)
-    path_instance = os.path.join(path_data, dir_instance)
-
-    num_data = len(os.listdir(path_label))
-    for frame in range(num_data):
-
-        start = time.time() # start time checker
-
-        ##### make name & pass the existed file
-        rgb_name = rgb_out + '/' + arg_scene + '_{:0>6}_leftImg8bit.png'.format(frame)
-        instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
-        color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
-        label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
-
-        if os.path.isfile(rgb_name):
-            print("Pass {:0>6} rgb frame".format(frame))
+        if filtered:
+            dir_label = arg_scene + "_2d-label-filt/label-filt"
+            dir_instance = arg_scene + "_2d-instance-filt/instance-filt"
         else:
-            file_rgb = os.path.join(path_rgb, str(frame) + ".jpg")
-            shutil.copy(file_rgb, rgb_name)
+            dir_label = arg_scene + "2d-label/label"
+            dir_instance = arg_scene + "2d-instance/instance"
 
-        if os.path.isfile(instance_name) and os.path.isfile(color_name) and os.path.isfile(label_name):
-            print("Pass {:0>6} frame".format(frame))
-            continue
+        path_rgb = os.path.join(path_data, "color")
+        path_label = os.path.join(path_data, dir_label)
+        path_instance = os.path.join(path_data, dir_instance)
 
-        img_label = Image.open(path_label + '{}.png'.format(frame))       # mode=I
-        img_instance = Image.open(path_instance + '{}.png'.format(frame)) # mode=L
-        img_instance = img_instance.convert("I")
-        np_label = np.array(img_label)                                    # 968 * 1296, dtype int32
-        np_instance = np.array(img_instance)                              # 968 * 1296, dtype uint8
-        np_instance.astype(np.int32)
+        if not os.path.exists(path_label):
+            zip_files = glob.glob(path_data + "/*.zip")
+            for zip_file in zip_files:
+                with zipfile.ZipFile(zip_file, 'r') as zip_f:
+                    zip_f.extractall(zip_file[-4:])
 
-        h, w = np_label.shape[0], np_label.shape[1]                       # height, width
+        num_data = len(os.listdir(path_label))
+        for frame in range(num_data):
 
-        ##### convert format scanNet to cityscapes. label format is nyu40id
-        # output = np.zeros((h, w), dtype=np.int32)
-        # for i, row in enumerate(output):
-        #     if not any(np_label[i]):
-        #         continue
-        #     for j, column in enumerate(row):
-        #         output[i][j] = nyu40id[np_label[i][j]] * 1000 + np_instance[i][j]
+            start = time.time() # start time checker
 
-        ## improve inference speed
-        np_mapped_label = np.vectorize(nyu40id.get)(np_label)
-        output = np_mapped_label * 1000 + np_instance
+            ##### make name & pass the existed file
+            rgb_name = rgb_out + '/' + arg_scene + '_{:0>6}_leftImg8bit.png'.format(frame)
+            instance_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_instanceIds.png'.format(frame)
+            color_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_color.png'.format(frame)
+            label_name = path_out + '/' + arg_scene + '_{:0>6}_gtFine_labelIds.png'.format(frame)
 
-        ##### save gtFine
-        output = output.astype(np.int32)
-        img_output = Image.fromarray(output, 'I')
+            if os.path.isfile(rgb_name):
+                print("Pass {:0>6} rgb frame".format(frame))
+            else:
+                file_rgb = os.path.join(path_rgb, str(frame) + ".jpg")
+                shutil.copy(file_rgb, rgb_name)
 
-        img_output.save(instance_name)
-        img_output.save(color_name)
-        img_output.save(label_name)
+            if os.path.isfile(instance_name) and os.path.isfile(color_name) and os.path.isfile(label_name):
+                print("Pass {:0>6} frame".format(frame))
+                continue
 
-        print("save {:0>6} frame".format(frame))
-        end = time.time()
-        print(f"{end - start:.5f} sec")
+            img_label = Image.open(os.path.join(path_label,'{}.png'.format(frame)))       # mode=I
+            img_instance = Image.open(os.path.join(path_instance, '{}.png'.format(frame))) # mode=L
+            img_instance = img_instance.convert("I")
+            np_label = np.array(img_label)                                    # 968 * 1296, dtype int32
+            np_instance = np.array(img_instance)                              # 968 * 1296, dtype uint8
+            np_instance.astype(np.int32)
 
-        ##### check image overflow for debugging ################################
-        img_debug = Image.open(instance_name)
-        pixels = np.array(img_debug)
-        if 65535 in np.unique(pixels):
-            print('Failed')
-            print('origin pixel: ', np.unique(output))
-            print('reopen pixel: ', np.unique(pixels))
-            print('origin instance: ', np.unique(np_instance))
+            h, w = np_label.shape[0], np_label.shape[1]                       # height, width
+
+            ##### convert format scanNet to cityscapes. label format is nyu40id
+            # output = np.zeros((h, w), dtype=np.int32)
+            # for i, row in enumerate(output):
+            #     if not any(np_label[i]):
+            #         continue
+            #     for j, column in enumerate(row):
+            #         output[i][j] = nyu40id[np_label[i][j]] * 1000 + np_instance[i][j]
+
+            ## improve inference speed
+            np_mapped_label = np.vectorize(nyu40id.get)(np_label)
+            output = np_mapped_label * 1000 + np_instance
+
+            ##### save gtFine
+            output = output.astype(np.int32)
+            img_output = Image.fromarray(output, 'I')
+
+            img_output.save(instance_name)
+            img_output.save(color_name)
+            img_output.save(label_name)
+
+            print("save {:0>6} frame".format(frame))
+            end = time.time()
+            print(f"{end - start:.5f} sec")
+
+            ##### check image overflow for debugging ################################
+            img_debug = Image.open(instance_name)
+            pixels = np.array(img_debug)
+            if 65535 in np.unique(pixels):
+                print('Failed')
+                print('origin pixel: ', np.unique(output))
+                print('reopen pixel: ', np.unique(pixels))
+                print('origin instance: ', np.unique(np_instance))
 
 
 if __name__ == '__main__':
