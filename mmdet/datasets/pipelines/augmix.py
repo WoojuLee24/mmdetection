@@ -178,11 +178,11 @@ class AugMix:
             autocontrast, equalize, posterize, solarize,
             color, contrast, brightness, sharpness
         ]
-        if aug_list == 'augmentations_without_obj_translation':
+        if (aug_list == 'augmentations_without_obj_translation') or (aug_list == 'wotrans'):
             self.aug_list = augmentations_without_obj_translation
         elif aug_list == 'augmentations':
             self.aug_list = augmentations
-        elif aug_list == 'augmentations_all':
+        elif (aug_list == 'augmentations_all') or (aug_list == 'all'):
             self.aug_list = augmentations_all
         elif aug_list == 'copy':
             self.aug_list = aug_list
