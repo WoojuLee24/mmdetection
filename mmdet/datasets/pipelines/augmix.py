@@ -197,9 +197,10 @@ class AugMix:
             return self.aug(img)
         elif self.aug_list == 'copy':
             img = results['img'].copy()
-            results['img2'] = img
-            results['img3'] = img
+            results['img2'] = img.copy()
+            results['img3'] = img.copy()
             results['img_fields'] = ['img', 'img2', 'img3']
+            return results
         else:
             img = results['img'].copy()
             results['img2'] = self.aug(img)
