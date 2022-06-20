@@ -319,6 +319,7 @@ def jsdv2(pred,
         torch.Tensor: The calculated loss
     """
     temper = kwargs['temper']
+    add_act = kwargs['add_act']
 
     # chunk the data to get p_orig, label_orig, and weight_orig
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
@@ -336,15 +337,24 @@ def jsdv2(pred,
             # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
 
-    # sigmoid and softmax function for rpn_cls and roi_cls
-    if pred_orig.shape[-1] is 1:    # if rpn
-        p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
-                                  torch.sigmoid(pred_aug1 / temper), \
-                                  torch.sigmoid(pred_aug2 / temper)
-    else:   # else roi
+    if add_act == None:
+        # sigmoid and softmax function for rpn_cls and roi_cls
+        if pred_orig.shape[-1] is 1:    # if rpn
+            p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
+                                      torch.sigmoid(pred_aug1 / temper), \
+                                      torch.sigmoid(pred_aug2 / temper)
+        else:   # else roi
+            p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
+                                      F.softmax(pred_aug1 / temper, dim=1), \
+                                      F.softmax(pred_aug2 / temper, dim=1)
+    elif add_act == 'softmax':
         p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
                                   F.softmax(pred_aug1 / temper, dim=1), \
                                   F.softmax(pred_aug2 / temper, dim=1)
+    elif add_act == 'sigmoid':
+        p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
+                                  torch.sigmoid(pred_aug1 / temper), \
+                                  torch.sigmoid(pred_aug2 / temper)
 
     label = label.float()
 
@@ -392,6 +402,7 @@ class CrossEntropyLossPlus(nn.Module):
                  additional_loss_weight_reduce=False,
                  lambda_weight=0.0001,
                  temper=1,
+                 add_act=None,
                  wandb_name=None):
         """CrossEntropyLossPlus.
 
@@ -421,6 +432,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.additional_loss_weight_reduce = additional_loss_weight_reduce
         self.lambda_weight = lambda_weight
         self.temper = temper
+        self.add_act = add_act
         self.wandb_name = wandb_name
 
         self.wandb_features = dict()
@@ -496,7 +508,8 @@ class CrossEntropyLossPlus(nn.Module):
                 weight,
                 reduction=reduction,
                 avg_factor=avg_factor,
-                temper=self.temper)
+                temper=self.temper,
+                add_act=self.add_act)
             self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
             self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = loss_additional
             for key, value in p_distribution.items():
