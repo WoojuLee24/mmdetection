@@ -1,8 +1,8 @@
 _base_ = [
-    '../../_base_/models/faster_rcnn_r50_fpn_ai28.py',
-    '../../_base_/datasets/cityscapes_detection.py',
-    '../../_base_/schedules/ai28.py',
-    '../../_base_/default_runtime.py'
+    '../_base_/models/faster_rcnn_r50_fpn_ai28.py',
+    '../_base_/datasets/cityscapes_detection.py',
+    '../_base_/schedules/ai28.py',
+    '../_base_/default_runtime.py'
 ]
 
 '''
