@@ -32,7 +32,7 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_1', lambda_weight=0.1, wandb_name='rpn_cls'),
+            , additional_loss='jsdv1_1', lambda_weight=0.01, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
