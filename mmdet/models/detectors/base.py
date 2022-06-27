@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import os
 import pdb
 from collections import OrderedDict
-
+from mmdet.models.losses.ai28.additional_loss import fpn_loss
 
 # use_wandb = True # False True
 
@@ -413,6 +413,18 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             data['img_metas'] += data['img_metas'] + data['img_metas']
 
             losses = self(**data)
+
+            # domain generalization in the fpn layer
+            # if train_cfg.wandb.log.features_list = [], pass
+            for key, pred in self.features.items():
+                loss_, p_dist = fpn_loss(pred[0],
+                                            loss_type=self.neck.train_cfg["loss"]["type"],
+                                            temper=self.neck.train_cfg["loss"]["temper"],
+                                            add_act=self.neck.train_cfg["loss"]["add_act"],
+                                         )
+                losses[f"fpn_loss.{key}"] = loss_
+                f".{pipeline['aug_list'].lower()}"
+
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
@@ -425,6 +437,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                         if 'log_vars' in self.train_cfg.wandb.log.vars:
                             for name, value in log_vars.items():
                                 self.wandb_features[name] = np.mean(value)
+
         else:
             # settings
             self.wandb_data = data
