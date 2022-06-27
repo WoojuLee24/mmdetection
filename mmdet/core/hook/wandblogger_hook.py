@@ -239,7 +239,11 @@ class WandbLogger(WandbLoggerHook):
                     self.wandb.log({wandb_feature: value})
                 if hasattr(runner.model.module.rpn_head.loss_cls, 'wandb_features'):
                     for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
-                        self.wandb.log({wandb_feature: value})
+                        if isinstance(value, list):
+                            for i, v in enumerate(value):
+                                self.wandb.log({wandb_feature + '_layer' + str(i): v})
+                        else:
+                            self.wandb.log({wandb_feature: value})
                 if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
                     for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
                         self.wandb.log({wandb_feature: value})
