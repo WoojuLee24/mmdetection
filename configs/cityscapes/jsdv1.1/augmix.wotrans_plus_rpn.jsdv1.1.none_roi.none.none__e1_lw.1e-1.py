@@ -143,7 +143,7 @@ print('++++++++++++++++++++')
 print(f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}")
 print('++++++++++++++++++++')
 
-log_config = dict(interval=10,
+log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
@@ -160,7 +160,7 @@ log_config = dict(interval=10,
                                                   # parameters
                                                   'epoch': runner['max_epochs'],
                                               }},
-                           interval=10,
+                           interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,
                            num_eval_images=5),
