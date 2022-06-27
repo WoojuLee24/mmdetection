@@ -449,6 +449,98 @@ def jsdv2(pred,
     return loss, p_distribution
 
 
+def jsdv3(pred,
+          label,
+          weight=None,
+          reduction='mean',
+          avg_factor=None,
+          ignore_index=-100,
+          **kwargs):
+    """Calculate the jsdy loss.
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+        temper (int, optional): temperature scaling for softmax function.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    # chunk the data to get p_orig, label_orig, and weight_orig
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    label, _, _ = torch.chunk(label, 3)
+    if weight is not None:
+        weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+
+    # match the shape: label and weight with pred
+    if pred_orig.shape != label.shape:
+        if pred_orig.shape[-1] is 1:  # if rpn
+            ignore_index = -100 if ignore_index is None else ignore_index
+            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
+        else:   # else roi
+            # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
+            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
+
+    if add_act == None:
+        # sigmoid and softmax function for rpn_cls and roi_cls
+        if pred_orig.shape[-1] is 1:    # if rpn
+            p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
+                                      torch.sigmoid(pred_aug1 / temper), \
+                                      torch.sigmoid(pred_aug2 / temper)
+        else:   # else roi
+            p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
+                                      F.softmax(pred_aug1 / temper, dim=1), \
+                                      F.softmax(pred_aug2 / temper, dim=1)
+    elif add_act == 'softmax':
+        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
+                                  F.softmax(pred_aug1 / temper, dim=1), \
+                                  F.softmax(pred_aug2 / temper, dim=1)
+    elif add_act == 'sigmoid':
+        p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
+                                  torch.sigmoid(pred_aug1 / temper), \
+                                  torch.sigmoid(pred_aug2 / temper)
+
+    label = label.float()
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
+    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
+            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+            F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+
+    # apply weights and do the reduction
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=None)  # avg_factor=avg_factor is deprecated
+
+    if weight is not None:
+        assert p_clean.size() == label.size() == weight.size(), \
+            "The size of tensors does not match"
+        # get valid predictions for wandb log
+        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight!=0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug1[weight!=0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug2[weight!=0], 1e-7, 1).log(), \
+                                                    p_mixture[weight!=0], \
+                                                    torch.clamp(label[weight!=0], 1e-7, 1).log()
+
+    # logging
+    p_distribution = {'p_clean': p_clean,
+                      'p_aug1': p_aug1,
+                      'p_aug2': p_aug2,
+                      'p_mixture': p_mixture,
+                      'label': label,}
+
+    return loss, p_distribution
+
+
 @LOSSES.register_module()
 class CrossEntropyLossPlus(nn.Module):
 
@@ -513,6 +605,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_1
         elif self.additional_loss == 'jsdv2':
             self.cls_additional = jsdv2
+        elif self.additional_loss == 'jsdv3':
+            self.cls_additional = jsdv3
         elif self.additional_loss == 'jsdy':
             self.cls_additional = jsdy
         else:
