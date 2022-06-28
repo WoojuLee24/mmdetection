@@ -417,13 +417,13 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             # domain generalization in the fpn layer
             # if train_cfg.wandb.log.features_list = [], pass
             for key, pred in self.features.items():
-                loss_, p_dist = fpn_loss(pred[0],
-                                            loss_type=self.neck.train_cfg["loss"]["type"],
-                                            temper=self.neck.train_cfg["loss"]["temper"],
-                                            add_act=self.neck.train_cfg["loss"]["add_act"],
-                                         )
+                dict_kwargs = dict()
+                if "loss" in self.neck.train_cfg:
+                    neck_train_cfg_loss = self.neck.train_cfg["loss"]
+                    for key, value in neck_train_cfg_loss:
+                        dict_kwargs[key] = value
+                loss_, p_dist = fpn_loss(pred[0], **dict_kwargs)
                 losses[f"fpn_loss.{key}"] = loss_
-                f".{pipeline['aug_list'].lower()}"
 
             loss, log_vars = self._parse_losses(losses)
 

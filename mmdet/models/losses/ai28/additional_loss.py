@@ -28,9 +28,9 @@ def fpn_loss(pred,
         torch.Tensor: The calculated loss
     """
     p_clean, p_aug1, p_aug2 = 0, 0, 0
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-    loss_type = kwargs['loss_type']
+    temper = kwargs['temper'] if 'temper' in kwargs else 1
+    add_act = kwargs['add_act'] if 'add_act' in kwargs else None
+    loss_type = kwargs['loss_type'] if 'loss_type' in kwargs else 'mse'
 
     # chunk the data to get p_orig
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
