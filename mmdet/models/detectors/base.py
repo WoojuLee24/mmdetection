@@ -422,8 +422,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                     neck_train_cfg_loss = self.neck.train_cfg["loss"]
                     for key, value in neck_train_cfg_loss:
                         dict_kwargs[key] = value
-                loss_, p_dist = fpn_loss(pred[0], **dict_kwargs)
-                losses[f"fpn_loss.{key}"] = loss_
+                    loss_, p_dist = fpn_loss(pred[0], **dict_kwargs)
+                    losses[f"fpn_loss.{key}"] = loss_
 
             loss, log_vars = self._parse_losses(losses)
 
