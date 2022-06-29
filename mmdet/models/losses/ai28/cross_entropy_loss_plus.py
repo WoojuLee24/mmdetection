@@ -445,7 +445,7 @@ def jsdy(pred,
     label, _, _ = torch.chunk(label, 3)
 
     if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] is 1: # if rpn
+        if pred_orig.shape[-1] == 1: # if rpn
             label = label.reshape(label.shape+(1,)).contiguous()
         else: # else roi
             label = F.one_hot(label, num_classes=pred_orig.shape[-1]) # TO-DO: need to check
@@ -517,7 +517,7 @@ def jsdv2(pred,
 
     # match the shape: label and weight with pred
     if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] is 1:  # if rpn
+        if pred_orig.shape[-1] == 1:  # if rpn
             ignore_index = -100 if ignore_index is None else ignore_index
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
         else:   # else roi
@@ -526,7 +526,7 @@ def jsdv2(pred,
 
     if add_act == None:
         # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] is 1:    # if rpn
+        if pred_orig.shape[-1] == 1:    # if rpn
             p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
                                       torch.sigmoid(pred_aug1 / temper), \
                                       torch.sigmoid(pred_aug2 / temper)
@@ -609,7 +609,7 @@ def jsdv3(pred,
 
     # match the shape: label and weight with pred
     if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] is 1:  # if rpn
+        if pred_orig.shape[-1] == 1:  # if rpn
             ignore_index = -100 if ignore_index is None else ignore_index
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
         else:   # else roi
@@ -618,7 +618,7 @@ def jsdv3(pred,
 
     if add_act == None:
         # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] is 1:    # if rpn
+        if pred_orig.shape[-1] == 1:    # if rpn
             p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
                                       torch.sigmoid(pred_aug1 / temper), \
                                       torch.sigmoid(pred_aug2 / temper)
