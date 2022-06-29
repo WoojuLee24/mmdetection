@@ -376,7 +376,7 @@ def jsdv1_3(pred,
         torch.Tensor: The calculated loss
     """
 
-    avg_factor = None
+    # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
 
