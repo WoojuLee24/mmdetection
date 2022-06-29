@@ -260,7 +260,7 @@ def jsdv1_1(pred,
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
 
-    if pred_orig.shape[-1] is 1:  # if rpn
+    if pred_orig.shape[-1] == 1:  # if rpn
         p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
                                   torch.sigmoid(pred_aug1), \
                                   torch.sigmoid(pred_aug2)
@@ -321,7 +321,7 @@ def jsdv1_2(pred,
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
 
-    if pred_orig.shape[-1] is 1:  # if rpn
+    if pred_orig.shape[-1] == 1:  # if rpn
         p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
                                   torch.sigmoid(pred_aug1), \
                                   torch.sigmoid(pred_aug2)
@@ -382,7 +382,7 @@ def jsdv1_3(pred,
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
 
-    if pred_orig.shape[-1] is 1:  # if rpn
+    if pred_orig.shape[-1] == 1:  # if rpn
         # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
         #                           torch.sigmoid(pred_aug1),\
         #                           torch.sigmoid(pred_aug2)
