@@ -419,6 +419,71 @@ def jsdv1_3(pred,
 
     return loss, p_distribution
 
+def jsdv1_4(pred,
+            label,
+            weight=None,
+            reduction='mean',
+            avg_factor=None,
+            **kwargs):
+    """Calculate the jsdv1.1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    avg_factor = None
+    kldiv_reduction = 'batchmean'
+
+    temper = kwargs['temper']
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+
+    if pred_orig.shape[-1] == 1:  # if rpn
+        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
+        #                           torch.sigmoid(pred_aug1),\
+        #                           torch.sigmoid(pred_aug2)
+        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig / temper), 1 - torch.sigmoid(pred_orig / temper)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1 / temper), 1 - torch.sigmoid(pred_aug1 / temper)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug2 / temper), 1 - torch.sigmoid(pred_aug2 / temper)), dim=1),
+
+    else:  # else roi
+        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
+                                  F.softmax(pred_aug1 / temper, dim=1), \
+                                  F.softmax(pred_aug2 / temper, dim=1)
+
+    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
+    loss = (F.kl_div(p_mixture, p_clean, reduction=kldiv_reduction) +
+            F.kl_div(p_mixture, p_aug1, reduction=kldiv_reduction) +
+            F.kl_div(p_mixture, p_aug2, reduction=kldiv_reduction)) / 3.
+
+    # apply weights and do the reduction
+    if weight is not None:
+        weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
+                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
+                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
+                      'p_mixture': p_mixture}
+
+    return loss, p_distribution
+
 
 def jsdy(pred,
          label,
@@ -733,6 +798,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_2
         elif self.additional_loss == 'jsdv1_3':
             self.cls_additional = jsdv1_3
+        elif self.additional_loss == 'jsdv1_4':
+            self.cls_additional = jsdv1_4
         elif self.additional_loss == 'jsdv2':
             self.cls_additional = jsdv2
         elif self.additional_loss == 'jsdv3':

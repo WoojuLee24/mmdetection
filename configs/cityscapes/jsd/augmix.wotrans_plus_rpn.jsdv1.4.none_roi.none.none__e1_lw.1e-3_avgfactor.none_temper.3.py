@@ -32,8 +32,8 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_4', wandb_name='rpn_cls',
-            additional_kwargs=dict(lambda_weight=0.01, avg_factor=None, temper=1)
+            , additional_loss='jsdv1_4', lambda_weight=0.001, wandb_name='rpn_cls'
+            , temper=3
         ),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", wandb_name='rpn_bbox')),
