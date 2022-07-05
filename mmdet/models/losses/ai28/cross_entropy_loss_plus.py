@@ -420,70 +420,6 @@ def jsdv1_3(pred,
     return loss, p_distribution
 
 
-def jsdv1_4(pred,
-            label,
-            weight=None,
-            reduction='mean',
-            avg_factor=None,
-            **kwargs):
-    """Calculate the jsdv1.1 loss.
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    # avg_factor = None
-    temper = kwargs['temper']
-
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
-
-    if pred_orig.shape[-1] == 1:  # if rpn
-        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
-        #                           torch.sigmoid(pred_aug1),\
-        #                           torch.sigmoid(pred_aug2)
-        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig / temper), 1 - torch.sigmoid(pred_orig / temper)), dim=1), \
-                                  torch.cat((torch.sigmoid(pred_aug1 / temper), 1 - torch.sigmoid(pred_aug1 / temper)), dim=1), \
-                                  torch.cat((torch.sigmoid(pred_aug2 / temper), 1 - torch.sigmoid(pred_aug2 / temper)), dim=1),
-
-    else:  # else roi
-        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
-                                  F.softmax(pred_aug1 / temper, dim=1), \
-                                  F.softmax(pred_aug2 / temper, dim=1)
-
-    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
-                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
-                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
-
-    # Clamp mixture distribution to avoid exploding KL divergence
-    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-    # apply weights and do the reduction
-    if weight is not None:
-        weight, _, _ = torch.chunk(weight, 3)
-        weight = weight.float()
-    loss = weight_reduce_loss(
-        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
-
-    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
-                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
-                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
-                      'p_mixture': p_mixture}
-
-    return loss, p_distribution
-
-
 def jsdy(pred,
          label,
          weight=None,
@@ -746,8 +682,7 @@ class CrossEntropyLossPlus(nn.Module):
                  lambda_weight=0.0001,
                  temper=1,
                  add_act=None,
-                 wandb_name=None,
-                 additional_kwargs=None):
+                 wandb_name=None):
         """CrossEntropyLossPlus.
 
         Args:
@@ -774,6 +709,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.ignore_index = ignore_index
         self.additional_loss = additional_loss
         self.additional_loss_weight_reduce = additional_loss_weight_reduce
+        self.lambda_weight = lambda_weight
         self.temper = temper
         self.add_act = add_act
         self.wandb_name = wandb_name
@@ -781,9 +717,6 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_features = dict()
         self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
-
-        self.additional_kwargs = additional_kwargs if additional_kwargs is not None else dict()
-        self.lambda_weight = self.additional_kwargs['lambda_weight'] if 'lambda_weight' in self.additional_kwargs else lambda_weight
 
         if self.use_sigmoid:
             self.cls_criterion = binary_cross_entropy
@@ -800,8 +733,6 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_2
         elif self.additional_loss == 'jsdv1_3':
             self.cls_additional = jsdv1_3
-        elif self.additional_loss == 'jsdv1_4':
-            self.cls_additional = jsdv1_4
         elif self.additional_loss == 'jsdv2':
             self.cls_additional = jsdv2
         elif self.additional_loss == 'jsdv3':
@@ -865,8 +796,8 @@ class CrossEntropyLossPlus(nn.Module):
                 label,
                 weight,
                 reduction=reduction,
-                avg_factor=self.additional_kwargs['avg_factor'] if 'avg_factor' in self.additional_kwargs else avg_factor,
-                temper=self.additional_kwargs['temper'] if 'temper' in self.additional_kwargs else self.temper,
+                avg_factor=avg_factor,
+                temper=self.temper,
                 add_act=self.add_act)
 
             # wandb for rpn
@@ -887,3 +818,4 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_features[f'loss({self.wandb_name})'] = loss
         self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
         return loss
+
