@@ -7,7 +7,6 @@ from mmcv.runner.hooks.checkpoint import CheckpointHook
 from mmcv.runner.hooks.logger.wandb import WandbLoggerHook
 
 from mmdet.core import DistEvalHook, EvalHook
-from mmdet.apis.test import single_gpu_test
 
 import pdb
 
@@ -99,7 +98,6 @@ class WandbLogger(WandbLoggerHook):
         self.log_map_every_iter = log_map_every_iter
         self.best_score = 0
         self.val_step = 0
-        pdb.set_trace()
 
     @master_only
     def before_run(self, runner):
@@ -207,6 +205,7 @@ class WandbLogger(WandbLoggerHook):
 
     # edited by dnwn24
     def after_train_iter(self, runner):
+        from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
         if self.every_n_iters(runner, self.interval):
             # save the wandb_features
