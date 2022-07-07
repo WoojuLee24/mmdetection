@@ -848,7 +848,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_name = wandb_name
 
         self.wandb_features = dict()
-        self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = []
+        self.wandb_features[f'additional_loss({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
 
         if self.use_sigmoid:
@@ -941,20 +941,18 @@ class CrossEntropyLossPlus(nn.Module):
             if self.use_sigmoid:
                 if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
                     self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
-                    self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'].clear()
+                    self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
                 self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
-                self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'].append(
-                    self.lambda_weight * loss_additional)
+                self.wandb_features[f'additional_loss({self.wandb_name})'].append(self.lambda_weight * loss_additional)
             else:
                 self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
-                self.wandb_features[
-                    f'{self.additional_loss}_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
+                self.wandb_features[f'additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
 
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 
         loss = loss_cls + self.lambda_weight * loss_additional
-        self.wandb_features[f'loss({self.wandb_name})'] = loss
-        self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
+        # self.wandb_features[f'loss({self.wandb_name})'] = loss
+        # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
         return loss
 
