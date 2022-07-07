@@ -254,7 +254,6 @@ def jsdv1_1(pred,
         torch.Tensor: The calculated loss
     """
 
-
     temper = kwargs['temper']
     add_act = kwargs['add_act']
 
@@ -419,6 +418,72 @@ def jsdv1_3(pred,
 
     return loss, p_distribution
 
+
+def jsdv1_3_1(pred,
+            label,
+            weight=None,
+            reduction='mean',
+            avg_factor=None,
+            **kwargs):
+    """Calculate the jsdv1.1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+
+    if pred_orig.shape[-1] == 1:  # if rpn
+        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
+        #                           torch.sigmoid(pred_aug1),\
+        #                           torch.sigmoid(pred_aug2)
+        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug2), 1 - torch.sigmoid(pred_aug2)), dim=1),
+
+    else:  # else roi
+        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig, dim=1), \
+                                  F.softmax(pred_aug1, dim=1), \
+                                  F.softmax(pred_aug2, dim=1)
+
+    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
+    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
+            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+            F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+
+    # apply weights and do the reduction
+    if weight is not None:
+        weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
+                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
+                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
+                      'p_mixture': p_mixture}
+
+    return loss, p_distribution
+
+
 def jsdv1_4(pred,
             label,
             weight=None,
@@ -451,9 +516,12 @@ def jsdv1_4(pred,
         # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
         #                           torch.sigmoid(pred_aug1),\
         #                           torch.sigmoid(pred_aug2)
-        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig / temper), 1 - torch.sigmoid(pred_orig / temper)), dim=1), \
-                                  torch.cat((torch.sigmoid(pred_aug1 / temper), 1 - torch.sigmoid(pred_aug1 / temper)), dim=1), \
-                                  torch.cat((torch.sigmoid(pred_aug2 / temper), 1 - torch.sigmoid(pred_aug2 / temper)), dim=1),
+        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig / temper), 1 - torch.sigmoid(pred_orig / temper)),
+                                            dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1 / temper), 1 - torch.sigmoid(pred_aug1 / temper)),
+                                            dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug2 / temper), 1 - torch.sigmoid(pred_aug2 / temper)),
+                                            dim=1),
 
     else:  # else roi
         p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
@@ -510,10 +578,10 @@ def jsdy(pred,
     label, _, _ = torch.chunk(label, 3)
 
     if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] == 1: # if rpn
-            label = label.reshape(label.shape+(1,)).contiguous()
-        else: # else roi
-            label = F.one_hot(label, num_classes=pred_orig.shape[-1]) # TO-DO: need to check
+        if pred_orig.shape[-1] == 1:  # if rpn
+            label = label.reshape(label.shape + (1,)).contiguous()
+        else:  # else roi
+            label = F.one_hot(label, num_classes=pred_orig.shape[-1])  # TO-DO: need to check
 
     p_clean, p_aug1, p_aug2 = F.softmax(
         pred_orig, dim=1), F.softmax(
@@ -585,17 +653,17 @@ def jsdv2(pred,
         if pred_orig.shape[-1] == 1:  # if rpn
             ignore_index = -100 if ignore_index is None else ignore_index
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
-        else:   # else roi
+        else:  # else roi
             # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
 
     if add_act == None:
         # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] == 1:    # if rpn
+        if pred_orig.shape[-1] == 1:  # if rpn
             p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
                                       torch.sigmoid(pred_aug1 / temper), \
                                       torch.sigmoid(pred_aug2 / temper)
-        else:   # else roi
+        else:  # else roi
             p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
                                       F.softmax(pred_aug1 / temper, dim=1), \
                                       F.softmax(pred_aug2 / temper, dim=1)
@@ -624,18 +692,18 @@ def jsdv2(pred,
         assert p_clean.size() == label.size() == weight.size(), \
             "The size of tensors does not match"
         # get valid predictions for wandb log
-        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight!=0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug1[weight!=0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug2[weight!=0], 1e-7, 1).log(), \
-                                                    p_mixture[weight!=0], \
-                                                    torch.clamp(label[weight!=0], 1e-7, 1).log()
+        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight != 0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug1[weight != 0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug2[weight != 0], 1e-7, 1).log(), \
+                                                    p_mixture[weight != 0], \
+                                                    torch.clamp(label[weight != 0], 1e-7, 1).log()
 
     # logging
     p_distribution = {'p_clean': p_clean,
                       'p_aug1': p_aug1,
                       'p_aug2': p_aug2,
                       'p_mixture': p_mixture,
-                      'label': label,}
+                      'label': label, }
 
     return loss, p_distribution
 
@@ -677,17 +745,17 @@ def jsdv3(pred,
         if pred_orig.shape[-1] == 1:  # if rpn
             ignore_index = -100 if ignore_index is None else ignore_index
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
-        else:   # else roi
+        else:  # else roi
             # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
             label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
 
     if add_act == None:
         # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] == 1:    # if rpn
+        if pred_orig.shape[-1] == 1:  # if rpn
             p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
                                       torch.sigmoid(pred_aug1 / temper), \
                                       torch.sigmoid(pred_aug2 / temper)
-        else:   # else roi
+        else:  # else roi
             p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
                                       F.softmax(pred_aug1 / temper, dim=1), \
                                       F.softmax(pred_aug2 / temper, dim=1)
@@ -716,18 +784,18 @@ def jsdv3(pred,
         assert p_clean.size() == label.size() == weight.size(), \
             "The size of tensors does not match"
         # get valid predictions for wandb log
-        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight!=0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug1[weight!=0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug2[weight!=0], 1e-7, 1).log(), \
-                                                    p_mixture[weight!=0], \
-                                                    torch.clamp(label[weight!=0], 1e-7, 1).log()
+        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight != 0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug1[weight != 0], 1e-7, 1).log(), \
+                                                    torch.clamp(p_aug2[weight != 0], 1e-7, 1).log(), \
+                                                    p_mixture[weight != 0], \
+                                                    torch.clamp(label[weight != 0], 1e-7, 1).log()
 
     # logging
     p_distribution = {'p_clean': p_clean,
                       'p_aug1': p_aug1,
                       'p_aug2': p_aug2,
                       'p_mixture': p_mixture,
-                      'label': label,}
+                      'label': label, }
 
     return loss, p_distribution
 
@@ -798,6 +866,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_2
         elif self.additional_loss == 'jsdv1_3':
             self.cls_additional = jsdv1_3
+        elif self.additional_loss == 'jsdv1_3_1':
+            self.cls_additional = jsdv1_3_1
         elif self.additional_loss == 'jsdv1_4':
             self.cls_additional = jsdv1_4
         elif self.additional_loss == 'jsdv2':
@@ -873,10 +943,12 @@ class CrossEntropyLossPlus(nn.Module):
                     self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'].clear()
                 self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
-                self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'].append(self.lambda_weight * loss_additional)
+                self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'].append(
+                    self.lambda_weight * loss_additional)
             else:
                 self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
-                self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
+                self.wandb_features[
+                    f'{self.additional_loss}_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
 
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
