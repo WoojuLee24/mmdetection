@@ -195,7 +195,8 @@ class WandbLogger(WandbLoggerHook):
             if self.num_eval_images > 0:
                 if self.eval_hook.by_epoch:
                     if self.every_n_epochs(runner, self.eval_hook.interval) or self.is_last_epoch(runner):
-                        results = self.eval_hook.results
+                        # results = self.eval_hook.results
+                        results = self.eval_hook.latest_results
                         # Initialize evaluation table
                         self._init_pred_table()
                         # Log predictions
@@ -325,9 +326,10 @@ class WandbLogger(WandbLoggerHook):
         self.wandb.log_artifact(model_artifact, aliases=aliases)
 
     def _get_ckpt_metadata(self, runner):
-        """Get model checkpoint metadata."""
+        """"Get model checkpoint metadata."""
         if self.ckpt_hook.interval == self.eval_hook.interval:
-            results = self.eval_hook.results
+            # results = self.eval_hook.results
+            results = self.eval_hook.latest_results
         else:
             runner.logger.info(
                 f'Evaluating for model checkpoint at epoch '
