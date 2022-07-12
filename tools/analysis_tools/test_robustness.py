@@ -275,7 +275,14 @@ def main():
                     # loading images, which needs to be fixed in the future
                     test_data_cfg['pipeline'].insert(1, corruption_trans)
             elif args.load_dataset == 'corrupted':
-                test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+                if '/cityscapes/' in test_data_cfg['img_prefix']:
+                    test_data_cfg['img_prefix'] = test_data_cfg['img_prefix'].replace('cityscapes', 'cityscapes-c')
+                    test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+                elif '/cityscapes-c/' in test_data_cfg['img_prefix']:
+                    test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+                else:
+                    raise NotImplementedError(
+                        "set load_dataset as 'corrupted' but use original dataset.")
             else:
                 raise NotImplementedError(
                     "The types of load_dataset can be 'original' or 'corrupted'.")
