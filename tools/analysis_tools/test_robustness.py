@@ -172,6 +172,13 @@ def parse_args():
         'It also allows nested list/tuple values, e.g. key="[(a,b),(c,d)]" '
         'Note that the quotation marks are necessary and that no white space '
         'is allowed.')
+    parser.add_argument(
+        '--load-dataset',
+        type=str,
+        choices=['original', 'corrupted'],
+        default='original',
+        help='Add Corrupt'
+    )
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -255,17 +262,23 @@ def main():
                 aggregated_results[corruption][0] = \
                     aggregated_results[corruptions[0]][0]
                 continue
-
             test_data_cfg = copy.deepcopy(cfg.data.test)
             # assign corruption and severity
-            if corruption_severity > 0:
-                corruption_trans = dict(
-                    type='Corrupt',
-                    corruption=corruption,
-                    severity=corruption_severity)
-                # TODO: hard coded "1", we assume that the first step is
-                # loading images, which needs to be fixed in the future
-                test_data_cfg['pipeline'].insert(1, corruption_trans)
+
+            if args.load_dataset == 'original':
+                if corruption_severity > 0:
+                    corruption_trans = dict(
+                        type='Corrupt',
+                        corruption=corruption,
+                        severity=corruption_severity)
+                    # TODO: hard coded "1", we assume that the first step is
+                    # loading images, which needs to be fixed in the future
+                    test_data_cfg['pipeline'].insert(1, corruption_trans)
+            elif args.load_dataset == 'corrupted':
+                test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+            else:
+                raise NotImplementedError(
+                    "The types of load_dataset can be 'original' or 'corrupted'.")
 
             # print info
             print(f'\nTesting {corruption} at severity {corruption_severity}')
