@@ -73,7 +73,9 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         dataset=dict(
-            pipeline=train_pipeline)),)
+            pipeline=train_pipeline)),
+    test=dict(
+        img_prefix='/ws/data/cityscapes-c/'+'leftImg8bit/val/'),)
 
 ################
 ### RUN TIME ###
