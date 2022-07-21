@@ -40,6 +40,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
     def __init__(self, init_cfg=None):
         super(BaseDetector, self).__init__(init_cfg)
         self.fp16_enabled = False
+        self.prev_data = None
         self.features = dict() # self.features are values of hook_layer_list
         self.wandb_data = dict()
         self.wandb_features=dict() # self.wandb_features has values of wandb.layer_list, accuracy, and values
@@ -402,21 +403,16 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.features.clear()
         self.wandb_features.clear()
 
-        if 'demo' in data.keys():
-            # settings
-            self.prev_data = data
+        if self.prev_data != None:
+            # concatenate the current data and previous data.
+            consecutive_data = dict()
+            for key in data.keys():
+                if key == 'img':
+                    consecutive_data['img'] = torch.cat((data['img'], self.prev_data['img']), dim=0)
+                else:
+                    consecutive_data[key] = data[key] + self.prev_data[key]
 
-        if 'img2' in list(data.keys()) or 'img3' in list(data.keys()):
-            # settings
-            self.wandb_data = data
-
-            # concatenate the original image and augmix images.
-            data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
-            data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
-            data['gt_labels'] += data['gt_labels'] + data['gt_labels']
-            data['img_metas'] += data['img_metas'] + data['img_metas']
-
-            losses = self(**data)
+            losses = self(**consecutive_data)
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
@@ -425,10 +421,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             if 'log_vars' in self.train_cfg.wandb.log.vars:
                 for name, value in log_vars.items():
                     self.wandb_features[name] = np.mean(value)
-        else:
-            # settings
-            self.wandb_data = data
 
+            self.prev_data = data
+
+        else:
             losses = self(**data)
 
             loss, log_vars = self._parse_losses(losses)
@@ -439,6 +435,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             if 'log_vars' in self.train_cfg.wandb.log.vars:
                 for name, value in log_vars.items():
                     self.wandb_features[name] = np.mean(value)
+
+            self.prev_data = data
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))

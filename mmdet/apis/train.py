@@ -17,7 +17,7 @@ from mmdet.datasets import (build_dataloader, build_dataset,
 from mmdet.utils import find_latest_checkpoint, get_root_logger
 
 import wandb
-
+import pdb
 
 def init_random_seed(seed=None, device='cuda'):
     """Initialize random seed.
@@ -79,7 +79,10 @@ def train_detector(model,
                    timestamp=None,
                    meta=None):
     logger = get_root_logger(log_level=cfg.log_level)
-
+    if 'demo' in cfg.data.train.dataset.img_prefix:
+        shuffle = False
+    else:
+        shuffle = True
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
     if 'imgs_per_gpu' in cfg.data:
@@ -106,6 +109,7 @@ def train_detector(model,
             # `num_gpus` will be ignored if distributed
             num_gpus=len(cfg.gpu_ids),
             dist=distributed,
+            shuffle=shuffle,
             seed=cfg.seed,
             runner_type=runner_type,
             persistent_workers=cfg.data.get('persistent_workers', False))

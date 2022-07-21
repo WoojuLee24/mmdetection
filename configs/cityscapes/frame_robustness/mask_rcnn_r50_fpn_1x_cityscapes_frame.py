@@ -30,7 +30,7 @@ model = dict(
         train_cfg = dict(
             wandb=dict(
                 log=dict(
-                    features_list=["rpn_head.rpn_cls"],
+                    features_list=[],
                     vars=['log_vars'],
                 ))))
 # optimizer
