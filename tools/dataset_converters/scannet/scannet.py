@@ -161,6 +161,9 @@ def collect_annotations(files, nproc=1):
 
 def load_img_info(files):
     img_file, inst_file, segm_file = files
+    # deubg
+    inst_debug = mmcv.imread("/ws/data/scannet/debug/_000000_gtFine_instanceIds.png", 'unchanged')
+    unique_inst_ids =np.unique(inst_debug)
     inst_img = mmcv.imread(inst_file, 'unchanged')
     unique_inst_ids = np.unique(inst_img)
     # ids < 24 are stuff labels (filtering them first is about 5% faster)

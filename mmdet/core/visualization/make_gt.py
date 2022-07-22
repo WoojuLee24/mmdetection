@@ -172,13 +172,16 @@ def main():
                 print("Pass {:0>6} rgb frame".format(frame))
             else:
                 file_rgb = os.path.join(path_rgb, str(frame) + ".jpg")
-                shutil.copy(file_rgb, rgb_name)
+                original_rgb = Image.open(file_rgb)
+                resized_rgb = original_rgb.resize((640, 480), resample=Image.NEAREST)
+                resized_rgb.save(rgb_name)
+                # shutil.copy(file_rgb, rgb_name)
 
             if os.path.isfile(instance_name) and os.path.isfile(color_name) and os.path.isfile(label_name):
                 print("Pass {:0>6} frame".format(frame))
                 continue
 
-            img_label = Image.open(os.path.join(path_label,'{}.png'.format(frame)))       # mode=I
+            img_label = Image.open(os.path.join(path_label, '{}.png'.format(frame)))       # mode=I
             img_instance = Image.open(os.path.join(path_instance, '{}.png'.format(frame))) # mode=L
             img_instance = img_instance.convert("I")
             np_label = np.array(img_label)                                    # 968 * 1296, dtype int32
@@ -202,23 +205,37 @@ def main():
             ##### save gtFine
             output = output.astype(np.int32)
             img_output = Image.fromarray(output, 'I')
+            # resize img
+            img_output_resized = img_output.resize((640, 480), resample=Image.NEAREST)
+            output_resized = np.array(img_output_resized)
 
-            img_output.save(instance_name)
-            img_output.save(color_name)
-            img_output.save(label_name)
+            # debug
+            output_id = np.unique(output)
+            output_resized_id = np.unique(output_resized)
+
+            # # debug
+            # debug_path = "/ws/data/scannet/debug/_{:0>6}_gtFine_instanceIds.png".format(frame)
+            # img_output.save(debug_path)
+            # debug_data = Image.open(debug_path)
+            # debug_np = np.array(debug_data)
+            # debug_id = np.unique(debug_np)
+
+            img_output_resized.save(instance_name)
+            img_output_resized.save(color_name)
+            img_output_resized.save(label_name)
 
             print("save {:0>6} frame".format(frame))
             end = time.time()
             print(f"{end - start:.5f} sec")
 
-            ##### check image overflow for debugging ################################
-            img_debug = Image.open(instance_name)
-            pixels = np.array(img_debug)
-            if 65535 in np.unique(pixels):
-                print('Failed')
-                print('origin pixel: ', np.unique(output))
-                print('reopen pixel: ', np.unique(pixels))
-                print('origin instance: ', np.unique(np_instance))
+            # ##### check image overflow for debugging ################################
+            # img_debug = Image.open(instance_name)
+            # pixels = np.array(img_debug)
+            # if 65535 in np.unique(pixels):
+            #     print('Failed')
+            #     print('origin pixel: ', np.unique(output))
+            #     print('reopen pixel: ', np.unique(pixels))
+            #     print('origin instance: ', np.unique(np_instance))
 
 
 if __name__ == '__main__':
