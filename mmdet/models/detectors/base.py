@@ -15,7 +15,9 @@ import matplotlib.pyplot as plt
 import os
 import pdb
 from collections import OrderedDict
-
+from mmdet.models.losses.ai28.frame_loss import fpn_loss
+from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
+import cv2 # debug
 
 # use_wandb = True # False True
 
@@ -372,6 +374,42 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         pdb.set_trace()
         return plt
 
+    def process_results(self, result, show_score_thr=0.3):
+        ## get results
+        import numpy as np
+        if isinstance(result, tuple):
+            bbox_result, segm_result = result
+            if isinstance(segm_result, tuple):
+                segm_result = segm_result[0]  # ms rcnn
+        else:
+            bbox_result, segm_result = result, None
+        bboxes = np.vstack(bbox_result)
+
+        labels = [np.full(bbox.shape[0], i, dtype=np.int32) for i, bbox in enumerate(bbox_result)]
+        labels = np.concatenate(labels)
+        # draw segmentation masks
+        segms = None
+        if segm_result is not None and len(labels) > 0:  # non empty
+            segms = mmcv.concat_list(segm_result)
+            if isinstance(segms[0], torch.Tensor):
+                segms = torch.stack(segms, dim=0).detach().cpu().numpy()
+            else:
+                segms = np.stack(segms, axis=0)
+
+        if show_score_thr > 0:
+            assert bboxes.shape[1] == 5
+            scores = bboxes[:, -1]
+            inds = scores > show_score_thr
+            bboxes = bboxes[inds, :]
+            labels = labels[inds]
+            if segms is not None:
+                segms = segms[inds, ...]
+        mask = segms.astype(np.int32)
+
+        processed_result = {"bboxes": bboxes, "mask": mask, "labels": labels}
+
+        return processed_result
+
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -403,16 +441,88 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.features.clear()
         self.wandb_features.clear()
 
+        # pdb.set_trace()
+        # with torch.no_grad():
+        #     data2 = dict()
+        #     data2['img'] = [data['img']]
+        #     data2['img_metas'] = [data['img_metas']]
+        #     result = self(return_loss=False, rescale=True, **data2)
+
+        # pdb.set_trace()
+
         if self.prev_data != None:
             # concatenate the current data and previous data.
             consecutive_data = dict()
+            data_test = dict()
+            prev_data_test = dict()
             for key in data.keys():
                 if key == 'img':
                     consecutive_data['img'] = torch.cat((data['img'], self.prev_data['img']), dim=0)
+                    data_test['img'] = [data['img']]
+                    prev_data_test['img'] = [self.prev_data['img']]
+                elif key == 'img_metas':
+                    data_test[key] = [data[key]]
+                    prev_data_test[key] = [self.prev_data[key]]
+                    consecutive_data[key] = data[key] + self.prev_data[key]
                 else:
                     consecutive_data[key] = data[key] + self.prev_data[key]
 
+
             losses = self(**consecutive_data)
+
+            with torch.no_grad():
+                # get results
+                pres_data_result = self(return_loss=False, rescale=True, **data_test)
+                prev_data_result = self(return_loss=False, rescale=True, **prev_data_test)
+                # process_results
+                pres = self.process_results(pres_data_result[0])
+                prev = self.process_results(prev_data_result[0])
+
+
+                pres_prev_matched, unmatched_pres_dets, unmatched_prev_dets = \
+                    associate_detections_to_trackers(pres['bboxes'], prev['bboxes'], iou_threshold=0.3)
+
+                pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
+                pres_matched_bbox = pres["bboxes"][pres_prev_matched[:, 0]]
+                # pres_matched_feat = pres["x1_npy"] * pres_matched_mask
+
+                prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
+                prev_matched_bbox = prev["bboxes"][pres_prev_matched[:, 1]]
+                # prev_matched_feat = prev["x1_npy"] * prev_matched_mask
+
+                for i, mask in enumerate(pres_matched_mask):
+                    # draw bbox
+                    left_top = int(pres_matched_bbox[i, 0]), int(pres_matched_bbox[i, 1])
+                    right_bottom = int(pres_matched_bbox[i, 2]), int(pres_matched_bbox[i, 3])
+                    mask = mask * 255
+                    cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
+                    cv2.imwrite("/ws/data/cityscapes/mask/debug/pres_{}.png".format(i), mask)
+
+                    left_top = int(prev_matched_bbox[i, 0]), int(prev_matched_bbox[i, 1])
+                    right_bottom = int(prev_matched_bbox[i, 2]), int(prev_matched_bbox[i, 3])
+                    prev_mask = prev_matched_mask[i] * 255
+                    cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
+                    cv2.imwrite("/ws/data/cityscapes/mask/debug/prev_{}.png".format(i), prev_mask)
+
+
+                for key, feature in self.features.items():
+                    _, F, H, W = feature[0].size()
+                    pres_matched_mask_resized = F.interpolate(pres_matched_mask, size=(H,W), mode='nearest')
+
+            # domain generalization in the fpn layer
+            # if train_cfg.wandb.log.features_list = [], pass
+
+            if "loss" in self.neck.train_cfg:
+                # pdb.set_trace()
+                dict_kwargs = dict()
+                neck_train_cfg_loss = self.neck.train_cfg["loss"]
+                for key, value in neck_train_cfg_loss.items():
+                    dict_kwargs[key] = value
+                for key, pred in self.features.items():
+                    loss_, p_dist = fpn_loss(self.features[key], **dict_kwargs)
+                    losses[f"fpn_loss.{key}"] = loss_
+
+            pdb.set_trace()
             loss, log_vars = self._parse_losses(losses)
 
             # wandb

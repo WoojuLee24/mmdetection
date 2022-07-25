@@ -15,7 +15,6 @@ from mmcv.runner import get_dist_info
 from mmdet.core import encode_mask_results
 from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 
-
 def single_gpu_test(model,
                     data_loader,
                     show=False,

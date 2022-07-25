@@ -4,6 +4,9 @@ _base_ = [
 ]
 model = dict(
     backbone=dict(init_cfg=None),
+    neck=dict(
+        loss=dict(temper=1, add_act='softmax', loss_type='mse'),
+    ),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -47,6 +50,14 @@ lr_config = dict(
     step=[7])
 runner = dict(
     type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
-log_config = dict(interval=100)
+custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=['neck.fpn_convs.0.conv', 'neck.fpn_convs.1.conv',])
+]
+log_config = dict(interval=100,
+                  hooks=[
+                      dict(type='TextLoggerHook'),
+                  ])
 # For better, more stable performance initialize from COCO
+load_from = '/ws/data/cityscapes/pretrained/mask_rcnn_r50_fpn_1x_cityscapes_20201211_133733-d2858245.pth'
 # load_from = 'https://download.openmmlab.com/mmdetection/v2.0/mask_rcnn/mask_rcnn_r50_fpn_1x_coco/mask_rcnn_r50_fpn_1x_coco_20200205-d4b0c5d6.pth'  # noqa
