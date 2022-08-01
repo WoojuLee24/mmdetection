@@ -982,7 +982,7 @@ def assert_positive_loss(loss, **kwargs):
             else:
                 f.write(f"{keyword} : {obj}\n")
     try:
-        if loss <= 0:
+        if loss > 0:
             raise ValueError
         else:
             return loss
@@ -1001,6 +1001,7 @@ def assert_positive_loss(loss, **kwargs):
         print_kwargs('weight', True)
         print_kwargs('pred_aug1', True)
         print_kwargs('pred_aug2', True)
+        print_kwargs('class_weight', True)
 
         f.close()
         return 0
@@ -1168,7 +1169,7 @@ class CrossEntropyLossPlus(nn.Module):
 
         pred_orig, pred_aug1, pred_aug2 = torch.chunk(cls_score, 3)
         loss_additional = assert_positive_loss(loss_additional, type=self.additional_loss, name=self.wandb_name, pred_orig=pred_orig,
-                                    pred_aug1=pred_aug1, pred_aug2=pred_aug2)
+                                    pred_aug1=pred_aug1, pred_aug2=pred_aug2, weight=weight, class_weight=class_weight)
         loss = loss_cls + self.lambda_weight * loss_additional
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
