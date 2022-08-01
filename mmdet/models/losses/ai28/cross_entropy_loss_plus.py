@@ -1033,6 +1033,47 @@ def jsdv3(pred,
     return loss, p_distribution
 
 
+def assert_positive_loss(loss, **kwargs):
+    def print_kwargs(keyword, save=False):
+        if keyword in kwargs:
+            obj = kwargs[keyword]
+            if save:
+                path = f'{filename}_{keyword}.pt'
+                torch.save(obj, path)
+                if isinstance(obj, dict):
+                    f.write(f"{keyword} {obj.shape}: {path}\n")
+                elif isinstance(obj, list):
+                    f.write(f"{keyword} {len(obj)}: {path}\n")
+                elif torch.is_tensor(obj):
+                    f.write(f"{keyword} : {path}\n")
+            else:
+                f.write(f"{keyword} : {obj}\n")
+    try:
+        if loss > 0:
+            raise ValueError
+        else:
+            return loss
+    except ValueError:
+        import time
+        filename = f"/ws/data/dshong/nagative_loss/{time.strftime('%Y%m%d_%H%M%S')}"
+        f = open(f"{filename}.txt", 'w')
+        f.write(f"[1] Information \n")
+        print_kwargs('type')
+        print_kwargs('name')
+        f.write("\n\n")
+
+        f.write("[2] Value\n")
+        print_kwargs('pred_orig', True)
+        print_kwargs('label', True)
+        print_kwargs('weight', True)
+        print_kwargs('pred_aug1', True)
+        print_kwargs('pred_aug2', True)
+        print_kwargs('class_weight', True)
+
+        f.close()
+        return 0
+
+
 @LOSSES.register_module()
 class CrossEntropyLossPlus(nn.Module):
 
@@ -1180,58 +1221,24 @@ class CrossEntropyLossPlus(nn.Module):
                 lambda_weight=self.lambda_weight
                 )
 
-            try:
-                # wandb for rpn
-                if self.use_sigmoid:
-                    if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
-                        self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
-                        self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
-                    self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
-                    self.wandb_features[f'additional_loss({self.wandb_name})'].append(
-                        self.lambda_weight * loss_additional)
-                else:
-                    self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
-                    self.wandb_features[f'additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
+            # wandb for rpn
+            if self.use_sigmoid:
+                if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
+                    self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
+                    self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
+                self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
+                self.wandb_features[f'additional_loss({self.wandb_name})'].append(
+                    self.lambda_weight * loss_additional)
+            else:
+                self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
+                self.wandb_features[f'additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
 
-                for key, value in p_distribution.items():
-                    self.wandb_features[f'{key}({self.wandb_name})'] = value
+            for key, value in p_distribution.items():
+                self.wandb_features[f'{key}({self.wandb_name})'] = value
 
-                if loss_additional < 0:
-                    raise ValueError
-            except ValueError:
-                def print_kwargs(keyword, save=False):
-                    if keyword in kwargs:
-                        obj = kwargs[keyword]
-                        if save:
-                            path = f'{filename}_{keyword}.pt'
-                            torch.save(obj, path)
-                            if isinstance(obj, dict):
-                                f.write(f"{keyword} {obj.shape}: {path}\n")
-                            elif isinstance(obj, list):
-                                f.write(f"{keyword} {len(obj)}: {path}\n")
-                            elif torch.is_tensor(obj):
-                                f.write(f"{keyword} : {path}\n")
-                        else:
-                            f.write(f"{keyword} : {obj}\n")
-
-                import time
-                filename = f"/ws/data/dshong/invalid_jsd_value/{time.strftime('%Y%m%d_%H%M%S')}"
-                f = open(f"{filename}.txt", 'w')
-                f.write(f"[1] Information \n")
-                print_kwargs('type')
-                print_kwargs('name')
-                f.write("\n\n")
-
-                f.write("[2] Value\n")
-                print_kwargs('pred_orig', True)
-                print_kwargs('label', True)
-                print_kwargs('weight', True)
-                print_kwargs('pred_aug1', True)
-                print_kwargs('pred_aug2', True)
-
-                f.close()
-                return loss_cls
-
+        pred_orig, pred_aug1, pred_aug2 = torch.chunk(cls_score, 3)
+        loss_additional = assert_positive_loss(loss_additional, type=self.additional_loss, name=self.wandb_name, pred_orig=pred_orig,
+                                    pred_aug1=pred_aug1, pred_aug2=pred_aug2, weight=weight, class_weight=class_weight)
         loss = loss_cls + self.lambda_weight * loss_additional
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
