@@ -648,6 +648,10 @@ def jsdv1_3_3(pred,
                       'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
                       'p_mixture': p_mixture}
 
+    loss = assert_positive_loss(loss, type='jsdv1.3.3',
+                                pred_orig=pred_orig, pred_aug1=pred_aug1, pred_aug2=pred_aug2,
+                                weight=weight)
+
     return loss, p_distribution
 
 
@@ -1049,13 +1053,13 @@ def assert_positive_loss(loss, **kwargs):
             else:
                 f.write(f"{keyword} : {obj}\n")
     try:
-        if loss > 0:
+        if loss <= 0:
             raise ValueError
         else:
             return loss
     except ValueError:
         import time
-        filename = f"/ws/data/dshong/nagative_loss/{time.strftime('%Y%m%d_%H%M%S')}"
+        filename = f"/ws/data/dshong/invalid_jsd_value/{time.strftime('%Y%m%d_%H%M%S')}"
         f = open(f"{filename}.txt", 'w')
         f.write(f"[1] Information \n")
         print_kwargs('type')
@@ -1236,9 +1240,6 @@ class CrossEntropyLossPlus(nn.Module):
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 
-        pred_orig, pred_aug1, pred_aug2 = torch.chunk(cls_score, 3)
-        loss_additional = assert_positive_loss(loss_additional, type=self.additional_loss, name=self.wandb_name, pred_orig=pred_orig,
-                                    pred_aug1=pred_aug1, pred_aug2=pred_aug2, weight=weight, class_weight=class_weight)
         loss = loss_cls + self.lambda_weight * loss_additional
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
