@@ -49,7 +49,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.index = 0 # check current iteration for save log image
         self.loss_type_list = dict()
 
-
     @property
     def with_neck(self):
         """bool: whether the detector has a neck"""
@@ -478,51 +477,93 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 pres = self.process_results(pres_data_result[0])
                 prev = self.process_results(prev_data_result[0])
 
+                # pres_mask = pres['mask']
+                # pres_bbox = pres['bboxes']
+
+                # for key, feature in self.features.items():
+                #     pres_mask_feature, pres_bbox_resized = self.mask_feature(feature[1], pres)
+                #     prev_mask_feature, prev_bbox_resized = self.mask_feature(feature[2], prev)
+
+
+                # for i, mask in enumerate(pres_mask):
+                #     # draw bbox
+                #     left_top = int(pres_bbox[i, 0]), int(pres_bbox[i, 1])
+                #     right_bottom = int(pres_bbox[i, 2]), int(pres_bbox[i, 3])
+                #     mask = mask * 255
+                #     cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
+                #     cv2.imwrite("/ws/data/cityscapes/mask/debug/pres/{}_pres.png".format(i), mask)
 
                 pres_prev_matched, unmatched_pres_dets, unmatched_prev_dets = \
                     associate_detections_to_trackers(pres['bboxes'], prev['bboxes'], iou_threshold=0.3)
 
-                pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
-                pres_matched_bbox = pres["bboxes"][pres_prev_matched[:, 0]]
-                # pres_matched_feat = pres["x1_npy"] * pres_matched_mask
+                if np.shape(pres_prev_matched)[0] != 0:
+                    pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
+                    pres_matched_bbox = pres["bboxes"][pres_prev_matched[:, 0]]
+                    # pres_matched_feat = pres["x1_npy"] * pres_matched_mask
 
-                prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
-                prev_matched_bbox = prev["bboxes"][pres_prev_matched[:, 1]]
-                # prev_matched_feat = prev["x1_npy"] * prev_matched_mask
+                    prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
+                    prev_matched_bbox = prev["bboxes"][pres_prev_matched[:, 1]]
+                    # prev_matched_feat = prev["x1_npy"] * prev_matched_mask
 
-                for i, mask in enumerate(pres_matched_mask):
-                    # draw bbox
-                    left_top = int(pres_matched_bbox[i, 0]), int(pres_matched_bbox[i, 1])
-                    right_bottom = int(pres_matched_bbox[i, 2]), int(pres_matched_bbox[i, 3])
-                    mask = mask * 255
-                    cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
-                    cv2.imwrite("/ws/data/cityscapes/mask/debug/pres_{}.png".format(i), mask)
+                    pres["mask"] = pres["mask"][pres_prev_matched[:, 0]]
+                    pres["bboxes"] = pres["bboxes"][pres_prev_matched[:, 0]]
+                    pres["labels"] = pres["labels"][pres_prev_matched[:, 0]]
 
-                    left_top = int(prev_matched_bbox[i, 0]), int(prev_matched_bbox[i, 1])
-                    right_bottom = int(prev_matched_bbox[i, 2]), int(prev_matched_bbox[i, 3])
-                    prev_mask = prev_matched_mask[i] * 255
-                    cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
-                    cv2.imwrite("/ws/data/cityscapes/mask/debug/prev_{}.png".format(i), prev_mask)
+                    prev["mask"] = prev["mask"][pres_prev_matched[:, 1]]
+                    prev["bboxes"] = prev["bboxes"][pres_prev_matched[:, 1]]
+                    prev["labels"] = prev["labels"][pres_prev_matched[:, 1]]
+
+                    for key, feature in self.features.items():
+                        pres_mask_feature, pres_bbox_resized = self.mask_feature(feature[1], pres)
+                        prev_mask_feature, prev_bbox_resized = self.mask_feature(feature[2], prev)
+                        prev_mask_feature_resized = self.interpolate_features(prev_mask_feature, pres_bbox_resized)
+                        a = prev_mask_feature_resized
+
+                    # for i, mask in enumerate(pres_matched_mask):
+                    #     # draw bbox
+                    #     left_top = int(pres_matched_bbox[i, 0]), int(pres_matched_bbox[i, 1])
+                    #     right_bottom = int(pres_matched_bbox[i, 2]), int(pres_matched_bbox[i, 3])
+                    #     mask = mask * 255
+                    #     cv2.rectangle(mask, left_top, right_bottom, color=255, thickness=3)
+                    #     cv2.imwrite("/ws/data/cityscapes/mask/debug/matched/{}_pres.png".format(i), mask)
+                    #
+                    #     left_top = int(prev_matched_bbox[i, 0]), int(prev_matched_bbox[i, 1])
+                    #     right_bottom = int(prev_matched_bbox[i, 2]), int(prev_matched_bbox[i, 3])
+                    #     prev_mask = prev_matched_mask[i] * 255
+                    #     cv2.rectangle(prev_mask, left_top, right_bottom, color=255, thickness=3)
+                    #     cv2.imwrite("/ws/data/cityscapes/mask/debug/matched/{}_prev.png".format(i), prev_mask)
 
 
-                for key, feature in self.features.items():
-                    _, F, H, W = feature[0].size()
-                    pres_matched_mask_resized = F.interpolate(pres_matched_mask, size=(H,W), mode='nearest')
+                    # for key, feature in self.features.items():
+                    #     _, f, h, w = feature[0].size()
+                    #     F, H, W = np.shape(pres_matched_mask)
+                    #     scale = (h / H, w / W)
+                    #     for i in np.shape(pres_matched_mask):
+                    #     # pres_matched_mask_resized = torch.nn.functional.interpolate(pres_matched_mask[0], size=(h, w), mode='nearest')
+                    #     pres_matched_mask_resized = cv2.resize(pres_matched_mask[i], dsize=(h, w), interpolation=cv2.INTER_NEAREST)
+                    #     pres_matched_bbox_resized = pres_matched_bbox[:, 0] * w / W, \
+                    #                                 pres_matched_bbox[:, 1] * h / H, \
+                    #                                 pres_matched_bbox[:, 2] * w / W, \
+                    #                                 pres_matched_bbox[:, 3] * h / H
+                    #     left_top = int(pres_matched_bbox_resized[i, 0]), int(pres_matched_bbox_resized[i, 1])
+                    #     right_bottom = int(pres_matched_bbox_resized[i, 2]), int(pres_matched_bbox_resized[i, 3])
+                    #     cv2.rectangle(pres_matched_mask_resized, left_top, right_bottom, color=255, thickness=3)
+                    #     cv2.imwrite("/ws/data/cityscapes/mask/debug/prev_{}.png".format(key), pres_matched_mask_resized)
 
-            # domain generalization in the fpn layer
-            # if train_cfg.wandb.log.features_list = [], pass
 
-            if "loss" in self.neck.train_cfg:
-                # pdb.set_trace()
-                dict_kwargs = dict()
-                neck_train_cfg_loss = self.neck.train_cfg["loss"]
-                for key, value in neck_train_cfg_loss.items():
-                    dict_kwargs[key] = value
-                for key, pred in self.features.items():
-                    loss_, p_dist = fpn_loss(self.features[key], **dict_kwargs)
-                    losses[f"fpn_loss.{key}"] = loss_
+                    # domain generalization in the fpn layer
+                    # if train_cfg.wandb.log.features_list = [], pass
 
-            pdb.set_trace()
+                    if "loss" in self.neck.train_cfg:
+                        # pdb.set_trace()
+                        dict_kwargs = dict()
+                        neck_train_cfg_loss = self.neck.train_cfg["loss"]
+                        for key, value in neck_train_cfg_loss.items():
+                            dict_kwargs[key] = value
+                        for key, pred in self.features.items():
+                            loss_, p_dist = fpn_loss(self.features[key], **dict_kwargs)
+                            losses[f"fpn_loss.{key}"] = loss_
+
             loss, log_vars = self._parse_losses(losses)
 
             # wandb
@@ -552,6 +593,67 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         return outputs
+
+    def mask_feature(self, feature, results):
+        """
+
+        Args:
+            feature: feature maps of feature pyramid network. (1, f, h, w)
+            mask: mask of instance objects. (D, H, W)
+            bbox: bbox of instance objects. (D, 4)
+
+        Returns:
+
+        """
+        mask_features = []
+        mask = results['mask']
+        mask = torch.from_numpy(mask).float().to(feature.device)    # to implement F.interpolate
+        mask = torch.unsqueeze(mask, dim=0)
+        bbox = results['bboxes']
+        _, f, h, w  = feature.size()
+        _, D, H, W = np.shape(mask)
+        scale = (h / H, w / W)
+        # resize mask with scale
+        # mask_resized = cv2.resize(mask, dsize=scale, interpolation=cv2.INTER_NEAREST)
+        mask_resized = F.interpolate(mask, size=(h, w), mode='nearest')
+        # debug
+        # output, inverse_indices = torch.unique(mask_resized, sorted=True, return_inverse=True)
+        bbox_resized = bbox * (w/ W, h / H, w/ W, h / H, 1)
+        bbox_resized = bbox_resized.astype(np.int)
+        for i in range(D):
+            mask_feature = feature * mask_resized[:, i, :, :]
+            # bbox slice interpolation is required later. Exception is required to treat under 1 pixel
+            mask_feature_cropped = mask_feature[:, :, bbox_resized[i, 1]:bbox_resized[i, 3], bbox_resized[i, 0]:bbox_resized[i, 2]]
+            mask_features.append(mask_feature_cropped)
+            # bbox_feature = feature[:, :, bbox_resized[i, 1]:bbox_resized[i, 3], bbox_resized[i, 0]:bbox_resized[i, 2]]
+            # mask_features.append(mask_feature)
+            # bbox_features.append(bbox_feature)
+
+        return mask_features, bbox_resized
+
+
+    def interpolate_features(self, prev_features, pres_bboxes):
+        """
+
+        Args:
+            pres_feature, prev_feature: {list: {Tensor: f, h, w}}
+            pres_bbox, prev_bbox: {list: {tuple: (D, 5)}}
+
+        Returns:
+
+        """
+        assert len(pres_bboxes) == len(prev_features)
+        prev_features_resized = []
+        for i in range(len(prev_features)):
+            # pres_feature = pres_features[i]
+            prev_feature = prev_features[i]
+            pres_w = pres_bboxes[i, 2] - pres_bboxes[i, 0]
+            pres_h = pres_bboxes[i, 3] - pres_bboxes[i, 1]
+            prev_feature_resized = F.interpolate(prev_feature, size=(pres_h, pres_w), mode='nearest')
+            prev_features_resized.append(prev_feature_resized)
+
+        return prev_features_resized
+
 
     def val_step(self, data, optimizer=None):
         """The iteration step during validation.
