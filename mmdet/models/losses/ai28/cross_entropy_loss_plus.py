@@ -1059,22 +1059,28 @@ def assert_positive_loss(loss, **kwargs):
             return loss
     except ValueError:
         import time
-        filename = f"/ws/data/dshong/invalid_jsd_value/{time.strftime('%Y%m%d_%H%M%S')}"
-        f = open(f"{filename}.txt", 'w')
-        f.write(f"[1] Information \n")
-        print_kwargs('type')
-        print_kwargs('name')
-        f.write("\n\n")
+        if loss == 0:
+            filename = f"/ws/data/dshong/invalid_jsd_value/{time.strftime('%Y%m%d_%H%M%S')}"
+            f = open(f"{filename}.txt", 'w')
+            f.write(f"[1] Information \n")
+            print_kwargs('type')
+            print_kwargs('name')
+            f.write("\n\n")
 
-        f.write("[2] Value\n")
-        print_kwargs('pred_orig', True)
-        print_kwargs('label', True)
-        print_kwargs('weight', True)
-        print_kwargs('pred_aug1', True)
-        print_kwargs('pred_aug2', True)
-        print_kwargs('class_weight', True)
+            f.write("[2] Value\n")
+            print_kwargs('pred_orig', True)
+            print_kwargs('label', True)
+            print_kwargs('weight', True)
+            print_kwargs('pred_aug1', True)
+            print_kwargs('pred_aug2', True)
+            print_kwargs('class_weight', True)
 
-        f.close()
+            f.close()
+        else:
+            filename = f"/ws/data/dshong/invalid_jsd_value/negative_loss"
+            f = open(f"{filename}.txt", 'a')
+            f.write(f"{time.strftime('%Y%m%d_%H%M%S')}")
+            f.close()
         return 0
 
 
