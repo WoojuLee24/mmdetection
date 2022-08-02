@@ -32,7 +32,7 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_3_1', lambda_weight=0.0001, wandb_name='rpn_cls'),
+            , additional_loss='jsdv1_3_4', lambda_weight=10, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
@@ -80,15 +80,8 @@ data = dict(
 ################
 ### RUN TIME ###
 ################
-lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=500,
-    warmup_ratio=0.001,
-    # [7] yields higher performance than [6]
-    step=[1])
 runner = dict(
-    type='EpochBasedRunner', max_epochs=2)  # actual epoch = 2 * 8 = 16
+    type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
 
 ###########
 ### LOG ###
