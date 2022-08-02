@@ -149,7 +149,7 @@ log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
                                               'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
                                               'config': {
                                                   # data pipeline
