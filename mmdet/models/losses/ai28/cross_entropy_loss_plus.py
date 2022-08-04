@@ -1099,7 +1099,8 @@ class CrossEntropyLossPlus(nn.Module):
                  lambda_weight=0.0001,
                  temper=1,
                  add_act=None,
-                 wandb_name=None):
+                 wandb_name=None,
+                 **kwargs):
         """CrossEntropyLossPlus.
 
         Args:
@@ -1130,6 +1131,8 @@ class CrossEntropyLossPlus(nn.Module):
         self.temper = temper
         self.add_act = add_act
         self.wandb_name = wandb_name
+
+        self.kwargs = kwargs
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []

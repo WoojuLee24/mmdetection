@@ -425,6 +425,16 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        # rpn tail loss
+        from mmdet.models.tails import RpnTail
+        rpn_tail = RpnTail(channel_wise=self.loss_cls.kwargs['channel_wise']
+                            if 'channel_wise' in self.loss_cls.kwargs else None)
+        x_ = rpn_tail(cls_score)
+        loss_additional = rpn_tail.loss_single(x_)
+        if len(self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})']) == 5:
+            self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].clear()
+        self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].append(self.loss_cls.lambda_weight * loss_additional)
+
         # classification loss
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
@@ -432,6 +442,11 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
                                       1).reshape(-1, self.cls_out_channels)
         loss_cls = self.loss_cls(
             cls_score, labels, label_weights, avg_factor=num_total_samples)
+
+        # rpn tail loss
+        if self.loss_cls.additional_loss == 'rpn_tail':
+            loss_cls += (loss_additional * self.loss_cls.lambda_weight)
+
         # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
         bbox_weights = bbox_weights.reshape(-1, 4)
@@ -520,6 +535,14 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             bbox_targets_list,
             bbox_weights_list,
             num_total_samples=num_total_samples)
+
+        self.vis_data['cls_scores'] = cls_scores
+        self.vis_data['bbox_preds'] = bbox_preds
+        self.vis_data['all_anchor_list'] = all_anchor_list
+        self.vis_data['labels_list'] = labels_list
+        self.vis_data['label_weights_list'] = label_weights_list
+        self.vis_data['bbox_targets_list'] = bbox_targets_list
+        self.vis_data['bbox_weights_list'] = bbox_weights_list
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     def aug_test(self, feats, img_metas, rescale=False):
