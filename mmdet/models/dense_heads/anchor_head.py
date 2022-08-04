@@ -536,13 +536,6 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             bbox_weights_list,
             num_total_samples=num_total_samples)
 
-        self.vis_data['cls_scores'] = cls_scores
-        self.vis_data['bbox_preds'] = bbox_preds
-        self.vis_data['all_anchor_list'] = all_anchor_list
-        self.vis_data['labels_list'] = labels_list
-        self.vis_data['label_weights_list'] = label_weights_list
-        self.vis_data['bbox_targets_list'] = bbox_targets_list
-        self.vis_data['bbox_weights_list'] = bbox_weights_list
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     def aug_test(self, feats, img_metas, rescale=False):
