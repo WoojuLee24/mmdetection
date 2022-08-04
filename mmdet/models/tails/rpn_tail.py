@@ -37,6 +37,8 @@ class RpnTail():
             elif self.maxpool_criterion['type'] == 'v1.2':
                 index = 0 if H > self.maxpool_criterion['thr_h'] else 1
                 maxpool = nn.MaxPool2d(self.maxpool_criterion['kernel_size'][index])
+            elif self.maxpool_criterion['type'] == 'v1.3':
+                maxpool = nn.AvgPool2d(self.maxpool_criterion['kernel_size'])
             else:
                 raise TypeError("maxpool criterion must be ['v1.1', 'v1.2']. "
                                 f"but got {self.maxpool_criterion['type']}")
