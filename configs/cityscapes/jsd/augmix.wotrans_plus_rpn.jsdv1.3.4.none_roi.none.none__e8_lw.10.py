@@ -133,13 +133,13 @@ else:
 str_parameters = '__'
 str_parameters += 'e'+str(runner['max_epochs'])
 if 'lambda_weight' in rpn_loss_cls:
-    str_parameters += ('_lw.'+"{:.0e}".format(rpn_loss_cls['lambda_weight']))
+    str_parameters += ('_lw.'+"{}".format(rpn_loss_cls['lambda_weight']))
 elif 'lambda_weight' in rpn_loss_bbox:
-    str_parameters += ('_lw'+"{:.0e}".format(rpn_loss_bbox['lambda_weight']))
+    str_parameters += ('_lw'+"{}".format(rpn_loss_bbox['lambda_weight']))
 elif 'lambda_weight' in roi_loss_cls:
-    str_parameters += ('_lw'+"{:.0e}".format(roi_loss_cls['lambda_weight']))
+    str_parameters += ('_lw'+"{}".format(roi_loss_cls['lambda_weight']))
 elif 'lambda_weight' in roi_loss_bbox:
-    str_parameters += ('_lw'+"{:.0e}".format(roi_loss_bbox['lambda_weight']))
+    str_parameters += ('_lw'+"{}".format(roi_loss_bbox['lambda_weight']))
 
 print('++++++++++++++++++++')
 print(f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}")
@@ -149,7 +149,7 @@ log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
                                               'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
                                               'config': {
                                                   # data pipeline
