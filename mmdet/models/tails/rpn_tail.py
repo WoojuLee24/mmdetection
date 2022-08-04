@@ -2,18 +2,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mmdet.core import (multi_apply)
-from mmdet.models.builder import build_loss
-
 from mmdet.utils.visualize import multi_imsave
 
 
 class RpnTail():
     def __init__(self,
                  channel_wise=None,
+                 maxpool_criterion=dict(type='v1.1', kernel_size=2),
+                 interpolate=dict(type='v1.1', thr_h=50, sizes=[[10,20], [5,10]]),
                  out_channels=1):
         self.out_channels = out_channels
         self.channel_wise = channel_wise
+        self.maxpool_criterion = maxpool_criterion
+        self.interpolate = interpolate
 
     def __call__(self, x):
         N, num_anchors, H, W = x.shape # e.g., 3, 3, 224, 440
@@ -30,14 +31,25 @@ class RpnTail():
             x = cwise_criterion(x)      # (N, H, W, 1)
             x = x.permute(0, 3, 1, 2)   # (N, 1, H, W)
 
-        maxpool = nn.MaxPool2d(2)
-        x = maxpool(x)
+        if self.maxpool_criterion is not None:
+            if self.maxpool_criterion['type'] == 'v1.1':
+                maxpool = nn.MaxPool2d(self.maxpool_criterion['kernel_size'])
+            elif self.maxpool_criterion['type'] == 'v1.2':
+                index = 0 if H > self.maxpool_criterion['thr_h'] else 1
+                maxpool = nn.MaxPool2d(self.maxpool_criterion['kernel_size'][index])
+            else:
+                raise TypeError("maxpool criterion must be ['v1.1', 'v1.2']. "
+                                f"but got {self.maxpool_criterion['type']}")
+            x = maxpool(x)
+
         # multi_imsave(x[0], 3, 1, f"maxpool({H},{W})")
 
-        if H > 50:
-            x = F.interpolate(x, size=[10, 20])
-        else:
-            x = F.interpolate(x, size=[5, 10])
+        if self.interpolate is not None:
+            if self.interpolate['type'] == 'v1.1':
+                if H > self.interpolate['thr_h']:
+                    x = F.interpolate(x, size=self.interpolate['sizes'][0])
+                else:
+                    x = F.interpolate(x, size=self.interpolate['sizes'][1])
         # multi_imsave(x[0], 3, 1, f"interpolate=({H},{W})")
 
         x = x.reshape(N, -1)
