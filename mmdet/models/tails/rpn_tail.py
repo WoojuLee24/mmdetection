@@ -10,11 +10,39 @@ class RpnTail():
                  channel_wise=None,
                  maxpool_criterion=dict(type='v1.1', kernel_size=2),
                  interpolate=dict(type='v1.1', thr_h=50, sizes=[[10,20], [5,10]]),
+                 linear_criterion=None, # dict(type='v1.1', out_channels=[200, 50])
                  out_channels=1):
         self.out_channels = out_channels
         self.channel_wise = channel_wise
         self.maxpool_criterion = maxpool_criterion
         self.interpolate = interpolate
+        self.linear_criterion = linear_criterion
+
+        if self.linear_criterion is not None:
+            num_anchors = 3 if channel_wise is None else 1
+            if self.interpolate is not None:
+                if 'thr_h' in self.interpolate:
+                    h1, w1 = self.interpolate['sizes'][0]
+                    h2, w2 = self.interpolate['sizes'][1]
+                else:
+                    h1, w1 = self.interpolate['size']
+            else:
+                raise ValueError("linear_criterion can be used when interpolate is not None.")
+            if 'out_channels' in linear_criterion:
+                if isinstance(linear_criterion['out_channels'], list):
+                    assert len(linear_criterion['out_channels']) == len(interpolate['sizes'])
+                    self.linear1 = nn.Linear(num_anchors * h1 * w1, linear_criterion['out_channels'][0])
+                    self.linear2 = nn.Linear(num_anchors * h2 * w2, linear_criterion['out_channels'][1])
+                elif isinstance(self.linear_criterion['out_channels'], int):
+                    assert isinstance(interpolate['sizes'], int)
+                    self.linear1 = nn.Linear(num_anchors * h1 * w1, linear_criterion['out_channels'])
+                    self.linear2 = None
+                else:
+                    raise TypeError("'out_channels' in linear_criterion must be list or int. "
+                                    f"but got {type(linear_criterion['out_channels'])}.")
+            else:
+                raise ValueError("linear_criterion must have 'out_channels'. "
+                                 f"but it doesn't have.")
 
     def __call__(self, x):
         N, num_anchors, H, W = x.shape # e.g., 3, 3, 224, 440
@@ -55,6 +83,16 @@ class RpnTail():
         # multi_imsave(x[0], 3, 1, f"interpolate=({H},{W})")
 
         x = x.reshape(N, -1)
+
+        if self.linear_criterion is not None:
+            if self.linear2 is None:
+                x = self.linear1(x)
+            else:
+                if H > self.interpolate['thr_h']:
+                    x = self.linear1(x)
+                else:
+                    x = self.linear2(x)
+
         return x
 
     def loss_single(self, features):
