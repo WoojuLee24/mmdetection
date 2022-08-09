@@ -444,8 +444,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         self.features.clear()
         self.wandb_features.clear()
-        self.save_tensor(data[0], name='ori')
-        self.save_tensor(data[1], name='aug')
+        # self.save_tensor(data[0], name='ori')
+        # self.save_tensor(data[1], name='aug')
 
         if 'frame_loss' in self.train_cfg.additional_loss:
             outputs = self.forward_mask_frame(data)
