@@ -56,10 +56,12 @@ def _concat_dataset(cfg, default_args=None):
 
 
 def build_dataset(cfg, default_args=None):
-    from .dataset_wrappers import (ConcatDataset, RepeatDataset,
+    from .dataset_wrappers import (ConDataset, ConcatDataset, RepeatDataset,
                                    ClassBalancedDataset, MultiImageMixDataset)
     if isinstance(cfg, (list, tuple)):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
+    elif cfg['type'] == 'ConDataset':
+        dataset = ConDataset([build_dataset(c, default_args) for c in cfg['datasets']])
     elif cfg['type'] == 'ConcatDataset':
         dataset = ConcatDataset(
             [build_dataset(c, default_args) for c in cfg['datasets']],

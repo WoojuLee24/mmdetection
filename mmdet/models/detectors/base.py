@@ -369,11 +369,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 plt.axis("off")
                 i += 1
         # plt.savefig("/ws/data/debug_test/test.jpg")
-
         pdb.set_trace()
         return plt
 
-    def process_results(self, result, show_score_thr=0.3):
+    def process_results(self, result, data, show_score_thr=0.3):
         ## get results
         import numpy as np
         if isinstance(result, tuple):
@@ -403,7 +402,13 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             labels = labels[inds]
             if segms is not None:
                 segms = segms[inds, ...]
-        mask = segms.astype(np.int32)
+
+        try:
+            mask = segms.astype(np.int32)
+        except:
+            print('segm_result: ', segm_result)
+            print('bbox_resulst: ', bbox_result)
+            print('gt_bboxes: ', data['gt_bboxes'])
 
         processed_result = {"bboxes": bboxes, "mask": mask, "labels": labels}
 
@@ -439,44 +444,131 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         self.features.clear()
         self.wandb_features.clear()
+        self.save_tensor(data[0], name='ori')
+        self.save_tensor(data[1], name='aug')
 
-        # pdb.set_trace()
-        # with torch.no_grad():
-        #     data2 = dict()
-        #     data2['img'] = [data['img']]
-        #     data2['img_metas'] = [data['img_metas']]
-        #     result = self(return_loss=False, rescale=True, **data2)
+        if 'frame_loss' in self.train_cfg.additional_loss:
+            outputs = self.forward_mask_frame(data)
 
-        # pdb.set_trace()
+        elif 'aug_loss' in self.train_cfg.additional_loss:
+            outputs = self.forward_aug_frame(data)
 
+        else:
+            outputs = self.forward_original(data)
+
+        return outputs
+
+    def save_tensor(self, data, name):
+        bboxes = data['gt_bboxes'][0]
+        bboxes = bboxes.detach().cpu().numpy()
+        bboxes = bboxes.astype(np.int)
+        img = data['img'][0]
+        img = img.detach().cpu().numpy()
+        img = np.transpose(img, (1, 2, 0))
+        img = img.astype(np.uint8).copy()
+        for i in range(np.shape(bboxes)[0]):
+            # draw bbox
+            left_top = int(bboxes[i, 0]), int(bboxes[i, 1])
+            right_bottom = int(bboxes[i, 2]), int(bboxes[i, 3])
+            # mask = mask * 255
+            cv2.rectangle(img, left_top, right_bottom, color=(0, 0, 255), thickness=3)
+        cv2.imwrite("/ws/data/cityscapes/mask/debug/{}.png".format(name), img)
+
+
+    def forward_original(self, data):
+        losses = self(**data)
+
+        loss, log_vars = self._parse_losses(losses)
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+
+        return outputs
+
+
+    def forward_aug_frame(self, data):
+
+        ori_data = data[0]
+        aug_data = data[1]
+        from mmdet.datasets.pipelines import Resize
+        pdb.set_trace()
+        con_data = self.concat_data(ori_data, aug_data)
+        pdb.set_trace()
+        losses = self(**con_data)
+
+        additional_loss = 0
+        for key, features in self.features.items():
+            ori_features = features[0][0:1]
+            aug_features = features[0][0:1]
+            k = ori_features - aug_features
+            loss_ = self.mse_loss(ori_features, aug_features)
+            additional_loss += loss_
+
+        losses['additional_loss'] = additional_loss
+
+        loss, log_vars = self._parse_losses(losses)
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+
+        return outputs
+
+    def concat_data(self, data1, data2):
+        con_data = dict()
+        for key in data1.keys():
+            if key == 'img':
+                con_data['img'] = torch.cat((data1['img'], data2['img']), dim=0)
+            else:
+                con_data[key] = data1[key] + data2[key]
+
+        return con_data
+
+    def forward_mask_frame(self, data):
         if self.prev_data != None:
             # concatenate the current data and previous data.
             consecutive_data = dict()
-            data_test = dict()
-            prev_data_test = dict()
             for key in data.keys():
                 if key == 'img':
                     consecutive_data['img'] = torch.cat((data['img'], self.prev_data['img']), dim=0)
-                    data_test['img'] = [data['img']]
-                    prev_data_test['img'] = [self.prev_data['img']]
-                elif key == 'img_metas':
-                    data_test[key] = [data[key]]
-                    prev_data_test[key] = [self.prev_data[key]]
-                    consecutive_data[key] = data[key] + self.prev_data[key]
+                # elif key == 'img_metas':
+                #     consecutive_data[key] = data[key] + self.prev_data[key]
                 else:
                     consecutive_data[key] = data[key] + self.prev_data[key]
 
-
             losses = self(**consecutive_data)
 
+            # additional_loss = torch.Tensor([0])
+            # additional_loss = additional_loss.cuda()
+            additional_loss = 0
+            pres = dict()
+            prev = dict()
             with torch.no_grad():
-                # get results
-                pres_data_result = self(return_loss=False, rescale=True, **data_test)
-                prev_data_result = self(return_loss=False, rescale=True, **prev_data_test)
+                # # get results
+                # pres_data_result = self(return_loss=False, rescale=True, **data_test)
+                # prev_data_result = self(return_loss=False, rescale=True, **prev_data_test)
                 # process_results
-                pres = self.process_results(pres_data_result[0])
-                prev = self.process_results(prev_data_result[0])
+                # pres = self.process_results(pres_data_result[0], data)
+                # prev = self.process_results(prev_data_result[0], self.prev_data)
 
+                pres['mask'] = consecutive_data['gt_masks'][0].masks
+                pres['bboxes'] = consecutive_data['gt_bboxes'][0].cpu().detach().numpy()
+                pres['labels'] = consecutive_data['gt_labels'][0].cpu().detach().numpy()
+                prev['mask'] = consecutive_data['gt_masks'][1].masks
+                prev['bboxes'] = consecutive_data['gt_bboxes'][1].cpu().detach().numpy()
+                prev['labels'] = consecutive_data['gt_labels'][1].cpu().detach().numpy()
+
+                pres = self.filter_small_objects(pres)
+                prev = self.filter_small_objects(prev)
                 # pres_mask = pres['mask']
                 # pres_bbox = pres['bboxes']
 
@@ -496,28 +588,33 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 pres_prev_matched, unmatched_pres_dets, unmatched_prev_dets = \
                     associate_detections_to_trackers(pres['bboxes'], prev['bboxes'], iou_threshold=0.3)
 
-                if np.shape(pres_prev_matched)[0] != 0:
-                    pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
-                    pres_matched_bbox = pres["bboxes"][pres_prev_matched[:, 0]]
-                    # pres_matched_feat = pres["x1_npy"] * pres_matched_mask
+            if np.shape(pres_prev_matched)[0] != 0:
+                pres_matched_mask = pres["mask"][pres_prev_matched[:, 0]]
+                pres_matched_bbox = pres["bboxes"][pres_prev_matched[:, 0]]
+                # pres_matched_feat = pres["x1_npy"] * pres_matched_mask
 
-                    prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
-                    prev_matched_bbox = prev["bboxes"][pres_prev_matched[:, 1]]
-                    # prev_matched_feat = prev["x1_npy"] * prev_matched_mask
+                prev_matched_mask = prev["mask"][pres_prev_matched[:, 1]]
+                prev_matched_bbox = prev["bboxes"][pres_prev_matched[:, 1]]
+                # prev_matched_feat = prev["x1_npy"] * prev_matched_mask
 
-                    pres["mask"] = pres["mask"][pres_prev_matched[:, 0]]
-                    pres["bboxes"] = pres["bboxes"][pres_prev_matched[:, 0]]
-                    pres["labels"] = pres["labels"][pres_prev_matched[:, 0]]
+                pres["mask"] = pres["mask"][pres_prev_matched[:, 0]]
+                pres["bboxes"] = pres["bboxes"][pres_prev_matched[:, 0]]
+                pres["labels"] = pres["labels"][pres_prev_matched[:, 0]]
 
-                    prev["mask"] = prev["mask"][pres_prev_matched[:, 1]]
-                    prev["bboxes"] = prev["bboxes"][pres_prev_matched[:, 1]]
-                    prev["labels"] = prev["labels"][pres_prev_matched[:, 1]]
+                prev["mask"] = prev["mask"][pres_prev_matched[:, 1]]
+                prev["bboxes"] = prev["bboxes"][pres_prev_matched[:, 1]]
+                prev["labels"] = prev["labels"][pres_prev_matched[:, 1]]
 
-                    for key, feature in self.features.items():
-                        pres_mask_feature, pres_bbox_resized = self.mask_feature(feature[1], pres)
-                        prev_mask_feature, prev_bbox_resized = self.mask_feature(feature[2], prev)
-                        prev_mask_feature_resized = self.interpolate_features(prev_mask_feature, pres_bbox_resized)
-                        a = prev_mask_feature_resized
+                for key, feature in self.features.items():
+                    # pres_mask_feature, pres_bbox = self.mask_feature2(feature[0][0:1], pres)
+                    # prev_mask_feature, prev_bbox = self.mask_feature2(feature[0][1:], prev)
+                    # prev_mask_feature_resized = self.interpolate_features(prev_mask_feature, pres_bbox)
+                    pres_mask_feature, pres_bbox_resized = self.mask_feature(feature[0][0:1], pres)
+                    prev_mask_feature, prev_bbox_resized = self.mask_feature(feature[0][1:], prev)
+                    prev_mask_feature_resized = self.interpolate_features(prev_mask_feature, pres_bbox_resized)
+                    # loss_ = self.jsd_hw_loss(pres_mask_feature, prev_mask_feature_resized)
+                    loss_ = self.mse_loss(pres_mask_feature, prev_mask_feature_resized)
+                    additional_loss += loss_
 
                     # for i, mask in enumerate(pres_matched_mask):
                     #     # draw bbox
@@ -554,25 +651,27 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                     # domain generalization in the fpn layer
                     # if train_cfg.wandb.log.features_list = [], pass
 
-                    if "loss" in self.neck.train_cfg:
-                        # pdb.set_trace()
-                        dict_kwargs = dict()
-                        neck_train_cfg_loss = self.neck.train_cfg["loss"]
-                        for key, value in neck_train_cfg_loss.items():
-                            dict_kwargs[key] = value
-                        for key, pred in self.features.items():
-                            loss_, p_dist = fpn_loss(self.features[key], **dict_kwargs)
-                            losses[f"fpn_loss.{key}"] = loss_
-
+                    # if "loss" in self.neck.train_cfg:
+                    #     # pdb.set_trace()
+                    #     dict_kwargs = dict()
+                    #     neck_train_cfg_loss = self.neck.train_cfg["loss"]
+                    #     for key, value in neck_train_cfg_loss.items():
+                    #         dict_kwargs[key] = value
+                    #     for key, pred in self.features.items():
+                    #         loss_, p_dist = fpn_loss(self.features[key], **dict_kwargs)
+                    #         losses[f"fpn_loss.{key}"] = loss_
+                print('additional_loss: ', additional_loss)
+                losses['additional_loss'] = additional_loss
             loss, log_vars = self._parse_losses(losses)
+            # loss += additional_loss
 
-            # wandb
-            for layer_name in self.train_cfg.wandb.log.features_list:
-                self.wandb_features[layer_name] = self.features[layer_name]
-            if 'log_vars' in self.train_cfg.wandb.log.vars:
-                for name, value in log_vars.items():
-                    self.wandb_features[name] = np.mean(value)
-
+            # # wandb
+            # for layer_name in self.train_cfg.wandb.log.features_list:
+            #     self.wandb_features[layer_name] = self.features[layer_name]
+            # if 'log_vars' in self.train_cfg.wandb.log.vars:
+            #     for name, value in log_vars.items():
+            #         self.wandb_features[name] = np.mean(value)
+            # self.wandb_features['additional_loss'] = additional_loss
             self.prev_data = data
 
         else:
@@ -580,12 +679,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
             loss, log_vars = self._parse_losses(losses)
 
-            # wandb
+            # # wandb
             # for layer_name in self.train_cfg.wandb.log.features_list:
             #     self.wandb_features[layer_name] = self.features[layer_name]
-            if 'log_vars' in self.train_cfg.wandb.log.vars:
-                for name, value in log_vars.items():
-                    self.wandb_features[name] = np.mean(value)
+            # if 'log_vars' in self.train_cfg.wandb.log.vars:
+            #     for name, value in log_vars.items():
+            #         self.wandb_features[name] = np.mean(value)
 
             self.prev_data = data
 
@@ -593,6 +692,15 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         return outputs
+
+    def filter_small_objects(self, results):
+
+        index = [True if (bbox[2] - bbox[0] > 8) and (bbox[3] - bbox[1] > 8) else False for bbox in results['bboxes'] ]
+        results['mask'] = results['mask'][index]
+        results['bboxes'] = results['bboxes'][index]
+        results['labels'] = results['labels'][index]
+
+        return results
 
     def mask_feature(self, feature, results):
         """
@@ -614,11 +722,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         _, D, H, W = np.shape(mask)
         scale = (h / H, w / W)
         # resize mask with scale
-        # mask_resized = cv2.resize(mask, dsize=scale, interpolation=cv2.INTER_NEAREST)
         mask_resized = F.interpolate(mask, size=(h, w), mode='nearest')
         # debug
         # output, inverse_indices = torch.unique(mask_resized, sorted=True, return_inverse=True)
-        bbox_resized = bbox * (w/ W, h / H, w/ W, h / H, 1)
+        # bbox_resized = bbox * (w/ W, h / H, w/ W, h / H, 1)
+        bbox_resized = bbox * (w/ W, h / H, w/ W, h / H)
+        bbox_resized = np.rint(bbox_resized)
         bbox_resized = bbox_resized.astype(np.int)
         for i in range(D):
             mask_feature = feature * mask_resized[:, i, :, :]
@@ -626,10 +735,43 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             mask_feature_cropped = mask_feature[:, :, bbox_resized[i, 1]:bbox_resized[i, 3], bbox_resized[i, 0]:bbox_resized[i, 2]]
             mask_features.append(mask_feature_cropped)
             # bbox_feature = feature[:, :, bbox_resized[i, 1]:bbox_resized[i, 3], bbox_resized[i, 0]:bbox_resized[i, 2]]
-            # mask_features.append(mask_feature)
             # bbox_features.append(bbox_feature)
 
         return mask_features, bbox_resized
+
+
+    def mask_feature2(self, feature, results):
+        """
+
+        Args:
+            feature: feature maps of feature pyramid network. (1, f, h, w)
+            mask: mask of instance objects. (D, H, W)
+            bbox: bbox of instance objects. (D, 4)
+
+        Returns:
+
+        """
+        mask_features = []
+        mask = results['mask']
+        mask = torch.from_numpy(mask).float().to(feature.device)    # to implement F.interpolate
+        mask = torch.unsqueeze(mask, dim=0)
+        bbox = results['bboxes']
+        bbox = bbox.astype(np.int)
+        _, f, h, w  = feature.size()
+        _, D, H, W = np.shape(mask)
+        # resize feature with scale
+        feature_resized = F.interpolate(feature, size=(H, W), mode='nearest')
+        # debug
+        # output, inverse_indices = torch.unique(mask_resized, sorted=True, return_inverse=True)
+        for i in range(D):
+            mask_feature = feature_resized * mask[:, i, :, :]
+            mask_feature_cropped = mask_feature[:, :, bbox[i, 1]:bbox[i, 3], bbox[i, 0]:bbox[i, 2]]
+            # # debug
+            # mask_feature_cropped_debug = mask_feature_cropped.cpu().detach().numpy()
+            # plt.imsave('/ws/data/log_kt/debug_mask6/{}.png'.format(i), np.mean(mask_feature_cropped_debug[0], axis=0))
+            mask_features.append(mask_feature_cropped)
+
+        return mask_features, bbox
 
 
     def interpolate_features(self, prev_features, pres_bboxes):
@@ -654,6 +796,40 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return prev_features_resized
 
+    def mse_loss(self, pres_features, prev_features):
+        loss = 0
+        for pres_feature, prev_feature in zip(pres_features,  prev_features):
+            pres_feature = pres_feature.mean()
+            prev_feature = prev_feature.mean()
+            loss += 0.1 * F.mse_loss(pres_feature, prev_feature, reduction='mean')
+
+        return loss
+
+    def jsd_hw_loss(self, pres_features, prev_features):
+        loss = 0
+        for pres_feature, prev_feature in zip(pres_features, prev_features):
+            B, C, H, W = pres_feature.size()
+            pres_feature = pres_feature.mean(dim=1, keepdim=True)
+            prev_feature = prev_feature.mean(dim=1, keepdim=True)
+
+            # pres_feature = pres_feature.reshape(B, C, -1)
+            # prev_feature = prev_feature.reshape(B, C, -1)
+            pres_feature = pres_feature.reshape(B, -1)
+            prev_feature = prev_feature.reshape(B, -1)
+            pres_feature = F.sigmoid(pres_feature)
+            prev_feature = F.sigmoid(prev_feature)
+            # pres_feature = F.softmax(pres_feature, dim=-1)
+            # prev_feature = F.softmax(prev_feature, dim=-1)
+
+            mix_feature = torch.clamp((pres_feature + prev_feature) / 2., 1e-7, 1).log()
+
+            loss += 0.1 * (F.kl_div(mix_feature, pres_feature, reduction='mean') +
+                           F.kl_div(mix_feature, prev_feature, reduction='mean')) / 2.
+            # loss += F.mse_loss(pres_feature, prev_feature, reduction='mean')
+        # prevent the exploding loss
+        loss = torch.clamp(loss, max=0.02)
+
+        return loss
 
     def val_step(self, data, optimizer=None):
         """The iteration step during validation.

@@ -2622,9 +2622,9 @@ class RandomAffine:
                         results['gt_labels'] = results['gt_labels'][
                             valid_index]
 
-                if 'gt_masks' in results:
-                    raise NotImplementedError(
-                        'RandomAffine only supports bbox.')
+                # if 'gt_masks' in results:
+                #     raise NotImplementedError(
+                #         'RandomAffine only supports bbox.')
         return results
 
     def filter_gt_bboxes(self, origin_bboxes, wrapped_bboxes):

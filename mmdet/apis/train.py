@@ -79,10 +79,12 @@ def train_detector(model,
                    timestamp=None,
                    meta=None):
     logger = get_root_logger(log_level=cfg.log_level)
-    if 'demo' in cfg.data.train.dataset.img_prefix:
-        shuffle = False
-    else:
-        shuffle = True
+    #if 'demo' in cfg.data.train.dataset.img_prefix:
+    #    shuffle = False
+    #else:
+    #    shuffle = True
+    shuffle = False
+    # pdb.set_trace()
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
     if 'imgs_per_gpu' in cfg.data:

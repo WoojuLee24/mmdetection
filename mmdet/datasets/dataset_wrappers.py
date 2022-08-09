@@ -8,10 +8,22 @@ from collections import defaultdict
 import numpy as np
 from mmcv.utils import build_from_cfg, print_log
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
+from torch.utils.data import Dataset
 
 from .builder import DATASETS, PIPELINES
 from .coco import CocoDataset
 
+@DATASETS.register_module()
+class ConDataset(Dataset):
+    def __init__(self, *datasets):
+        self.datasets = datasets[0]
+        self.CLASSES = self.datasets[0].CLASSES
+
+    def __getitem__(self, i):
+        return tuple(d[i] for d in self.datasets)
+
+    def __len__(self):
+        return min(len(d) for d in self.datasets)
 
 @DATASETS.register_module()
 class ConcatDataset(_ConcatDataset):
