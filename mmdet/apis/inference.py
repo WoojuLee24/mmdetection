@@ -12,6 +12,7 @@ from mmdet.core import get_classes
 from mmdet.datasets import replace_ImageToTensor
 from mmdet.datasets.pipelines import Compose
 from mmdet.models import build_detector
+from mmdet.core.hook import FeatureHook
 
 
 def init_detector(config, checkpoint=None, device='cuda:0', cfg_options=None):
@@ -38,6 +39,48 @@ def init_detector(config, checkpoint=None, device='cuda:0', cfg_options=None):
     config.model.pretrained = None
     config.model.train_cfg = None
     model = build_detector(config.model, test_cfg=config.get('test_cfg'))
+    if checkpoint is not None:
+        checkpoint = load_checkpoint(model, checkpoint, map_location='cpu')
+        if 'CLASSES' in checkpoint.get('meta', {}):
+            model.CLASSES = checkpoint['meta']['CLASSES']
+        else:
+            warnings.simplefilter('once')
+            warnings.warn('Class names are not saved in the checkpoint\'s '
+                          'meta data, use COCO classes by default.')
+            model.CLASSES = get_classes('coco')
+    model.cfg = config  # save the config in the model for convenience
+    model.to(device)
+    model.eval()
+    return model
+
+
+def init_detector_with_feature(config, checkpoint=None, device='cuda:0', cfg_options=None):
+    """Initialize a detector from config file.
+
+    Args:
+        config (str or :obj:`mmcv.Config`): Config file path or the config
+            object.
+        checkpoint (str, optional): Checkpoint path. If left as None, the model
+            will not load any weights.
+        cfg_options (dict): Options to override some settings in the used
+            config.
+
+    Returns:
+        nn.Module: The constructed detector.
+    """
+    if isinstance(config, str):
+        config = mmcv.Config.fromfile(config)
+    elif not isinstance(config, mmcv.Config):
+        raise TypeError('config must be a filename or Config object, '
+                        f'but got {type(config)}')
+    if cfg_options is not None:
+        config.merge_from_dict(cfg_options)
+    layer_list = config.custom_hooks[0]['layer_list']
+    feature_hook = FeatureHook(layer_list)
+    config.model.pretrained = None
+    config.model.train_cfg = None
+    model = build_detector(config.model, test_cfg=config.get('test_cfg'))
+    feature_hook.hook_multi_layer(model, layer_list)
     if checkpoint is not None:
         checkpoint = load_checkpoint(model, checkpoint, map_location='cpu')
         if 'CLASSES' in checkpoint.get('meta', {}):
