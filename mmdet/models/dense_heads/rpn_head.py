@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
+import math
 
 import torch
 import torch.nn as nn
@@ -9,6 +10,18 @@ from mmcv.ops import batched_nms
 
 from ..builder import HEADS
 from .anchor_head import AnchorHead
+from mmdet.models.losses.ai28 import RpnAdditionalLoss
+
+def get_loss_additional_criterion(loss_additional):
+    if loss_additional['version'] == '2.1':
+        in_channels = loss_additional['in_channels']
+        feature_dim = int(math.sqrt(in_channels))
+    else:
+        raise TypeError(f"loss_additional version should be ['2.1'],"
+                        f"but got {loss_additional['version']}.")
+    return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
+                         nn.ReLU(),
+                         nn.Conv2d(in_channels, feature_dim, kernel_size=1))
 
 
 @HEADS.register_module()
@@ -25,10 +38,23 @@ class RPNHead(AnchorHead):
                  in_channels,
                  init_cfg=dict(type='Normal', layer='Conv2d', std=0.01),
                  num_convs=1,
+                 loss_additional=None,
                  **kwargs):
         self.num_convs = num_convs
         super(RPNHead, self).__init__(
             1, in_channels, init_cfg=init_cfg, **kwargs)
+
+        if loss_additional is not None:
+            if loss_additional['type'] == 'RpnAdditionalLoss':
+                loss_additional['in_channels'] = self.in_channels
+                loss_additional['criterion'] = get_loss_additional_criterion(loss_additional).to('cuda')
+                loss_additional['loss_criterion'] = RpnAdditionalLoss(loss_additional)
+            else:
+                raise TypeError(f"loss_additional type should be ['RpnTail'],"
+                                f"but got {loss_additional['type']}.")
+            self.loss_additional = loss_additional
+        else:
+            self.loss_additional = loss_additional
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -65,6 +91,9 @@ class RPNHead(AnchorHead):
         x = F.relu(x, inplace=True)
         rpn_cls_score = self.rpn_cls(x)
         rpn_bbox_pred = self.rpn_reg(x)
+        if self.loss_additional is not None:
+            rpn_additional = self.loss_additional['criterion'](x)
+            return rpn_cls_score, rpn_bbox_pred, rpn_additional
         return rpn_cls_score, rpn_bbox_pred
 
     def loss(self,
