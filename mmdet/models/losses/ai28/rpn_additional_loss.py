@@ -7,8 +7,26 @@ from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 
 
-def jsd(features,
-        **kwargs):
+def bce(features, **kwargs):
+    features = features.reshape(features.shape[0], -1)
+    assert features.shape[0] == 3
+
+    feats_orig, feats_aug1, feats_aug2 = torch.chunk(features, 3)
+    p_clean, p_aug1, p_aug2 = F.sigmoid(feats_orig), \
+                              F.sigmoid(feats_aug1), \
+                              F.sigmoid(feats_aug2)
+
+    p_mixture = (p_clean + p_aug1 + p_aug2) / 3.
+    bce1 = F.binary_cross_entropy(p_mixture, p_clean, reduction='none')
+    bce2 = F.binary_cross_entropy(p_mixture, p_aug1, reduction='none')
+    bce3 = F.binary_cross_entropy(p_mixture, p_aug2, reduction='none')
+
+    loss = (bce1 + bce2 + bce3) / 3.
+
+    return loss
+
+
+def jsd(features, **kwargs):
     features = features.reshape(features.shape[0], -1)
     assert features.shape[0] == 3
 
@@ -46,8 +64,10 @@ class RpnAdditionalLoss(nn.Module):
                 rpn_additional,
                 **kwargs):
         losses = []
-        if self.version == '2.1' or '2.2' or '2.3':
+        if self.version == '2.1' or self.version == '2.2' or self.version == '2.3':
             criterion = jsd
+        elif self.version == '2.4':
+            criterion = bce
         else:
             raise ValueError(f"version must be ['2.1'],"
                              f"but got {self.version}.")

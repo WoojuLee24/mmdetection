@@ -20,7 +20,7 @@ def get_loss_additional_criterion(loss_additional):
         return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
                              nn.ReLU(),
                              nn.Conv2d(in_channels, feature_dim, kernel_size=1))
-    elif loss_additional['version'] == '2.2':
+    elif loss_additional['version'] == '2.2' or '2.4':
         feature_dim = 1
         return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
                              nn.ReLU(),
