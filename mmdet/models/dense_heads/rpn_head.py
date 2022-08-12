@@ -25,6 +25,11 @@ def get_loss_additional_criterion(loss_additional):
         return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
                              nn.ReLU(),
                              nn.Conv2d(in_channels, feature_dim, kernel_size=1))
+    elif loss_additional['version'] == '2.3':
+        feature_dim = 2
+        return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
+                             nn.ReLU(),
+                             nn.Conv2d(in_channels, feature_dim, kernel_size=1))
     else:
         raise TypeError(f"loss_additional version should be ['2.1'],"
                         f"but got {loss_additional['version']}.")
