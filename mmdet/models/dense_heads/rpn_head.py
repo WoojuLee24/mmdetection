@@ -12,16 +12,22 @@ from ..builder import HEADS
 from .anchor_head import AnchorHead
 from mmdet.models.losses.ai28 import RpnAdditionalLoss
 
+
 def get_loss_additional_criterion(loss_additional):
+    in_channels = loss_additional['in_channels']
     if loss_additional['version'] == '2.1':
-        in_channels = loss_additional['in_channels']
         feature_dim = int(math.sqrt(in_channels))
+        return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
+                             nn.ReLU(),
+                             nn.Conv2d(in_channels, feature_dim, kernel_size=1))
+    elif loss_additional['version'] == '2.2':
+        feature_dim = 1
+        return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
+                             nn.ReLU(),
+                             nn.Conv2d(in_channels, feature_dim, kernel_size=1))
     else:
         raise TypeError(f"loss_additional version should be ['2.1'],"
                         f"but got {loss_additional['version']}.")
-    return nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                         nn.ReLU(),
-                         nn.Conv2d(in_channels, feature_dim, kernel_size=1))
 
 
 @HEADS.register_module()
