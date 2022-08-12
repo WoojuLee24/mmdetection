@@ -17,9 +17,10 @@ def bce(features, **kwargs):
                               F.sigmoid(feats_aug2)
 
     p_mixture = (p_clean + p_aug1 + p_aug2) / 3.
-    bce1 = F.binary_cross_entropy(p_mixture, p_clean, reduction='none')
-    bce2 = F.binary_cross_entropy(p_mixture, p_aug1, reduction='none')
-    bce3 = F.binary_cross_entropy(p_mixture, p_aug2, reduction='none')
+    p_mixture = p_mixture.detach()
+    bce1 = F.binary_cross_entropy(p_clean, p_mixture, reduction='none')
+    bce2 = F.binary_cross_entropy(p_aug1, p_mixture, reduction='none')
+    bce3 = F.binary_cross_entropy(p_aug2, p_mixture, reduction='none')
 
     loss = (bce1 + bce2 + bce3) / 3.
 
