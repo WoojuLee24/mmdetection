@@ -46,7 +46,7 @@ class RpnAdditionalLoss(nn.Module):
                 rpn_additional,
                 **kwargs):
         losses = []
-        if self.version == '2.1':
+        if self.version == '2.1' or '2.2':
             criterion = jsd
         else:
             raise ValueError(f"version must be ['2.1'],"
