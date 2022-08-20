@@ -146,12 +146,6 @@ class TwoStageDetector(BaseDetector):
         else:
             proposal_list = proposals
 
-        if 'given_cfg' in self.train_cfg:
-            filename = img_metas[0]['filename'].replace(self.train_cfg['given_cfg']['train_dataset_img_prefix'],
-                                                        self.train_cfg['given_cfg']['parent_dir'])
-            proposals = torch.load(filename.replace('.png', f"_{self.train_cfg['given_cfg']['type']}.pt"))[0]
-            proposal_list = [proposals, proposals, proposals]
-
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
                                                  gt_bboxes_ignore, gt_masks,
