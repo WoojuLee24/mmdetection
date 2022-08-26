@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
+import torch.nn.functional as F
 
 from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
 from ..builder import HEADS, build_head, build_roi_extractor
@@ -124,6 +125,90 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                                     gt_bboxes, gt_labels,
                                                     img_metas)
             losses.update(bbox_results['loss_bbox'])
+
+        if hasattr(self.bbox_head.loss_cls, 'kwargs'):
+            if 'contrastive_loss' in self.bbox_head.loss_cls.kwargs:
+                ############################
+                ### Contrastive learning ###
+                ###            by dshong ###
+                ############################
+                ''' Step1. Get cls_feats and cls_feats_gt '''
+                cls_score = bbox_results['cls_score']
+                cls_feats = self.bbox_head.cls_feats
+                cls_feats = F.normalize(cls_feats, dim=1)
+
+                gt_bbox = gt_bboxes[0]
+                img_inds = gt_bbox.new_full((gt_bbox.size(0), 1), 0)  # (num_gts=7, 1)
+                rois_gt = torch.cat([img_inds, gt_bbox], dim=-1)  # (num_gts=7, 5)
+                bbox_results_gt = self._bbox_forward(x, rois_gt)
+                cls_feats_gt = self.bbox_head.cls_feats # (num_gts=7, 1024)
+
+                ''' Step2. Divide into pos, neg and gt '''
+                num_pos = int(cls_feats.shape[0] / 3)
+                neg_inds = sampling_result.neg_inds[sampling_result.neg_inds < num_pos]
+                pos_inds = sampling_result.pos_inds[sampling_result.pos_inds < num_pos]
+                num_gts = gt_bbox.shape[0]
+                num_pos, num_neg = neg_inds.shape[0], pos_inds.shape[0]
+
+                # Sample neg_inds
+                perm = torch.randperm(neg_inds.shape[0])
+                sampled_neg_inds = neg_inds[perm[:num_gts]]
+                all_neg_inds = torch.cat([sampled_neg_inds, sampled_neg_inds + num_pos, sampled_neg_inds + 2 * num_pos], dim=0)
+                all_pos_inds = torch.cat([pos_inds, pos_inds + num_pos, pos_inds + 2 * num_pos], dim=0)
+
+                ''' Step3. Ready the features and labels
+                    - features = (num_gts+num_gts, num_aug, feats_dim)
+                                which consists of pos(num_gts) + neg(num_gts)
+                    - labels = (num_gts+num_gts, )
+                '''
+                num_aug = len(gt_bboxes)
+                feats_dim = cls_feats.shape[1]
+                all_cls_feats_pos = cls_feats[all_pos_inds] # (num_gts*num_aug, feats_dim) e.g., = (7*3, 1024)
+                all_cls_feats_neg = cls_feats[all_neg_inds] # (num_gts*num_aug, feats_dim) e.g., = (7*3, 1024)
+                features_pos = all_cls_feats_pos.reshape(num_aug, num_gts, feats_dim).permute(1, 0, 2) # (num_gts, num_aug, feats_dim)
+                features_neg = all_cls_feats_neg.reshape(num_aug, num_gts, feats_dim).permute(1, 0, 2) # (num_gts, num_aug, feats_dim)
+                features = torch.cat([features_pos, features_neg], dim=0)
+
+                all_labels_pos = torch.cat(gt_labels, dim=0)
+                all_labels_neg = all_labels_pos.new_full((all_cls_feats_neg.shape[0],), cls_score[0].shape[-1] - 1)
+                labels_pos = all_labels_pos.reshape(num_aug, num_gts)
+                labels_neg = all_labels_neg.reshape(num_aug, num_gts)
+                labels = torch.cat([labels_pos[0], labels_neg[0]], dim=0)
+                labels = labels.contiguous().view(-1, 1)
+
+                mask = torch.eq(labels, labels.T).float() # (num_gts*2, num_gts*2) e.g., =(14,14)
+
+                ''' Step4. '''
+                contrast_count = features.shape[1] # =num_aug e.g., =3
+                contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0) # (num_gts*2*num_aug, feats_dim) e.g., = (7*2*3=42, 1024)
+                anchor_count = contrast_count
+                anchor_feature = contrast_feature
+
+                ''' Step5. '''
+                temperature = 0.07
+                anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T), temperature)
+                logits_max = torch.max(anchor_dot_contrast, dim=1, keepdim=True)[0]
+                logits = anchor_dot_contrast - logits_max.detach()
+
+                ''' Step6. '''
+                batch_size = num_gts * 2
+                mask = mask.repeat(anchor_count, contrast_count) # (num_gts*2 * anchor_count, num_gts*2 * contrast_count) = (num_gts*2*num_aug, num_gts*2*num_aug) e.g., (7*2*3=42, 42)
+                logits_mask = torch.scatter(torch.ones_like(mask), 1,
+                                            torch.arange(batch_size * anchor_count).view(-1, 1).to('cuda'), 0) # (num_gts*2*num_aug, num_gts*2*num_aug) e.g., (7*2*3=42, 42)
+                mask = mask * logits_mask
+
+                ''' Step7. '''
+                exp_logits = torch.exp(logits) * logits_mask
+                log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+
+                base_temperature = 0.07
+                mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1) # (num_gts*2*num_aug) e.g., = (7*2*3=42,)
+                loss = -(temperature / base_temperature) * mean_log_prob_pos # (num_gts*2*num_aug) e.g., = (7*2*3=42,)
+                loss = loss.view(anchor_count, batch_size).mean() # (num_aug, num_gts*2) -> (,)
+
+                loss_supcon = {'loss_supcon': loss}
+                losses.update(loss_supcon)
+                #################################################
 
         # mask head forward and loss
         if self.with_mask:
