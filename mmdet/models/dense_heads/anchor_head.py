@@ -427,19 +427,20 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         """
         # rpn tail loss
         from mmdet.models.tails import RpnTail
-        rpn_tail = RpnTail(channel_wise=self.loss_cls.kwargs['channel_wise']
-                           if 'channel_wise' in self.loss_cls.kwargs else None,
-                           maxpool_criterion=self.loss_cls.kwargs['maxpool_criterion']
-                           if 'maxpool_criterion' in self.loss_cls.kwargs else dict(type='v1.1', kernel_size=2),
-                           interpolate=self.loss_cls.kwargs['interpolate']
-                           if 'interpolate' in self.loss_cls.kwargs else dict(type='v1.1', thr_h=50, sizes=[[10,20], [5,10]]),
-                           linear_criterion=self.loss_cls.kwargs['linear_criterion']
-                           if 'linear_criterion' in self.loss_cls.kwargs else None)
-        x_ = rpn_tail(cls_score)
-        loss_additional = rpn_tail.loss_single(x_)
-        if len(self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})']) == 5:
-            self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].clear()
-        self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].append(self.loss_cls.lambda_weight * loss_additional)
+        if 'kwargs' in self.loss_cls:
+            rpn_tail = RpnTail(channel_wise=self.loss_cls.kwargs['channel_wise']
+                               if 'channel_wise' in self.loss_cls.kwargs else None,
+                               maxpool_criterion=self.loss_cls.kwargs['maxpool_criterion']
+                               if 'maxpool_criterion' in self.loss_cls.kwargs else dict(type='v1.1', kernel_size=2),
+                               interpolate=self.loss_cls.kwargs['interpolate']
+                               if 'interpolate' in self.loss_cls.kwargs else dict(type='v1.1', thr_h=50, sizes=[[10,20], [5,10]]),
+                               linear_criterion=self.loss_cls.kwargs['linear_criterion']
+                               if 'linear_criterion' in self.loss_cls.kwargs else None)
+            x_ = rpn_tail(cls_score)
+            loss_additional = rpn_tail.loss_single(x_)
+            if len(self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})']) == 5:
+                self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].clear()
+            self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].append(self.loss_cls.lambda_weight * loss_additional)
 
         # classification loss
         labels = labels.reshape(-1)
