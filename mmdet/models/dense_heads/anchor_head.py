@@ -451,8 +451,9 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             cls_score, labels, label_weights, avg_factor=num_total_samples)
 
         # rpn tail loss
-        if self.loss_cls.additional_loss == 'rpn_tail':
-            loss_cls += (loss_additional * self.loss_cls.lambda_weight)
+        if hasattr(self.loss_cls, 'additional_loss'):
+            if self.loss_cls.additional_loss == 'rpn_tail':
+                loss_cls += (loss_additional * self.loss_cls.lambda_weight)
 
         # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
