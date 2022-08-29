@@ -427,7 +427,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         """
         # rpn tail loss
         from mmdet.models.tails import RpnTail
-        if 'kwargs' in self.loss_cls:
+        if hasattr(self.loss_cls, 'kwargs'):
             rpn_tail = RpnTail(channel_wise=self.loss_cls.kwargs['channel_wise']
                                if 'channel_wise' in self.loss_cls.kwargs else None,
                                maxpool_criterion=self.loss_cls.kwargs['maxpool_criterion']
