@@ -21,6 +21,16 @@ from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
 
 
+''''
+How 2 run?
+    you can set the parameters same as test_robustness.py !
+    Note:   This code is simply written based on test_robustness.py
+            Therefore, it was not completely focused on saving dataset-c.
+            Therefore, unnecessary parameters or codes are included.
+            Please set the required parameters by referring to save_data() function.
+            You can just enter any value for the remaining parameters.
+'''
+
 def parse_args():
     parser = argparse.ArgumentParser(description='MMDet test detector')
     parser.add_argument('config', help='test config file path')
