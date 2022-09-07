@@ -17,7 +17,7 @@ from mmcv.runner import get_dist_info
 from mmdet.core import encode_mask_results
 from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 
-import gc
+import matplotlib.pyplot as plt
 import pdb
 
 def single_gpu_test(model,
@@ -33,15 +33,6 @@ def single_gpu_test(model,
         model.module.features.clear()   # prevent gpu memory leakage
         with torch.no_grad():
             result = model(return_loss=False, rescale=True, **data)
-            k = model
-        # pdb.set_trace()
-
-        # for obj in gc.get_objects():
-        #     try:
-        #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-        #             print(type(obj), obj.size())
-        #     except:
-        #         pass
 
         batch_size = len(result)
         if show or out_dir:
@@ -101,6 +92,7 @@ def single_gpu_test_feature(model,
     # feature_hook.hook_multi_layer(model, layer_list)
 
     for i, data in enumerate(data_loader):
+        model.module.features.clear()
         with torch.no_grad():
             result = model(return_loss=False, rescale=True, **data)
 
@@ -145,16 +137,30 @@ def single_gpu_test_feature(model,
 
         if save_fpn:
             assert out_dir != None
+
+            # save bbox or mask results
+            img_metas = data['img_metas'][0].data[0][0]
+            scene, filename = osp.split(img_metas['ori_filename'])
+            scene_dir = osp.join(out_dir, scene)
+            if not osp.exists(scene_dir):
+                os.mkdir(scene_dir)
+            result_dir = osp.join(scene_dir, 'result')
+            if not osp.exists(result_dir):
+                os.mkdir(result_dir)
+            result_file = osp.join(result_dir, filename[:-4] + ".npy")
+            np.save(result_file, result[0])
+
             for i, fpn in enumerate(model.module.fpn_features):
-                fpn_dir = osp.join(out_dir, 'fpn{}'.format(i))
+                fpn = fpn.squeeze(dim=0)
+                fpn_dir = osp.join(scene_dir, 'fpn{}'.format(i))
                 if not osp.exists(fpn_dir):
                     os.mkdir(fpn_dir)
-                scene, filename = osp.split(img_meta['ori_filename'])
-                scene_dir = osp.join(fpn_dir, scene)
-                if not osp.exists(scene_dir):
-                    os.mkdir(scene_dir)
-                out_file = osp.join(scene_dir, filename[:-4] + ".npy")
+                out_file = osp.join(fpn_dir, filename[:-4] + ".npy")
                 np.save(out_file, fpn.cpu().detach().numpy())
+                if show:
+                    k = fpn.cpu().detach().numpy()
+                    k = k.mean(axis=0)
+                    plt.imsave("/ws/data/OpenLORIS/debug/png/{}".format(filename), k, cmap='gray')
 
         for _ in range(batch_size):
             prog_bar.update()
