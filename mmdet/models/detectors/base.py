@@ -19,6 +19,8 @@ from mmdet.models.losses.ai28.frame_loss import fpn_loss
 from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 import cv2 # debug
 
+from kornia.geometry.transform import translate, scale, warp_perspective, warp_affine, get_affine_matrix2d
+
 # use_wandb = True # False True
 
 def images_to_levels(target, num_levels):
@@ -369,7 +371,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 plt.axis("off")
                 i += 1
         # plt.savefig("/ws/data/debug_test/test.jpg")
-        pdb.set_trace()
+        # pdb.set_trace()
         return plt
 
     def process_results(self, result, data, show_score_thr=0.3):
@@ -451,7 +453,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             outputs = self.forward_mask_frame(data)
 
         elif 'aug_loss' in self.train_cfg.additional_loss:
-            outputs = self.forward_aug_frame(data)
+            if 'gt_masks' in data[0].keys():
+                outputs = self.forward_aug_frame_instance(data)
+            else:
+                outputs = self.forward_aug_frame_detection(data)
 
         else:
             outputs = self.forward_original(data)
@@ -475,6 +480,77 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         cv2.imwrite("/ws/data/cityscapes/mask/debug/{}.png".format(name), img)
 
 
+    def save_ori_feature_tensor(self, feature, data, aug_parameters, name, visualize=False):
+        C, H, W = np.shape(data['img'][0])
+
+        if visualize == True:
+            feature = feature.mean(dim=1, keepdim=True)
+
+        b, c, h, w = np.shape(feature)
+
+        # k = get_affine_matrix2d(translations=translation, center=center, scale=scale_factor, angle=angle)
+        warp_matrix = aug_parameters['warp_matrix']
+        trans_x = aug_parameters['trans_x'].clone().detach() * w / W
+        trans_y = aug_parameters['trans_y'].clone().detach() * h / H
+        warp_matrix[0, 0, 2] = trans_x
+        warp_matrix[0, 1, 2] = trans_y
+        feature = warp_perspective(feature, warp_matrix, (h, w), mode='bilinear')
+        # feature = (feature - feature.mean()) / (feature.std() + 1e-6)
+        out = self.slice_feature_tensor(feature, trans_x, trans_y)
+
+        if visualize == True:
+            img = torch.squeeze(out)
+            img = img.detach().cpu().numpy()
+            img = img.copy()
+            plt.imsave("/ws/data/cityscapes/mask/debug/{}.png".format(name), img, cmap='gray')
+
+        return out
+
+
+    def save_aug_feature_tensor(self, feature, data, aug_parameters, name, visualize=False):
+
+        C, H, W = np.shape(data['img'][0])
+
+        if visualize == True:
+            feature = feature.mean(dim=1, keepdim=True)
+        b, c, h, w = np.shape(feature)
+
+        trans_x = aug_parameters['trans_x'].clone().detach() * w / W
+        trans_y = aug_parameters['trans_y'].clone().detach() * h / H
+
+        # feature = (feature - feature.mean()) / (feature.std() + 1e-6)
+        out = self.slice_feature_tensor(feature, trans_x, trans_y)
+        # h_ratio, w_ratio = H / h * scaling_ratio, W / w * scaling_ratio
+
+        if visualize == True:
+            img = torch.squeeze(feature)
+            img = img.detach().cpu().numpy()
+            img = img.copy()
+            plt.imsave("/ws/data/cityscapes/mask/debug/{}.png".format(name), img, cmap='gray')
+
+        return out
+
+    def slice_feature_tensor(self, feature, trans_x, trans_y):
+
+        # trans_x = torch.round(trans_x).int()
+        trans_x = torch.round(trans_x).int().data
+        # trans_y = torch.round(trans_y).int()
+        trans_y = torch.round(trans_y).int().data
+
+        feature = feature.clone()
+        if trans_x > 0:
+            feature[:, :, :, :trans_x] = 0
+        else:
+            feature[:, :, :, trans_x:] = 0
+        if trans_y > 0:
+            feature[:, :, :trans_y, :] = 0
+        else:
+            feature[:, :, trans_y:, :] = 0
+
+        return feature
+
+
+
     def forward_original(self, data):
         losses = self(**data)
 
@@ -491,22 +567,65 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         return outputs
 
 
-    def forward_aug_frame(self, data):
+    def forward_aug_frame_detection(self, data):
 
         ori_data = data[0]
         aug_data = data[1]
-        from mmdet.datasets.pipelines import Resize
-        pdb.set_trace()
+        aug_parameters = data[1]['aug_parameters']
         con_data = self.concat_data(ori_data, aug_data)
-        pdb.set_trace()
-        losses = self(**con_data)
+
+        resulsts = self(**con_data['img'], **con_data['img_meta'], return_loss=False)
+        # losses = self(**con_data)
+        # # self.save_tensor(ori_data, name='ori_data')
+        # # self.save_tensor(aug_data, name='aug_data')
+        #
+        # additional_loss = 0
+        # for key, features in self.features.items():
+        #     ori_features = features[0][0:1]
+        #     aug_features = features[0][1:]
+        #     ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features', visualize=False)
+        #     aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features', visualize=False)
+        #
+        #     loss_ = self.mse_loss(ori_out, aug_out)
+        #     # loss_2 = self.cosine_similarity(ori_out, aug_out)
+        #     additional_loss += loss_
+        #
+        # # losses['additional_loss'] = additional_loss
+        #
+        # loss, log_vars = self._parse_losses(losses)
+        #
+        # # wandb
+        # if 'log_vars' in self.train_cfg.wandb.log.vars:
+        #     for name, value in log_vars.items():
+        #         self.wandb_features[name] = np.mean(value)
+        #
+        # outputs = dict(
+        #     loss=loss, log_vars=log_vars, num_samples=len(con_data['img_metas']))
+        #
+        # return outputs
+
+    def forward_aug_frame_instance(self, data):
+
+        ori_data = data[0]
+        aug_data = data[1]
+        aug_parameters = data[1]['aug_parameters']
+        # con_data = self.concat_data(ori_data, aug_data)
+        losses = self(**ori_data)
+        _ = self(**aug_data)
+        # self.save_tensor(ori_data, name='ori_data')
+        # self.save_tensor(aug_data, name='aug_data')
 
         additional_loss = 0
         for key, features in self.features.items():
-            ori_features = features[0][0:1]
-            aug_features = features[0][0:1]
-            k = ori_features - aug_features
-            loss_ = self.mse_loss(ori_features, aug_features)
+            ori_features = features[0]
+            aug_features = features[1]
+            ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features',
+                                                   visualize=False)
+            aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features',
+                                                   visualize=False)
+
+            loss_ = self.mse_loss(ori_out, aug_out)
+            # loss_2 = self.cosine_similarity(ori_out, aug_out)
             additional_loss += loss_
 
         losses['additional_loss'] = additional_loss
@@ -519,9 +638,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 self.wandb_features[name] = np.mean(value)
 
         outputs = dict(
-            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+            loss=loss, log_vars=log_vars, num_samples=len(ori_data['img_metas']))
 
         return outputs
+
 
     def concat_data(self, data1, data2):
         con_data = dict()
@@ -796,14 +916,25 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return prev_features_resized
 
-    def mse_loss(self, pres_features, prev_features):
-        loss = 0
-        for pres_feature, prev_feature in zip(pres_features,  prev_features):
-            pres_feature = pres_feature.mean()
-            prev_feature = prev_feature.mean()
-            loss += 0.1 * F.mse_loss(pres_feature, prev_feature, reduction='mean')
-
+    def mse_loss(self, ori, aug, lambda_weight=1):
+        loss = lambda_weight * F.mse_loss(ori, aug, reduction='mean')
         return loss
+
+    def cosine_similarity(self, ori, aug, lambda_weight=0.1):
+        B, C, H, W = ori.size()
+        ori = ori.reshape(B, -1).contiguous()
+        aug = aug.reshape(B, -1).contiguous()
+        loss = lambda_weight * F.cosine_similarity(ori, aug, dim=1)
+        return loss
+
+    # def mse_loss(self, pres_features, prev_features):
+    #     loss = 0
+    #     for pres_feature, prev_feature in zip(pres_features,  prev_features):
+    #         pres_feature = pres_feature.mean()
+    #         prev_feature = prev_feature.mean()
+    #         loss += 0.1 * F.mse_loss(pres_feature, prev_feature, reduction='mean')
+    #
+    #     return loss
 
     def jsd_hw_loss(self, pres_features, prev_features):
         loss = 0
@@ -838,6 +969,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         during val epochs. Note that the evaluation after training epochs is
         not implemented with this method, but an evaluation hook.
         """
+        self.features.clear()
+        self.wandb_features.clear()
+
         losses = self(**data)
         loss, log_vars = self._parse_losses(losses)
 

@@ -186,9 +186,9 @@ def imshow_det_bboxes(img,
             plt.show(block=False)
             plt.pause(wait_time)
     if out_file is not None:
-        # mmcv.imwrite(img, out_file)
+        mmcv.imwrite(img, out_file)
         ## save numpy bbox, segms, labels, gtFine_instanceIds made by dongkyu
-        make_gt(out_file, bboxes, segms, labels, save_npy=False)
+        # make_gt(out_file, bboxes, segms, labels, save_npy=False)
 
     plt.close()
 

@@ -4,9 +4,6 @@ _base_ = [
 ]
 model = dict(
     backbone=dict(init_cfg=None),
-    neck=dict(
-        loss=dict(temper=1, add_act='softmax', loss_type='mse'),
-    ),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -22,13 +19,14 @@ model = dict(
             loss_cls=dict(
                 type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
             loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
-        train_cfg = dict(
-            additional_loss=['aug_loss'], #['frame_loss'],
-            wandb=dict(
-                log=dict(
-                    features_list=[],
-                    vars=['log_vars'],
-                ))))
+    train_cfg=dict(
+        additional_loss=['aug_loss'], #['frame_loss'],
+        wandb=dict(
+            log=dict(
+                features_list=['neck.fpn_convs.0.conv',
+                               ],
+                vars=['log_vars'],
+            ))))
 # optimizer
 # lr is set for a batch size of 8
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
@@ -45,8 +43,8 @@ runner = dict(
     type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
 custom_hooks = [
     dict(type='FeatureHook',
-         layer_list=['neck.fpn_convs.0.conv', 
-             # 'neck.fpn_convs.1.conv',
+         layer_list=['neck.fpn_convs.0.conv',
+                     'neck.fpn_convs.1.conv',
              ])
 ]
 log_config = dict(interval=100,

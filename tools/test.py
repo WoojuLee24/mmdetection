@@ -13,7 +13,7 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
 
-from mmdet.apis import multi_gpu_test, single_gpu_test, single_gpu_test_fpn
+from mmdet.apis import multi_gpu_test, single_gpu_test, single_gpu_test_fpn, single_gpu_test_feature
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.models import build_detector
@@ -52,6 +52,7 @@ def parse_args():
         help='evaluation metrics, which depends on the dataset, e.g., "bbox",'
         ' "segm", "proposal" for COCO, and "mAP", "recall" for PASCAL VOC')
     parser.add_argument('--show', action='store_true', help='show results')
+    parser.add_argument('--save-fpn', action='store_true', help='save fpn features')
     parser.add_argument(
         '--show-dir', help='directory where painted images will be saved')
     parser.add_argument(
@@ -215,9 +216,12 @@ def main():
         model = MMDataParallel(model, device_ids=cfg.gpu_ids)
         # outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
         #                           args.show_score_thr)
-        if 'demo' in cfg.data.test.img_prefix:
-            outputs = single_gpu_test_fpn(model, data_loader, args.show, args.show_dir,
-                                          args.show_score_thr)
+        # if 'demo' in cfg.data.test.img_prefix:
+        if args.save_fpn:
+            outputs = single_gpu_test_feature(model, data_loader, cfg, args.show, args.show_dir,
+                                          args.show_score_thr, args.save_fpn)
+            # outputs = single_gpu_test_fpn(model, data_loader, args.show, args.show_dir,
+            #                               args.show_score_thr)
         else:
             outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
                                       args.show_score_thr)

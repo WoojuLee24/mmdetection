@@ -8,6 +8,8 @@ from mmcv.runner.hooks.logger.wandb import WandbLoggerHook
 
 from mmdet.core import DistEvalHook, EvalHook
 
+import pdb
+
 @HOOKS.register_module()
 class WandbLogger(WandbLoggerHook):
     """WandbLogger logs metrics, saves model checkpoints as W&B Artifact, and
@@ -232,13 +234,15 @@ class WandbLogger(WandbLoggerHook):
                     })
                     plt.close()
 
+
                 # save the loss and jsd loss log
                 for wandb_feature, value in runner.model.module.wandb_features.items():
                     self.wandb.log({wandb_feature: value})
-                for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
-                    self.wandb.log({wandb_feature: value})
-                for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
-                    self.wandb.log({wandb_feature: value})
+                # for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
+                #     self.wandb.log({wandb_feature: value})
+                # for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
+                #     self.wandb.log({wandb_feature: value})
+
 
                 # measure mAP and save the results on the validation dataset
                 results = single_gpu_test(runner.model, self.val_dataloader, show=False)
@@ -246,6 +250,8 @@ class WandbLogger(WandbLoggerHook):
                 print("eval_results: ", eval_results)
                 for key, value in eval_results.items():
                     self.wandb.log({key: value})
+
+
 
                 # Initialize evaluation table
                 self._init_pred_table()

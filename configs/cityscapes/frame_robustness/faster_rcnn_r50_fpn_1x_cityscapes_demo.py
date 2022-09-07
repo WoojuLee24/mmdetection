@@ -36,14 +36,16 @@ runner = dict(
     type='EpochBasedRunner', max_epochs=8)  # actual epoch = 8 * 8 = 64
 custom_hooks = [
     dict(type='FeatureHook',
-         layer_list=["rpn_head.rpn_cls", "rpn_head.rpn_reg",
-                    "roi_head.bbox_head.fc_cls", "roi_head.bbox_head.fc_reg"]),
+         layer_list=['neck.fpn_convs.0.conv',
+                     'neck.fpn_convs.1.conv',
+             ])
 ]
 log_config = dict(interval=100)
 # For better, more stable performance initialize from COCO
-load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+load_from = '/ws/data/cityscapes/pretrained/faster_rcnn_r50_fpn_1x_cityscapes_20200502-829424c0.pth'
 
-# dataset settings
+# dataset settings. overwrite the '../../_base_/datasets/cityscapes_detection.py'
 dataset_type = 'CityscapesDataset'
 data_root = '/ws/data/cityscapes/'
 img_norm_cfg = dict(
@@ -76,7 +78,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=2,
+    workers_per_gpu=1,
     train=dict(
         type='RepeatDataset',
         times=8,

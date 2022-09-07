@@ -5,13 +5,16 @@ import json
 import pycocotools.mask as mask_util
 import cv2
 
-
-
 def main():
-    input_bbox_path = "/ws/data/OpenLORIS/results/all_seq.bbox.json"
-    input_segm_path = "/ws/data/OpenLORIS/results/all_seq.segm.json"
-    output_path = "/ws/data/OpenLORIS/annotations/all_seq.json"
-    modified_path = "/ws/data/OpenLORIS/annotations/all_seq_mod.json"
+    # input_bbox_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_val.bbox.json"
+    # input_segm_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_val.segm.json"
+    # output_path = "/ws/data/OpenLORIS/annotations/preprocess_val.json"
+    # modified_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_val.json"
+
+    input_bbox_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_train.bbox.json"
+    input_segm_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_train.segm.json"
+    output_path = "/ws/data/OpenLORIS/annotations/preprocess_train.json"
+    modified_path = "/ws/data/OpenLORIS/annotations/mask_rcnn_r50_fpn_2x_train.json"
     # input_bbox_path = "/ws/data/OpenLORIS/results/test.bbox.json"
     # input_segm_path = "/ws/data/OpenLORIS/results/test.segm.json"
     # output_path = "/ws/data/OpenLORIS/annotations/home1-5.json"
@@ -34,10 +37,10 @@ def main():
         # print(img['id'], img['file_name'])
         for idx, in_bb in enumerate(in_bb_data):
             if out_img['id'] == in_bb['image_id']:
-                # bx_min, by_min, bx_max, by_max = min(in_bb['bbox'][0], in_bb['bbox'][2]), \
-                #                                  min(in_bb['bbox'][1], in_bb['bbox'][3]), \
-                #                                  max(in_bb['bbox'][0], in_bb['bbox'][2]), \
-                #                                  max(in_bb['bbox'][1], in_bb['bbox'][3])
+                bx_min, by_min, bx_max, by_max = min(in_bb['bbox'][0], in_bb['bbox'][2]), \
+                                                 min(in_bb['bbox'][1], in_bb['bbox'][3]), \
+                                                 max(in_bb['bbox'][0], in_bb['bbox'][2]), \
+                                                 max(in_bb['bbox'][1], in_bb['bbox'][3])
                 polygons = []
                 mask = mask_util.decode(in_segm_data[idx]['segmentation'])
                 contours, _ = cv2.findContours(mask.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -46,15 +49,15 @@ def main():
                         contour = contour.flatten().tolist()
                         polygons.append(contour)
                 ann = dict(
-                    id = ann_id,
-                    image_id = out_img['id'],
-                    category_id = in_bb['category_id'],
-                    segmentation = polygons,
+                    id=ann_id,
+                    image_id=out_img['id'],
+                    category_id=in_bb['category_id'],
+                    segmentation=polygons,
                     # area = (bx_max - bx_min) * (by_max - by_min),
                     # bbox = [bx_min, by_min, bx_max - bx_min, by_max - by_min],
                     area=in_bb['bbox'][2] * in_bb['bbox'][3],
                     bbox=in_bb['bbox'],
-                    iscrowd = 0
+                    iscrowd=0
                 )
                 ann_id += 1
                 out_data['annotations'].append(ann)
