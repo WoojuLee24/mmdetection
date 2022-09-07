@@ -573,36 +573,34 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         aug_data = data[1]
         aug_parameters = data[1]['aug_parameters']
         con_data = self.concat_data(ori_data, aug_data)
+        losses = self(**con_data)
+        # self.save_tensor(ori_data, name='ori_data')
+        # self.save_tensor(aug_data, name='aug_data')
 
-        resulsts = self(**con_data['img'], **con_data['img_meta'], return_loss=False)
-        # losses = self(**con_data)
-        # # self.save_tensor(ori_data, name='ori_data')
-        # # self.save_tensor(aug_data, name='aug_data')
-        #
-        # additional_loss = 0
-        # for key, features in self.features.items():
-        #     ori_features = features[0][0:1]
-        #     aug_features = features[0][1:]
-        #     ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features', visualize=False)
-        #     aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features', visualize=False)
-        #
-        #     loss_ = self.mse_loss(ori_out, aug_out)
-        #     # loss_2 = self.cosine_similarity(ori_out, aug_out)
-        #     additional_loss += loss_
-        #
-        # # losses['additional_loss'] = additional_loss
-        #
-        # loss, log_vars = self._parse_losses(losses)
-        #
-        # # wandb
-        # if 'log_vars' in self.train_cfg.wandb.log.vars:
-        #     for name, value in log_vars.items():
-        #         self.wandb_features[name] = np.mean(value)
-        #
-        # outputs = dict(
-        #     loss=loss, log_vars=log_vars, num_samples=len(con_data['img_metas']))
-        #
-        # return outputs
+        additional_loss = 0
+        for key, features in self.features.items():
+            ori_features = features[0][0:1]
+            aug_features = features[0][1:]
+            ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features', visualize=False)
+            aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features', visualize=False)
+
+            loss_ = self.mse_loss(ori_out, aug_out)
+            # loss_2 = self.cosine_similarity(ori_out, aug_out)
+            additional_loss += loss_
+
+        losses['additional_loss'] = additional_loss
+
+        loss, log_vars = self._parse_losses(losses)
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(con_data['img_metas']))
+
+        return outputs
 
     def forward_aug_frame_instance(self, data):
 

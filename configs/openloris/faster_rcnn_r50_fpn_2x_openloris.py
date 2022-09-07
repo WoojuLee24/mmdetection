@@ -16,7 +16,7 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=True,
         style='pytorch',
-        init_cfg=None),
+        init_cfg=None),         # no backbone pretrained model
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -99,7 +99,7 @@ model = dict(
                 add_gt_as_proposals=True),
             pos_weight=-1,
             debug=False),
-        additional_loss=['none'],  # ['frame_loss'], ['aug_loss']
+        additional_loss=['none'],  # ['frame_loss'], ['aug_loss']       # additional_loss parameter
         wandb=dict(
             log=dict(
                 features_list=[     #'neck.fpn_convs.0.conv',
@@ -121,26 +121,13 @@ model = dict(
     ))
 
 
-# optimizer
-optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
-optimizer_config = dict(grad_clip=None)
-# learning policy
-lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=500,
-    warmup_ratio=0.001,
-    step=[3, 5])
-runner = dict(type='EpochBasedRunner', max_epochs=6)
-
-
-
 custom_hooks = [
     dict(type='FeatureHook',
          layer_list=['neck.fpn_convs.0.conv',
                      'neck.fpn_convs.1.conv',
              ])
 ]
+
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
