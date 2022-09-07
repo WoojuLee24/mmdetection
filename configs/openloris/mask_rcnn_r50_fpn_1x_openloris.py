@@ -16,7 +16,7 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=True,
         style='pytorch',
-        init_cfg=None),
+        init_cfg=None),             # no backbone pretrained model
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -113,10 +113,10 @@ model = dict(
             mask_size=28,
             pos_weight=-1,
             debug=False),
-        additional_loss=[],  # ['frame_loss'], ['aug_loss']
+        additional_loss=[],  # ['frame_loss'], ['aug_loss']         # additional_loss parameter
         wandb=dict(
             log=dict(
-                features_list=['neck.fpn_convs.0.conv',
+                features_list=[     # 'neck.fpn_convs.0.conv',
                                ],
                 vars=['log_vars'],
             ))),
@@ -138,11 +138,20 @@ custom_hooks = [
                      'neck.fpn_convs.1.conv',
              ])
 ]
+
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "KT_AI", 'entity': "kaist-url-ai28",
+                                              'name': "mask_rcnn_r50_fpn_1x_openloris",
+                                              },
+                           log_map_every_iter=False,
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ])
 
 
-
-# load_from = '/ws/data/OpenLORIS/pretrained/mask_rcnn_r50_fpn_1x_coco_20200205-d4b0c5d6.pth'
+load_from = '/ws/data/OpenLORIS/pretrained/mask_rcnn_r50_fpn_1x_coco_20200205-d4b0c5d6.pth'
