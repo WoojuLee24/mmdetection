@@ -52,13 +52,8 @@ test_pipeline = [
 ]
 
 classes = ['person',
-           'backpack', 'umbrella', 'handbag', 'tie',
-           'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
            'chair', 'couch',
-           'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
-           'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
-           'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
-           'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+           'dining table', 'tv', 'laptop']
 
 train1 = dict(
     type=dataset_type,
