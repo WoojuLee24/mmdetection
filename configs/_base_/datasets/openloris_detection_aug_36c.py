@@ -51,6 +51,15 @@ test_pipeline = [
         ])
 ]
 
+classes = ['person',
+           'backpack', 'umbrella', 'handbag', 'tie',
+           'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+           'chair', 'couch',
+           'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+           'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
+           'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
+           'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+
 train1 = dict(
     type=dataset_type,
     # ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_train.json',
@@ -58,6 +67,7 @@ train1 = dict(
     ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
     img_prefix=data_root + 'val/',
     pipeline=train_pipeline1,
+    classes=classes,
     ),
 train2 = dict(
     type=dataset_type,
@@ -65,7 +75,9 @@ train2 = dict(
     # img_prefix=data_root + 'train/',
     ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
     img_prefix=data_root + 'val/',
-    pipeline=train_pipeline2,),
+    pipeline=train_pipeline2,
+    classes=classes
+    ),
 
 data = dict(
     samples_per_gpu=1,
@@ -78,12 +90,14 @@ data = dict(
         ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
         img_prefix=data_root + 'val/',
         pipeline=test_pipeline,
+        classes=classes,
     ),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
         img_prefix=data_root + 'val/',
         pipeline=test_pipeline,
+        classes=classes,
         ))
 evaluation = dict(interval=1, metric='bbox')
 
