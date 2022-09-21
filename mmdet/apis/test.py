@@ -158,9 +158,10 @@ def single_gpu_test_feature(model,
                 out_file = osp.join(fpn_dir, filename[:-4] + ".npy")
                 np.save(out_file, fpn.cpu().detach().numpy())
                 if show:
+                    out_png = osp.join(fpn_dir, filename[:-4] + ".png")
                     k = fpn.cpu().detach().numpy()
                     k = k.mean(axis=0)
-                    plt.imsave("/ws/data/OpenLORIS/debug/png/{}".format(filename), k, cmap='gray')
+                    plt.imsave(out_png, k, cmap='gray')
 
         for _ in range(batch_size):
             prog_bar.update()
