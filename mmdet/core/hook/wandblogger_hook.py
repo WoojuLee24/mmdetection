@@ -274,7 +274,7 @@ class WandbLogger(WandbLoggerHook):
         if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
                 self.wandb.log({split + wandb_feature: value})
-            loss_module = runner.model.module.rpn_head.loss_cls
+            loss_module = runner.model.module.roi_head.loss_cls
             loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
             loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
