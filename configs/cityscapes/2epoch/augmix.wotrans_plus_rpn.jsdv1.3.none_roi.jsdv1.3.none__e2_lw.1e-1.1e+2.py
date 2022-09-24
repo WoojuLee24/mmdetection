@@ -39,7 +39,7 @@ model = dict(
         bbox_head=dict(
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls'),
+                , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='roi_cls'),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
                            , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
@@ -155,7 +155,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
+                                              'name': "augmix.wotrans_plus_rpn.none.none_roi.jsdv1.3.none__e2_lw.1e+2",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{str_pipeline}",
