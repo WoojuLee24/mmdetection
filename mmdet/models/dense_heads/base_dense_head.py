@@ -327,17 +327,12 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
                 proposal_list (list[Tensor]): Proposals of each image.
         """
         outs = self(x)
-        if self.loss_additional is not None:
-            rpn_additional = outs[2]
-            outs = outs[:2]
 
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
         else:
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
-        if self.loss_additional is not None:
-            losses['loss_additional'] = self.loss_additional['loss_criterion'](rpn_additional)
 
         if proposal_cfg is None:
             return losses

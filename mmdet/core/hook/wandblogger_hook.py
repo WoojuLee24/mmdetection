@@ -274,18 +274,11 @@ class WandbLogger(WandbLoggerHook):
         if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
                 self.wandb.log({split + wandb_feature: value})
-            loss_module = runner.model.module.roi_head.loss_cls
-            loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
-            loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
-
-        rpn_loss_additional = runner.model.module.rpn_head.loss_additional
-        if hasattr(rpn_loss_additional, 'loss_criterion'):
-            if hasattr(rpn_loss_additional.loss_criterion, 'wandb_features'):
-                for wandb_feature, value in rpn_loss_additional.loss_criterion.wandb_features.items():
-                    self.wandb.log({split + wandb_feature: value})
-                rpn_loss_additional.loss_criterion.wandb_features[rpn_loss_additional.loss_criterion.wandb_name].clear()
-
-
+            loss_module = runner.model.module.roi_head.bbox_head.loss_cls
+            if isinstance(loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
+            if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
     @master_only
     def after_run(self, runner):
