@@ -280,6 +280,7 @@ class WandbLogger(WandbLoggerHook):
             if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
                 loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
+
     @master_only
     def after_run(self, runner):
         self.wandb.finish()
