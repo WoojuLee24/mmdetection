@@ -425,22 +425,6 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
-        # rpn tail loss
-        from mmdet.models.tails import RpnTail
-        if hasattr(self.loss_cls, 'kwargs'):
-            rpn_tail = RpnTail(channel_wise=self.loss_cls.kwargs['channel_wise']
-                               if 'channel_wise' in self.loss_cls.kwargs else None,
-                               maxpool_criterion=self.loss_cls.kwargs['maxpool_criterion']
-                               if 'maxpool_criterion' in self.loss_cls.kwargs else dict(type='v1.1', kernel_size=2),
-                               interpolate=self.loss_cls.kwargs['interpolate']
-                               if 'interpolate' in self.loss_cls.kwargs else dict(type='v1.1', thr_h=50, sizes=[[10,20], [5,10]]),
-                               linear_criterion=self.loss_cls.kwargs['linear_criterion']
-                               if 'linear_criterion' in self.loss_cls.kwargs else None)
-            x_ = rpn_tail(cls_score)
-            loss_additional = rpn_tail.loss_single(x_)
-            if len(self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})']) == 5:
-                self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].clear()
-            self.loss_cls.wandb_features[f'additional_loss({self.loss_cls.wandb_name})'].append(self.loss_cls.lambda_weight * loss_additional)
 
         # classification loss
         labels = labels.reshape(-1)
@@ -449,11 +433,6 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
                                       1).reshape(-1, self.cls_out_channels)
         loss_cls = self.loss_cls(
             cls_score, labels, label_weights, avg_factor=num_total_samples)
-
-        # rpn tail loss
-        if hasattr(self.loss_cls, 'additional_loss'):
-            if self.loss_cls.additional_loss == 'rpn_tail':
-                loss_cls += (loss_additional * self.loss_cls.lambda_weight)
 
         # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
