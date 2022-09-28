@@ -62,6 +62,67 @@ def l1_loss(pred, target):
     return loss_orig
 
 
+def smooth_l1_dg_loss(pred, target, beta=1.0, weight=None, reduction=None, avg_factor=None):
+    """Smooth L1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        target (torch.Tensor): The learning target of the prediction.
+        beta (float, optional): The threshold in the piecewise function.
+            Defaults to 1.0.
+
+    Returns:
+        torch.Tensor: Calculated loss
+    """
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    target, _, _ = torch.chunk(target, 3)
+
+    assert beta > 0
+    if target.numel() == 0:
+        return pred_orig.sum() * 0
+
+    assert pred_orig.size() == pred_aug1.size()
+    diff = (torch.abs(pred_orig - pred_aug1) + torch.abs(pred_orig - pred_aug2)) / 2
+    additional_loss = torch.where(diff < beta, 0.5 * diff * diff / beta,
+                       diff - 0.5 * beta)
+    additional_loss = additional_loss.mean()
+
+    p_distribution = {'pred_orig': pred_orig,
+                      'pred_aug1': pred_aug1,
+                      'pred_aug2': pred_aug2,
+                      }
+
+    return additional_loss, p_distribution
+
+
+def l1_dg_loss(pred, target, weight=None, reduction=None, avg_factor=None):
+    """L1 dg loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        target (torch.Tensor): The learning target of the prediction.
+
+    Returns:
+        torch.Tensor: Calculated loss
+    """
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    target, _, _ = torch.chunk(target, 3)
+
+    if target.numel() == 0:
+        return pred_orig.sum() * 0
+
+    assert pred_orig.size() == pred_aug1.size()
+    additional_loss = (torch.abs(pred_orig - pred_aug1) + torch.abs(pred_aug1 - pred_aug2) + torch.abs(pred_aug2 - pred_orig)) / 3
+    additional_loss = additional_loss.mean()
+
+    p_distribution = {'pred_orig': pred_orig,
+                      'pred_aug1': pred_aug1,
+                      'pred_aug2': pred_aug2,
+                      }
+
+    return additional_loss, p_distribution
+
+
 def jsd(pred,
         label,
         weight=None,
@@ -207,6 +268,10 @@ class SmoothL1LossPlus(nn.Module):
             self.cls_additional = jsd
         elif self.additional_loss == 'jsdy':
             self.cls_additional = jsdy
+        elif self.additional_loss == 'l1_dg_loss':
+            self.cls_additional = l1_dg_loss
+        elif self.additional_loss == 'smooth_l1_dg_loss':
+            self.cls_additional = smooth_l1_dg_loss
         else:
             self.cls_additional = None
 
@@ -247,9 +312,12 @@ class SmoothL1LossPlus(nn.Module):
             loss_additional, p_distribution = self.cls_additional(
                 pred,
                 target,
-                weight,)
+                weight,
+                reduction=reduction,
+                avg_factor=avg_factor)
+
             self.wandb_features[f'smoothL1_loss({self.wandb_name})'] = loss_bbox
-            self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = loss_additional
+            self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 
@@ -281,11 +349,17 @@ class L1LossPlus(nn.Module):
         self.wandb_name = wandb_name
 
         self.wandb_features = dict()
+        self.wandb_features[f'additional_loss({self.wandb_name})'] = []
+        self.wandb_features[f'L1_loss({self.wandb_name})'] = []
 
         if self.additional_loss == 'jsd':
             self.cls_additional = jsd
         elif self.additional_loss == 'jsdy':
             self.cls_additional = jsdy
+        elif self.additional_loss == 'l1_dg_loss':
+            self.cls_additional = l1_dg_loss
+        elif self.additional_loss == 'smooth_l1_dg_loss':
+            self.cls_additional = smooth_l1_dg_loss
         else:
             self.cls_additional = None
 
@@ -322,8 +396,15 @@ class L1LossPlus(nn.Module):
                 weight,
                 reduction=reduction,
                 avg_factor=avg_factor)
-            self.wandb_features[f'L1_loss({self.wandb_name})'] = loss_bbox
-            self.wandb_features[f'{self.additional_loss}_loss({self.wandb_name})'] = loss_additional
+
+            # wandb for rpn
+            if len(self.wandb_features[f'L1_loss({self.wandb_name})']) == 5:
+                self.wandb_features[f'L1_loss({self.wandb_name})'].clear()
+                self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
+            self.wandb_features[f'L1_loss({self.wandb_name})'].append(loss_bbox)
+            self.wandb_features[f'additional_loss({self.wandb_name})'].append(
+                self.lambda_weight * loss_additional)
+
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 

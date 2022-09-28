@@ -34,14 +34,14 @@ model = dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
             , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss="l1_dg_loss", lambda_weight=0.1, wandb_name='rpn_bbox')),
+                       , additional_loss="l1_dg_loss", lambda_weight=10, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='roi_cls'),
+                , additional_loss='jsdv1_3', lambda_weight=10, wandb_name='roi_cls'),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
+                           , additional_loss="None", lambda_weight=1.0, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
@@ -153,24 +153,24 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      # dict(type='WandbLogger',
-                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                      #                         'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
-                      #                         'config': {
-                      #                             # data pipeline
-                      #                             'data pipeline': f"{str_pipeline}",
-                      #                             # losses
-                      #                             'loss type(rpn_cls)': f"{rpn_loss_cls['type']}",
-                      #                             'loss type(rpn_bbox)': f"{rpn_loss_bbox['type']}",
-                      #                             'loss type(roi_cls)': f"{roi_loss_cls['type']}",
-                      #                             'loss type(roi_bbox)': f"{roi_loss_bbox['type']}",
-                      #                             # parameters
-                      #                             'epoch': runner['max_epochs'],
-                      #                         }},
-                      #      interval=500,
-                      #      log_checkpoint=True,
-                      #      log_checkpoint_metadata=True,
-                      #      num_eval_images=5),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': "augmix.wotrans_plus_rpn.jsdv1.3.l1_roi.jsdv1.3.none__e2_lw.1e-1.10.10",
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{str_pipeline}",
+                                                  # losses
+                                                  'loss type(rpn_cls)': f"{rpn_loss_cls['type']}",
+                                                  'loss type(rpn_bbox)': f"{rpn_loss_bbox['type']}",
+                                                  'loss type(roi_cls)': f"{roi_loss_cls['type']}",
+                                                  'loss type(roi_bbox)': f"{roi_loss_bbox['type']}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                              }},
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )
 
