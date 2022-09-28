@@ -259,9 +259,6 @@ class WandbLogger(WandbLoggerHook):
             self.wandb.log({split + wandb_feature: value})
         runner.model.module.wandb_features.clear()
 
-
-        import pdb
-        pdb.set_trace()
         if hasattr(runner.model.module.rpn_head.loss_cls, 'wandb_features'):
             # save the loss and jsd loss of rpn_cls. rpn_cls consists of 5 feature maps.
             for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
@@ -273,8 +270,6 @@ class WandbLogger(WandbLoggerHook):
             loss_module = runner.model.module.rpn_head.loss_cls
             loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
             loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
-
-        pdb.set_trace()
 
         if hasattr(runner.model.module.rpn_head.loss_bbox, 'wandb_features'):
             # save the loss and jsd loss of rpn_cls. rpn_cls consists of 5 feature maps.
@@ -288,8 +283,6 @@ class WandbLogger(WandbLoggerHook):
             loss_module.wandb_features[f'L1_loss({loss_module.wandb_name})'].clear()
             loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
-        pdb.set_trace()
-
         if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
                 self.wandb.log({split + wandb_feature: value})
@@ -298,8 +291,6 @@ class WandbLogger(WandbLoggerHook):
                 loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
             if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
                 loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
-
-        pdb.set_trace()
 
         if hasattr(runner.model.module.roi_head.bbox_head.loss_bbox, 'wandb_features'):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_bbox.wandb_features.items():
