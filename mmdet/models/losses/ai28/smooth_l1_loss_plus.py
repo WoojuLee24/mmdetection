@@ -263,6 +263,8 @@ class SmoothL1LossPlus(nn.Module):
         self.wandb_name = wandb_name
 
         self.wandb_features = dict()
+        self.wandb_features[f'additional_loss({self.wandb_name})'] = []
+        self.wandb_features[f'smoothL1_loss({self.wandb_name})'] = []
 
         if self.additional_loss == 'jsd':
             self.cls_additional = jsd
