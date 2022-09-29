@@ -19,7 +19,7 @@ from mmdet.models.losses.ai28.frame_loss import fpn_loss
 from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 import cv2 # debug
 
-from kornia.geometry.transform import translate, scale, warp_perspective, warp_affine, get_affine_matrix2d
+# from kornia.geometry.transform import translate, scale, warp_perspective, warp_affine, get_affine_matrix2d
 
 # use_wandb = True # False True
 
