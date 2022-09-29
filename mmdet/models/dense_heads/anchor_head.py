@@ -512,16 +512,32 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         all_anchor_list = images_to_levels(concat_anchor_list,
                                            num_level_anchors)
 
-        losses_cls, losses_bbox = multi_apply(
-            self.loss_single,
-            cls_scores,
-            bbox_preds,
-            all_anchor_list,
-            labels_list,
-            label_weights_list,
-            bbox_targets_list,
-            bbox_weights_list,
-            num_total_samples=num_total_samples)
+        if hasattr(self.loss_cls, 'kwargs'):
+            if 'num_total_samples' in self.loss_cls.kwargs:
+                # num_total_samples = [num_total_samples/16, num_total_samples/4, num_total_samples, num_total_samples*4, num_total_samples*16]
+                num_total_samples = self.loss_cls.kwargs['num_total_samples']
+        if isinstance(num_total_samples, list):
+            losses_cls, losses_bbox = multi_apply(
+                self.loss_single,
+                cls_scores,
+                bbox_preds,
+                all_anchor_list,
+                labels_list,
+                label_weights_list,
+                bbox_targets_list,
+                bbox_weights_list,
+                num_total_samples)
+        else:
+            losses_cls, losses_bbox = multi_apply(
+                self.loss_single,
+                cls_scores,
+                bbox_preds,
+                all_anchor_list,
+                labels_list,
+                label_weights_list,
+                bbox_targets_list,
+                bbox_weights_list,
+                num_total_samples=num_total_samples)
 
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
