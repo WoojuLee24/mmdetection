@@ -772,9 +772,11 @@ def jsdv1_3_5(pred,
                               p_aug2.reshape((1,) + p_aug2.shape).contiguous()
 
     # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = (p_clean + p_aug1 + p_aug2) / 3
     p_clean = torch.clamp(p_clean, 1e-7, 1).log()
     p_aug1 = torch.clamp(p_aug1, 1e-7, 1).log()
     p_aug2 = torch.clamp(p_aug2, 1e-7, 1).log()
+
     loss = (F.kl_div(p_clean, p_mixture, reduction='batchmean') +
             F.kl_div(p_aug1, p_mixture, reduction='batchmean') +
             F.kl_div(p_aug2, p_mixture, reduction='batchmean')) / 3.
@@ -786,10 +788,10 @@ def jsdv1_3_5(pred,
     loss = weight_reduce_loss(
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
 
-    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
-                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
-                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
-                      'p_mixture': p_mixture}
+    p_distribution = {'p_clean': p_clean,
+                      'p_aug1': p_aug1,
+                      'p_aug2':p_aug2,
+                      'p_mixture': torch.clamp(p_mixture, 1e-7, 1).log()}
 
     return loss, p_distribution
 
