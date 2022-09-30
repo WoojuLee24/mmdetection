@@ -774,7 +774,7 @@ def jsdv1_3_5(pred,
     # Clamp mixture distribution to avoid exploding KL divergence
     p_clean = torch.clamp(p_clean, 1e-7, 1).log()
     p_aug1 = torch.clamp(p_aug1, 1e-7, 1).log()
-    p_aug2 = torch.clmap(p_agug2, 1e-7, 1).log()
+    p_aug2 = torch.clamp(p_aug2, 1e-7, 1).log()
     loss = (F.kl_div(p_clean, p_mixture, reduction='batchmean') +
             F.kl_div(p_aug1, p_mixture, reduction='batchmean') +
             F.kl_div(p_aug2, p_mixture, reduction='batchmean')) / 3.
