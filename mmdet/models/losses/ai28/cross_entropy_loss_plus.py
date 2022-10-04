@@ -360,7 +360,10 @@ def jsdv1_3(pred,
             reduction='mean',
             avg_factor=None,
             **kwargs):
-    """Calculate the jsdv1.1 loss.
+    """Calculate the jsdv1.3 loss.
+    jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+    divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+    reduction parameter does not affect the loss
 
     Args:
         pred (torch.Tensor): The prediction with shape (N, C), C is the number
@@ -719,6 +722,78 @@ def jsdv1_3_4(pred,
 
     return loss, p_distribution
 
+
+def jsdv1_3_5(pred,
+            label,
+            weight=None,
+            reduction='mean',
+            avg_factor=None,
+            **kwargs):
+    """Calculate the jsdv1.3 loss.
+    jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+    divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+    reduction parameter does not affect the loss
+    jsdv_inversion version
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+
+    if pred_orig.shape[-1] == 1:  # if rpn
+        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
+        #                           torch.sigmoid(pred_aug1),\
+        #                           torch.sigmoid(pred_aug2)
+        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug2), 1 - torch.sigmoid(pred_aug2)), dim=1),
+
+    else:  # else roi
+        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig, dim=1), \
+                                  F.softmax(pred_aug1, dim=1), \
+                                  F.softmax(pred_aug2, dim=1)
+
+    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = (p_clean + p_aug1 + p_aug2) / 3
+    p_clean = torch.clamp(p_clean, 1e-7, 1).log()
+    p_aug1 = torch.clamp(p_aug1, 1e-7, 1).log()
+    p_aug2 = torch.clamp(p_aug2, 1e-7, 1).log()
+
+    loss = (F.kl_div(p_clean, p_mixture, reduction='batchmean') +
+            F.kl_div(p_aug1, p_mixture, reduction='batchmean') +
+            F.kl_div(p_aug2, p_mixture, reduction='batchmean')) / 3.
+
+    # apply weights and do the reduction
+    if weight is not None:
+        weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    p_distribution = {'p_clean': p_clean,
+                      'p_aug1': p_aug1,
+                      'p_aug2':p_aug2,
+                      'p_mixture': torch.clamp(p_mixture, 1e-7, 1).log()}
+
+    return loss, p_distribution
 
 
 def jsdv1_4(pred,
@@ -1161,6 +1236,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_3_3
         elif self.additional_loss == 'jsdv1_3_4':
             self.cls_additional = jsdv1_3_4
+        elif self.additional_loss == 'jsdv1_3_5':
+            self.cls_additional = jsdv1_3_5
         elif self.additional_loss == 'jsdv1_4':
             self.cls_additional = jsdv1_4
         elif self.additional_loss == 'jsdv2':
