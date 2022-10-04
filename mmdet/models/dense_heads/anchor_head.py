@@ -400,7 +400,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         return res + tuple(rest_results)
 
     def loss_single(self, cls_score, bbox_pred, anchors, labels, label_weights,
-                    bbox_targets, bbox_weights, num_total_samples):
+                    bbox_targets, bbox_weights, num_total_samples, **kwargs):
         """Compute loss of a single scale level.
 
         Args:
@@ -432,7 +432,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         cls_score = cls_score.permute(0, 2, 3,
                                       1).reshape(-1, self.cls_out_channels)
         loss_cls = self.loss_cls(
-            cls_score, labels, label_weights, avg_factor=num_total_samples)
+            cls_score, labels, label_weights, avg_factor=num_total_samples, **kwargs)
 
         # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
@@ -448,7 +448,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             bbox_pred,
             bbox_targets,
             bbox_weights,
-            avg_factor=num_total_samples)
+            avg_factor=num_total_samples, **kwargs)
         return loss_cls, loss_bbox
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
@@ -515,6 +515,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         if hasattr(self.loss_cls, 'kwargs'):
             if 'num_total_samples' in self.loss_cls.kwargs:
                 # num_total_samples = [num_total_samples/16, num_total_samples/4, num_total_samples, num_total_samples*4, num_total_samples*16]
+                original_avg_factor = num_total_samples
                 num_total_samples = self.loss_cls.kwargs['num_total_samples']
         if isinstance(num_total_samples, list):
             losses_cls, losses_bbox = multi_apply(
@@ -526,7 +527,8 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
                 label_weights_list,
                 bbox_targets_list,
                 bbox_weights_list,
-                num_total_samples)
+                num_total_samples,
+                original_avg_factor=original_avg_factor)
         else:
             losses_cls, losses_bbox = multi_apply(
                 self.loss_single,

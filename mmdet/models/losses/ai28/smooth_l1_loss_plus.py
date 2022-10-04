@@ -370,7 +370,8 @@ class L1LossPlus(nn.Module):
                 target,
                 weight=None,
                 avg_factor=None,
-                reduction_override=None):
+                reduction_override=None,
+                **kwargs):
         """Forward function.
 
         Args:

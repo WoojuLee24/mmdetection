@@ -474,7 +474,7 @@ def jsdv1_3_1(pred,
         weight, _, _ = torch.chunk(weight, 3)
         weight = weight.float()
     loss = weight_reduce_loss(
-        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+        loss, weight=weight, reduction='sum', avg_factor=avg_factor)
 
     p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
                       'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
@@ -1213,9 +1213,8 @@ class CrossEntropyLossPlus(nn.Module):
             weight,
             class_weight=class_weight,
             reduction=reduction,
-            avg_factor=avg_factor,
-            ignore_index=ignore_index,
-            **kwargs)
+            avg_factor=kwargs['original_avg_factor'] if 'original_avg_factor' in kwargs else avg_factor,
+            ignore_index=ignore_index)
 
         loss_additional = 0
         if self.cls_additional is not None:
