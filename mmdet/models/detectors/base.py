@@ -19,7 +19,7 @@ from mmdet.models.losses.ai28.frame_loss import fpn_loss
 from mmdet.models.trackers.sort_tracker import Sort, associate_detections_to_trackers
 import cv2 # debug
 
-# from kornia.geometry.transform import translate, scale, warp_perspective, warp_affine, get_affine_matrix2d
+from kornia.geometry.transform import translate, scale, warp_perspective, warp_affine, get_affine_matrix2d
 
 # use_wandb = True # False True
 
@@ -458,6 +458,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             else:
                 outputs = self.forward_aug_frame_detection(data)
 
+        elif 'aug_lossv0.2' in self.train_cfg.additional_loss:
+            pooling_ratio = self.train_cfg.feature_pooling_ratio
+            outputs = self.forward_aug_frame_detectionv0_2(data, pooling_ratio)
         else:
             outputs = self.forward_original(data)
 
@@ -477,7 +480,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             right_bottom = int(bboxes[i, 2]), int(bboxes[i, 3])
             # mask = mask * 255
             cv2.rectangle(img, left_top, right_bottom, color=(0, 0, 255), thickness=3)
-        cv2.imwrite("/ws/data/cityscapes/mask/debug/{}.png".format(name), img)
+        cv2.imwrite("/ws/data2/debug/{}.png".format(name), img)
 
 
     def save_ori_feature_tensor(self, feature, data, aug_parameters, name, visualize=False):
@@ -502,7 +505,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             img = torch.squeeze(out)
             img = img.detach().cpu().numpy()
             img = img.copy()
-            plt.imsave("/ws/data/cityscapes/mask/debug/{}.png".format(name), img, cmap='gray')
+            plt.imsave(f"/ws/data2/debug/{name}.png", img, cmap='gray')
+            pdb.set_trace()
 
         return out
 
@@ -526,7 +530,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             img = torch.squeeze(feature)
             img = img.detach().cpu().numpy()
             img = img.copy()
-            plt.imsave("/ws/data/cityscapes/mask/debug/{}.png".format(name), img, cmap='gray')
+            plt.imsave(f"/ws/data2/debug/{name}.png", img, cmap='gray')
+            pdb.set_trace()
 
         return out
 
@@ -536,7 +541,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         trans_x = torch.round(trans_x).int().data
         # trans_y = torch.round(trans_y).int()
         trans_y = torch.round(trans_y).int().data
-
         feature = feature.clone()
         if trans_x > 0:
             feature[:, :, :, :trans_x] = 0
@@ -574,15 +578,59 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         aug_parameters = data[1]['aug_parameters']
         con_data = self.concat_data(ori_data, aug_data)
         losses = self(**con_data)
+        self.save_tensor(ori_data, name='ori_data')
+        self.save_tensor(aug_data, name='aug_data')
+
+        additional_loss = 0
+        for i, (key, features) in enumerate(self.features.items()):
+            ori_features = features[0][0:1]
+            aug_features = features[0][1:]
+            ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name=f'{key}_ori_features', visualize=False)
+            aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name=f'{key}_aug_features', visualize=False)
+
+            lambda_weight = self.train_cfg.lambda_weight[i]
+            loss_ =  self.mse_loss(ori_out, aug_out, lambda_weight)
+            # loss_2 = self.cosine_similarity(ori_out, aug_out)
+            additional_loss += loss_
+
+        losses['additional_loss'] = additional_loss
+
+        loss, log_vars = self._parse_losses(losses)
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(con_data['img_metas']))
+
+        return outputs
+
+
+    def forward_aug_frame_detectionv0_2(self, data, pooling_ratio):
+        """
+        max pooling to fix input size of feature map
+        """
+        ori_data = data[0]
+        aug_data = data[1]
+        aug_parameters = data[1]['aug_parameters']
+        con_data = self.concat_data(ori_data, aug_data)
+        losses = self(**con_data)
         # self.save_tensor(ori_data, name='ori_data')
         # self.save_tensor(aug_data, name='aug_data')
 
         additional_loss = 0
-        for key, features in self.features.items():
+        for i, (key, features) in enumerate(self.features.items()):
+            ratio = pooling_ratio[i]
             ori_features = features[0][0:1]
             aug_features = features[0][1:]
-            ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features', visualize=False)
-            aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features', visualize=False)
+            ori_features = F.max_pool2d(ori_features, kernel_size=ratio)
+            aug_features = F.max_pool2d(aug_features, kernel_size=ratio)
+
+            # ori_features and aug_features have to be resized to size parameter by max pooling
+            ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name=f'{key}_ori_features', visualize=True)
+            aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name=f'{key}_aug_features', visualize=True)
 
             loss_ = self.mse_loss(ori_out, aug_out)
             # loss_2 = self.cosine_similarity(ori_out, aug_out)
@@ -601,6 +649,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(con_data['img_metas']))
 
         return outputs
+
 
     def forward_aug_frame_instance(self, data):
 

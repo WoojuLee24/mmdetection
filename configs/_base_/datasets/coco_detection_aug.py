@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'CocoDataset'
-data_root = '/ws/data/OpenLORIS/'
+data_root = '/ws/data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline1 = [
@@ -39,7 +39,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(848, 480),
+        img_scale=(1333, 800),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -53,18 +53,14 @@ test_pipeline = [
 
 train1 = dict(
     type=dataset_type,
-    ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_train.json',
-    img_prefix=data_root + 'train/',
-    # ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
-    # img_prefix=data_root + 'val/',
+    ann_file=data_root + 'annotations/instances_train2017.json',
+    img_prefix=data_root + 'train2017/',
     pipeline=train_pipeline1,
     ),
 train2 = dict(
     type=dataset_type,
-    ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_train.json',
-    img_prefix=data_root + 'train/',
-    # ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
-    # img_prefix=data_root + 'val/',
+    ann_file=data_root + 'annotations/instances_train2017.json',
+    img_prefix=data_root + 'train2017/',
     pipeline=train_pipeline2,),
 
 data = dict(
@@ -75,14 +71,14 @@ data = dict(
         datasets=[train1, train2]),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
-        img_prefix=data_root + 'val/',
+        ann_file=data_root + 'annotations/instances_val2017.json',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
     ),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
-        img_prefix=data_root + 'val/',
+        ann_file=data_root + 'annotations/instances_val2017.json',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
         ))
 evaluation = dict(interval=1, metric='bbox')
