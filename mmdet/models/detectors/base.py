@@ -449,6 +449,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         # self.save_tensor(data[0], name='ori')
         # self.save_tensor(data[1], name='aug')
 
+        # pdb.set_trace()
         if 'frame_loss' in self.train_cfg.additional_loss:
             outputs = self.forward_mask_frame(data)
 
@@ -582,6 +583,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         self.save_tensor(aug_data, name='aug_data')
 
         additional_loss = 0
+        # pdb.set_trace()
         for i, (key, features) in enumerate(self.features.items()):
             ori_features = features[0][0:1]
             aug_features = features[0][1:]

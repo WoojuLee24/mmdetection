@@ -31,7 +31,7 @@ model = dict(
     test_cfg=dict(score_thr=0.01, nms=dict(type='nms', iou_threshold=0.65)))
 
 # dataset settings
-data_root = '/ws/data/coco/'
+data_root = '/ws/data2/OpenLORIS/'
 dataset_type = 'CocoDataset'
 
 train_pipeline = [
@@ -66,8 +66,10 @@ train_dataset = dict(
     type='MultiImageMixDataset',
     dataset=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        # ann_file=data_root + 'annotations/instances_train2017.json',
+        # img_prefix=data_root + 'train2017/',
+        ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_train.json',
+        img_prefix=data_root + 'train/',
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(type='LoadAnnotations', with_bbox=True)
@@ -101,13 +103,17 @@ data = dict(
     train=train_dataset,
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        # ann_file=data_root + 'annotations/instances_val2017.json',
+        # img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
+        img_prefix=data_root + 'val/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        # ann_file=data_root + 'annotations/instances_val2017.json',
+        # img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/mask_rcnn_r50_fpn_2x_val.json',
+        img_prefix=data_root + 'val/',
         pipeline=test_pipeline))
 
 # optimizer
@@ -167,3 +173,5 @@ evaluation = dict(
     dynamic_intervals=[(max_epochs - num_last_epochs, 1)],
     metric='bbox')
 log_config = dict(interval=50)
+
+load_from = '/ws/data2/OpenLORIS/pretrained/yolox_s_8x8_300e_coco_20211121_095711-4592a793.pth'
