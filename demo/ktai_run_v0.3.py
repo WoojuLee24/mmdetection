@@ -57,6 +57,11 @@ def interpolate_features(features, size, mode='nearest'):
     return features_resized
 
 def main():
+    """
+    ktai_run_v0.3: TensorRT demo
+    Returns:
+
+    """
     args = parse_args()
     out_path = args.out_path
     device = "cuda"

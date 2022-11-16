@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument('--checkpoint', default='/media/ktaioneteam/DISK/checkpoints/faster_rcnn_r50_fpn_mstrain_3x_coco_20210524_110822-e10bd31c.pth', help='Checkpoint file')
     parser.add_argument('--visualize', type=bool, default=False, help='visualization option')
     parser.add_argument('--device', type=str, default='cuda:0', help='CPU/CUDA device option')
+    parser.add_argument('--mp4', type=str, default='/media/ktaioneteam/DISK/video/20210729_sq01_1280x720.mp4', help='mp4 source file')
     parser.add_argument('--camera-id', type=int, default=0, help='camera device id')
     parser.add_argument('--score-thr', type=float, default=0.5, help='bbox score threshold')
     args = parser.parse_args()
@@ -65,7 +66,7 @@ def main():
     model = init_detector_with_feature(args.config, args.checkpoint, device=device)
 
     # camera = cv2.VideoCapture(args.camera_id)
-    camera = cv2.VideoCapture('/media/ktaioneteam/DISK/video/20210729_sq01_1280x720.mp4')
+    camera = cv2.VideoCapture(args.mp4)
     camera.set(cv2.CAP_PROP_POS_FRAMES, 100)
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
