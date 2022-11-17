@@ -143,6 +143,11 @@ lr_config = dict(
 runner = dict(type='EpochBasedRunner', max_epochs=max_epochs)
 
 custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=['neck.out_convs.0.activate',
+                     'neck.out_convs.1.activate',
+                     'neck.out_convs.2.activate',
+             ]),
     dict(
         type='YOLOXModeSwitchHook',
         num_last_epochs=num_last_epochs,

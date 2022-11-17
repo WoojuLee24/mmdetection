@@ -123,7 +123,6 @@ model = dict(
 
 custom_hooks = [
     dict(type='FeatureHook',
-         layer_list=['neck.fpn_convs.0.conv',
-             # 'neck.fpn_convs.1.conv',
+         layer_list=['neck.fpn_convs.0.conv', 'neck.fpn_convs.1.conv', 'neck.fpn_convs.2.conv', 'neck.fpn_convs.3.conv',
              ])
 ]

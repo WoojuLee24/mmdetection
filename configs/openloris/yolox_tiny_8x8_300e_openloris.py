@@ -1,34 +1,13 @@
-_base_ = ['../_base_/schedules/schedule_1x.py', '../_base_/default_runtime.py']
-
-img_scale = (640, 640)
+_base_ = './yolox_s_8x8_300e_openloris.py'
 
 # model settings
 model = dict(
-    type='YOLOX',
-    input_size=img_scale,
-    random_size_range=(15, 25),
-    random_size_interval=10,
-    backbone=dict(type='CSPDarknet', deepen_factor=0.33, widen_factor=0.5),
-    neck=dict(
-        type='YOLOXPAFPN',
-        in_channels=[128, 256, 512],
-        out_channels=128,
-        num_csp_blocks=1),
-    bbox_head=dict(
-        type='YOLOXHead', num_classes=80, in_channels=128, feat_channels=128),
-    train_cfg=dict(assigner=dict(type='SimOTAAssigner', center_radius=2.5),
-                   additional_loss=['aug_loss'],  # ['frame_loss'], ['aug_loss']       # additional_loss parameter
-                   lambda_weight=[0.5, 0.5, 0.5], # [0.5, 0.5, 0.5, 0.5],
-                   wandb=dict(
-                       log=dict(
-                           features_list=[  # 'neck.fpn_convs.0.conv',
-                           ],
-                           vars=['log_vars']
-                       ))
-                   ),
-    # In order to align the source code, the threshold of the val phase is
-    # 0.01, and the threshold of the test phase is 0.001.
-    test_cfg=dict(score_thr=0.01, nms=dict(type='nms', iou_threshold=0.65)))
+    random_size_range=(10, 20),
+    backbone=dict(deepen_factor=0.33, widen_factor=0.375),
+    neck=dict(in_channels=[96, 192, 384], out_channels=96),
+    bbox_head=dict(in_channels=96, feat_channels=96))
+
+img_scale = (640, 640)
 
 # dataset settings
 data_root = '/ws/data/OpenLORIS/'
@@ -171,6 +150,7 @@ custom_hooks = [
         resume_from=resume_from,
         momentum=0.0001,
         priority=49),
+    
 ]
 checkpoint_config = dict(interval=interval)
 evaluation = dict(
