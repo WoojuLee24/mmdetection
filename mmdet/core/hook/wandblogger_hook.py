@@ -195,7 +195,8 @@ class WandbLogger(WandbLoggerHook):
             if self.num_eval_images > 0:
                 if self.eval_hook.by_epoch:
                     if self.every_n_epochs(runner, self.eval_hook.interval) or self.is_last_epoch(runner):
-                        results = self.eval_hook.results
+                        # results = self.eval_hook.results
+                        results = self.eval_hook.latest_results
                         # Initialize evaluation table
                         self._init_pred_table()
                         # Log predictions
@@ -203,62 +204,103 @@ class WandbLogger(WandbLoggerHook):
                         # Log the table
                         self._log_eval_table()
 
-    # edited by dnwn24
+    # edited by dnwn24c
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
-        if self.log_map_every_iter:
-            # print("runner: ", runner)
-            # print("runner.model.module:", runner.model.module)
-            # print("runner.model.module.features: ", runner.model.module.features)
-            # print("##########################################3")
-
-            if self.every_n_iters(runner, self.interval):
-                # save the rpn feature maps
-                if 'rpn_head.rpn_cls' in runner.model.module.train_cfg.wandb.log.features_list:
-                    data = runner.model.module.wandb_data
-                    plt = runner.model.module.save_the_result_img(data)
-                    self.wandb.log({
-                        f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
-                    })
-                    plt.close()
-
-                # save the fpn feature maps
-                if ('neck.fpn_convs.0.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
-                    or ('neck.fpn_convs.1.conv' in runner.model.module.train_cfg.wandb.log.features_list)\
-                    or ('neck.fpn_convs.2.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
-                    or ('neck.fpn_convs.3.conv' in runner.model.module.train_cfg.wandb.log.features_list):
-                    plt = runner.model.module.save_the_fpn_img()
-                    self.wandb.log({
-                        f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
-                    })
-                    plt.close()
-
-
-                # save the loss and jsd loss log
-                for wandb_feature, value in runner.model.module.wandb_features.items():
-                    self.wandb.log({wandb_feature: value})
-                # for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
-                #     self.wandb.log({wandb_feature: value})
-                # for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
-                #     self.wandb.log({wandb_feature: value})
-
-
+        if self.every_n_iters(runner, self.interval):
+            # save the wandb_features
+            self.log_wandb_feature(runner, split='train/')
+            if self.log_map_every_iter:
+                # save the feature maps
+                self.log_feature_map(runner)
                 # measure mAP and save the results on the validation dataset
                 results = single_gpu_test(runner.model, self.val_dataloader, show=False)
                 eval_results = self.val_dataset.evaluate(results, logger='silent')
                 print("eval_results: ", eval_results)
                 for key, value in eval_results.items():
-                    self.wandb.log({key: value})
-
-
-
+                    self.wandb.log({"val/" + key: value})
+                # # ce_loss and jsd_loss for validation is not possible now.
+                # self.log_wandb_feature(runner, split='val/')
                 # Initialize evaluation table
                 self._init_pred_table()
                 # Log predictions
                 self._log_predictions(results, runner.iter + 1)
                 # Log the table
                 self._log_eval_table()
+
+    def log_feature_map(self, runner):
+        # save the feature maps
+        if 'wandb' in runner.model.module.train_cfg:
+            if 'log' in runner.model.module.train_cfg.wandb:
+                if 'features_list' in runner.model.module.train_cfg.wandb.log:
+                    # save the rpn feature maps
+                    if 'rpn_head.rpn_cls' in runner.model.module.train_cfg.wandb.log.features_list:
+                        data = runner.model.module.wandb_data
+                        plt = runner.model.module.save_the_result_img(data)
+                        self.wandb.log({
+                            f"rpn_head.rpn_cls.feature_map": self.wandb.Image(plt)
+                        })
+                        plt.close()
+                    # save the fpn feature maps
+                    if ('neck.fpn_convs.0.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
+                            or ('neck.fpn_convs.1.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
+                            or ('neck.fpn_convs.2.conv' in runner.model.module.train_cfg.wandb.log.features_list) \
+                            or ('neck.fpn_convs.3.conv' in runner.model.module.train_cfg.wandb.log.features_list):
+                        plt = runner.model.module.save_the_fpn_img()
+                        self.wandb.log({
+                            f"neck.fpn_convs.feature_map": self.wandb.Image(plt)
+                        })
+                        plt.close()
+
+    def log_wandb_feature(self, runner, split="train/"):
+        # save the loss and jsd loss log
+        for wandb_feature, value in runner.model.module.wandb_features.items():
+            self.wandb.log({split + wandb_feature: value})
+        runner.model.module.wandb_features.clear()
+
+        if hasattr(runner.model.module.rpn_head.loss_cls, 'wandb_features'):
+            # save the loss and jsd loss of rpn_cls. rpn_cls consists of 5 feature maps.
+            for wandb_feature, value in runner.model.module.rpn_head.loss_cls.wandb_features.items():
+                if isinstance(value, list):
+                    for i, v in enumerate(value):
+                        self.wandb.log({split + wandb_feature + '_layer' + str(i): v})
+                else:
+                    self.wandb.log({split + wandb_feature: value})
+            loss_module = runner.model.module.rpn_head.loss_cls
+            loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
+            loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
+
+        if hasattr(runner.model.module.rpn_head.loss_bbox, 'wandb_features'):
+            # save the loss and jsd loss of rpn_cls. rpn_cls consists of 5 feature maps.
+            for wandb_feature, value in runner.model.module.rpn_head.loss_bbox.wandb_features.items():
+                if isinstance(value, list):
+                    for i, v in enumerate(value):
+                        self.wandb.log({split + wandb_feature + '_layer' + str(i): v})
+                else:
+                    self.wandb.log({split + wandb_feature: value})
+            loss_module = runner.model.module.rpn_head.loss_bbox
+            loss_module.wandb_features[f'L1_loss({loss_module.wandb_name})'].clear()
+            loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
+
+        if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
+            for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
+                self.wandb.log({split + wandb_feature: value})
+            loss_module = runner.model.module.roi_head.bbox_head.loss_cls
+            if isinstance(loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
+            if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
+
+        if hasattr(runner.model.module.roi_head.bbox_head.loss_bbox, 'wandb_features'):
+            for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_bbox.wandb_features.items():
+                self.wandb.log({split + wandb_feature: value})
+            loss_module = runner.model.module.roi_head.bbox_head.loss_bbox
+            if isinstance(loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'].clear()
+            if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
+                loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
+
 
     @master_only
     def after_run(self, runner):
@@ -310,7 +352,8 @@ class WandbLogger(WandbLoggerHook):
     def _get_ckpt_metadata(self, runner):
         """Get model checkpoint metadata."""
         if self.ckpt_hook.interval == self.eval_hook.interval:
-            results = self.eval_hook.results
+            # results = self.eval_hook.results
+            results = self.eval_hook.latest_results
         else:
             runner.logger.info(
                 f'Evaluating for model checkpoint at epoch '
