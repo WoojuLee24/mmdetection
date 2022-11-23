@@ -208,26 +208,26 @@ class WandbLogger(WandbLoggerHook):
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
-        if self.every_n_iters(runner, self.interval):
-            # save the wandb_features
-            self.log_wandb_feature(runner, split='train/')
-            if self.log_map_every_iter:
-                # save the feature maps
-                self.log_feature_map(runner)
-                # measure mAP and save the results on the validation dataset
-                results = single_gpu_test(runner.model, self.val_dataloader, show=False)
-                eval_results = self.val_dataset.evaluate(results, logger='silent')
-                print("eval_results: ", eval_results)
-                for key, value in eval_results.items():
-                    self.wandb.log({"val/" + key: value})
-                # # ce_loss and jsd_loss for validation is not possible now.
-                # self.log_wandb_feature(runner, split='val/')
-                # Initialize evaluation table
-                self._init_pred_table()
-                # Log predictions
-                self._log_predictions(results, runner.iter + 1)
-                # Log the table
-                self._log_eval_table()
+        # if self.every_n_iters(runner, self.interval):
+        #     # save the wandb_features
+        #     self.log_wandb_feature(runner, split='train/')
+        #     if self.log_map_every_iter:
+        #         # save the feature maps
+        #         self.log_feature_map(runner)
+        #         # measure mAP and save the results on the validation dataset
+        #         results = single_gpu_test(runner.model, self.val_dataloader, show=False)
+        #         eval_results = self.val_dataset.evaluate(results, logger='silent')
+        #         print("eval_results: ", eval_results)
+        #         for key, value in eval_results.items():
+        #             self.wandb.log({"val/" + key: value})
+        #         # # ce_loss and jsd_loss for validation is not possible now.
+        #         # self.log_wandb_feature(runner, split='val/')
+        #         # Initialize evaluation table
+        #         self._init_pred_table()
+        #         # Log predictions
+        #         self._log_predictions(results, runner.iter + 1)
+        #         # Log the table
+        #         self._log_eval_table()
 
     def log_feature_map(self, runner):
         # save the feature maps

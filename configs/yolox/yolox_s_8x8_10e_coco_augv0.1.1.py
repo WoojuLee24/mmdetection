@@ -163,13 +163,13 @@ test_pipeline = [
 train1 = dict(
     type=dataset_type,
     ann_file=data_root + 'annotations/instances_train2017.json',
-    img_prefix=data_root + 'train/',
+    img_prefix=data_root + 'train2017/',
     pipeline=train_pipeline1,
     ),
 train2 = dict(
     type=dataset_type,
     ann_file=data_root + 'annotations/instances_train2017.json',
-    img_prefix=data_root + 'train/',
+    img_prefix=data_root + 'train2017/',
     pipeline=train_pipeline2,),
 
 data = dict(
@@ -181,13 +181,13 @@ data = dict(
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val/',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
     ),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val/',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
         ))
 
@@ -202,10 +202,10 @@ optimizer = dict(
     paramwise_cfg=dict(norm_decay_mult=0., bias_decay_mult=0.))
 optimizer_config = dict(grad_clip=None)
 
-max_epochs = 300
-num_last_epochs = 15
+max_epochs = 10
+num_last_epochs = 1
 resume_from = None
-interval = 10
+interval = 1
 
 # learning policy
 lr_config = dict(
@@ -215,13 +215,18 @@ lr_config = dict(
     by_epoch=False,
     warmup_by_epoch=True,
     warmup_ratio=1,
-    warmup_iters=5,  # 5 epoch
+    warmup_iters=1,  # 5 epoch
     num_last_epochs=num_last_epochs,
-    min_lr_ratio=0.05)
+    min_lr_ratio=0.005)
 
 runner = dict(type='EpochBasedRunner', max_epochs=max_epochs)
 
 custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=['neck.out_convs.0.activate',
+                     'neck.out_convs.1.activate',
+                     'neck.out_convs.2.activate',
+             ]),
     dict(
         type='YOLOXModeSwitchHook',
         num_last_epochs=num_last_epochs,
@@ -261,3 +266,5 @@ log_config = dict(interval=50,
                            num_eval_images=5),
                   ]
                   )
+
+load_from = '/ws/data/OpenLORIS/pretrained/yolox_s_8x8_300e_coco_20211121_095711-4592a793.pth'
