@@ -135,6 +135,20 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         return losses
 
+    # ANALYSIS[CODE=001]: analysis background
+    def _bbox_forward_analysis_background(self, x, rois, img_metas):
+        """Box head forward function used in both training and testing."""
+        # TODO: a more flexible way to decide which feature maps to use
+        bbox_feats = self.bbox_roi_extractor.forward_analysis_background(
+            x[:self.bbox_roi_extractor.num_inputs], rois, img_metas)
+        if self.with_shared_head:
+            bbox_feats = self.shared_head(bbox_feats)
+        cls_score, bbox_pred = self.bbox_head(bbox_feats)
+
+        bbox_results = dict(
+            cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+        return bbox_results
+
     def _bbox_forward(self, x, rois):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
@@ -250,6 +264,65 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 rescale=rescale,
                 mask_test_cfg=self.test_cfg.get('mask'))
             return bbox_results, segm_results
+
+    # ANALYSIS[CODE=001]: analysis background
+    def simple_test_analysis_background(self,
+                                        x,
+                                        proposal_list,
+                                        img_metas,
+                                        proposals=None,
+                                        rescale=False):
+        assert self.with_bbox, 'Bbox head must be implemented.'
+
+        ''' self.simple_test_bboxes starts from here '''
+        proposals = proposal_list
+        rcnn_test_cfg = self.test_cfg
+
+        rois = bbox2roi(proposals)
+
+        if not rois.shape[0] == 0:
+            only_gt = True
+            if only_gt:
+                gt_bboxes = torch.tensor(img_metas[0]['annotations'][0]['bboxes']).to(rois.get_device())
+                gt_labels = torch.tensor(img_metas[0]['annotations'][0]['labels']).to(rois.get_device())
+                batch_inds = gt_bboxes.new_full((gt_bboxes.size(0), 1), 0)
+                rois = torch.cat([batch_inds, gt_bboxes], dim=1)
+
+            bbox_results = self._bbox_forward_analysis_background(x, rois, img_metas)
+            img_shapes = tuple(meta['img_shape'] for meta in img_metas)
+            scale_factors = tuple(meta['scale_factor'] for meta in img_metas)
+
+            # split batch bbox prediction back to each image
+            cls_score = bbox_results['cls_score']
+            bbox_pred = bbox_results['bbox_pred']
+
+            if only_gt:
+                num_proposals_per_img = len(rois)
+            else:
+                num_proposals_per_img = tuple(len(p) for p in proposals)
+            rois = rois.split(num_proposals_per_img, 0)
+            cls_score = cls_score.split(num_proposals_per_img, 0)
+
+            # some detector with_reg is False, bbox_pred will be None
+            if bbox_pred is not None:
+                # TODO move this to a sabl_roi_head
+                # the bbox prediction of some detectors like SABL is not Tensor
+                if isinstance(bbox_pred, torch.Tensor):
+                    bbox_pred = bbox_pred.split(num_proposals_per_img, 0)
+                else:
+                    bbox_pred = self.bbox_head.bbox_pred_split(
+                        bbox_pred, num_proposals_per_img)
+            else:
+                bbox_pred = (None,) * len(proposals)
+
+            # apply bbox post-processing to each image individually
+            for i in range(len(proposals)):
+                if not rois[i].shape[0] == 0:
+                    self.bbox_head.analysis_regions(rois[i], cls_score[i], bbox_pred[i], img_shapes[i],
+                                                    scale_factors[i], rescale=rescale, cfg=rcnn_test_cfg,
+                                                    img_metas=img_metas)
+
+        return 0
 
     def simple_test(self,
                     x,

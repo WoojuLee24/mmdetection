@@ -15,6 +15,34 @@ from mmcv.runner import get_dist_info
 from mmdet.core import encode_mask_results
 
 
+def single_gpu_analysis_background(model,
+                    data_loader,
+                    show=False,
+                    out_dir=None,
+                    show_score_thr=0.3,
+                    work_dir='analysis_background/'):
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    for i, data in enumerate(data_loader):
+        _transform = dataset.pipeline.transforms[1]
+        if _transform.__class__.__name__ == 'Corrupt':
+            data['img_metas'][0].data[0][0]['corruption'] = _transform.corruption
+            data['img_metas'][0].data[0][0]['severity'] = _transform.severity
+        else:
+            data['img_metas'][0].data[0][0]['corruption'] = 'None'
+            data['img_metas'][0].data[0][0]['severity'] = 0
+
+        annotations = [dataset.get_ann_info(i) for i in range(i*data_loader.batch_size, (i+1)*data_loader.batch_size)]
+        data['img_metas'][0].data[0][0]['annotations'] = annotations
+
+        data['img_metas'][0].data[0][0]['work_dir'] = work_dir
+
+        with torch.no_grad():
+            model(return_loss=False, rescale=True, **data, analysis_background=True)
+        break
+    return results
+
 def single_gpu_test(model,
                     data_loader,
                     show=False,

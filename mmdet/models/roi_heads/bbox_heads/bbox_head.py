@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from mmcv.runner import BaseModule, auto_fp16, force_fp32
 from torch.nn.modules.utils import _pair
 
-from mmdet.core import build_bbox_coder, multi_apply, multiclass_nms
+from mmdet.core import build_bbox_coder, multi_apply, multiclass_nms, analysis_multiclass_nms
 from mmdet.models.builder import HEADS, build_loss
 from mmdet.models.losses import accuracy
 from mmdet.models.utils import build_linear_layer
@@ -385,6 +385,28 @@ class BBoxHead(BaseModule):
                                                     cfg.max_per_img)
 
             return det_bboxes, det_labels
+
+    # ANALYSIS[CODE=001]: analysis background
+    @force_fp32(apply_to=('cls_score', 'bbox_pred'))
+    def analysis_regions(self, rois, cls_score, bbox_pred, img_shape,
+                         scale_factor, rescale=False, cfg=None,
+                         img_metas=None):
+        # some loss (Seesaw loss..) may have custom activation
+        scores = F.softmax(cls_score, dim=-1) if cls_score is not None else None
+
+        # bbox_pred would be None in some detector when with_reg is False,
+        # e.g. Grid R-CNN.
+        bboxes = self.bbox_coder.decode(rois[..., 1:], bbox_pred, max_shape=img_shape)
+
+        if rescale and bboxes.size(0) > 0:
+            scale_factor = bboxes.new_tensor(scale_factor)
+            bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(
+                bboxes.size()[0], -1)
+
+        analysis_multiclass_nms(bboxes, scores, cfg.score_thr, cfg.nms, cfg.max_per_img, img_metas=img_metas)
+
+        return
+
 
     @force_fp32(apply_to=('bbox_preds', ))
     def refine_bboxes(self, rois, labels, bbox_preds, pos_is_gts, img_metas):

@@ -94,6 +94,97 @@ def multiclass_nms(multi_bboxes,
     else:
         return dets, labels[keep]
 
+# ANALYSIS[CODE=001]: analysis background
+def analysis_multiclass_nms(multi_bboxes, multi_scores, score_thr,
+                            nms_cfg, max_num=-1, score_factors=None, return_inds=False,
+                            img_metas=None):
+
+    num_classes = multi_scores.size(1) - 1
+    # exclude background category
+    if multi_bboxes.shape[1] > 4:
+        bboxes = multi_bboxes.view(multi_scores.size(0), -1, 4)
+    else:
+        bboxes = multi_bboxes[:, None].expand(
+            multi_scores.size(0), num_classes, 4)
+
+    if img_metas is not None:
+        import matplotlib.pyplot as plt
+        from thirdparty.dscv.utils.detection_utils import visualize_bbox_xy, get_color_array, pixel2inch
+        import torchvision
+
+        corruption = img_metas[0]['corruption']
+        severity = img_metas[0]['severity']
+        work_dir = img_metas[0]['work_dir']
+
+        img_shape = img_metas[0]['img_shape']
+        img = img_metas[0]['img'][0]
+        img_norm_cfg = img_metas[0]['img_norm_cfg']
+
+        denormalize = torchvision.transforms.Compose([
+            torchvision.transforms.Normalize([0., 0., 0.], 1/img_norm_cfg['std']),
+            torchvision.transforms.Normalize(-img_norm_cfg['mean'], [1., 1., 1.])
+        ])
+        img = denormalize(img).permute(1,2,0)
+        img = (img - img.min()) / (img.max() - img.min())
+        img = img.cpu().detach().numpy()
+
+        fig, ax = plt.subplots(1, 1, figsize=(pixel2inch(img_shape[1]), pixel2inch(img_shape[0])))
+        ax.imshow(img)
+        fig.savefig(f'/ws/data2/dshong/ai28_detection/{work_dir}{corruption}{severity}_img.png')
+        plt.close(fig)
+
+        def set_title_with_score(multi_scores, i, fig=None, ax=None, fontsize=10):
+            title = ''
+            CLASSES = ['person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'background']
+            for c in range(multi_scores.shape[-1]):
+                title += f"{CLASSES[c]}({multi_scores[i, c]:.2f}) "
+            fig.suptitle(title, fontsize=fontsize)
+        def visualize_for_each_bbox(bboxes, img, img_metas, num_bboxes=50, work_dir='', save_title='each_bboxes', multi_scores=None, fontsize=10):
+            img_shape = img_metas[0]['img_shape']
+
+            for i in range(num_bboxes):
+                fig, ax = plt.subplots(1, 1, figsize=(pixel2inch(img_shape[1]), pixel2inch(img_shape[0])))
+                ax.imshow(img)
+
+                for c in range(num_classes):
+                    visualize_bbox_xy(bboxes[i, c, :], fig=fig, ax=ax, color_idx=c, num_colors=num_classes)
+
+                if multi_scores is not None:
+                    set_title_with_score(multi_scores, i, fig=fig, ax=ax, fontsize=fontsize)
+
+                ax.axes.set_xlim(0, img_shape[1])
+                ax.axes.set_ylim(img_shape[0], 0)
+                corruption = img_metas[0]['corruption']
+                severity = img_metas[0]['severity']
+                fig.savefig(f'/ws/data2/dshong/ai28_detection/{work_dir}{corruption}{severity}_{save_title}{i}.png')
+                plt.close(fig)
+        def visualize_for_each_class(img, img_metas, bboxes, num_classes=8, work_dir='', score_thr=0.0, save_title='each_classes'):
+            img_shape = img_metas[0]['img_shape']
+
+            for c in range(num_classes):
+                fig, ax = plt.subplots(1, 1, figsize=(pixel2inch(img_shape[1]), pixel2inch(img_shape[0])))
+                ax.imshow(img)
+
+                for i in range(len(multi_scores)):
+                    if multi_scores[i, c] > score_thr:
+                        visualize_bbox_xy(bboxes[i, c, :], fig=fig, ax=ax, color_idx=c, num_colors=num_classes)
+
+                CLASSES = ['person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'background']
+                fig.suptitle(f"{CLASSES[c]}(thr:{score_thr:.2f})")
+
+                ax.axes.set_xlim(0, img_shape[1])
+                ax.axes.set_ylim(img_shape[0], 0)
+                corruption = img_metas[0]['corruption']
+                severity = img_metas[0]['severity']
+                fig.savefig(f'/ws/data2/dshong/ai28_detection/{work_dir}{corruption}{severity}_{save_title}_class{c}_thr{score_thr}.png')
+                plt.close(fig)
+
+        visualize_for_each_bbox(bboxes, img, img_metas, num_bboxes=len(bboxes), multi_scores=multi_scores, work_dir=work_dir)
+        for score_thr in [0.00, 0.01, 0.02, 0.03, 0.04, 0.05]:
+            visualize_for_each_class(img, img_metas, bboxes, work_dir=work_dir, score_thr=score_thr)
+
+    return 0
+
 
 def fast_nms(multi_bboxes,
              multi_scores,

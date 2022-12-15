@@ -184,6 +184,28 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             assert 'proposals' not in kwargs
             return self.aug_test(imgs, img_metas, **kwargs)
 
+    # ANALYSIS[CODE=001]: analysis background
+    def analysis_background(self, imgs, img_metas, **kwargs):
+        for img, img_meta in zip(imgs, img_metas):
+            batch_size = len(img_meta)
+            for img_id in range(batch_size):
+                img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
+
+        img = imgs[0]
+        img_metas = img_metas[0]
+        img_metas[0]['img'] = img
+        rescale = kwargs['rescale'] if 'rescale' in kwargs else False
+
+        x = self.extract_feat(img)
+
+        # hook the fpn features
+        self.fpn_features = x
+        proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
+        bbox_results = self.roi_head.simple_test_analysis_background(x, proposal_list, img_metas, rescale=rescale)
+
+        return
+
+
     @auto_fp16(apply_to=('img', ))
     def forward(self, img, img_metas, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
@@ -199,8 +221,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             assert len(img_metas) == 1
             return self.onnx_export(img[0], img_metas[0])
 
+        if 'analysis_background' in kwargs: # ANALYSIS[CODE=001]
+            if kwargs['analysis_background']:
+                return self.analysis_background(img, img_metas, **kwargs)
+
         if return_loss:
-            global FEATURES
+            global FEATURES # DEV[CODE=201]: Contrastive Loss
             FEATURES = self.features    # is it true?
             return self.forward_train(img, img_metas, **kwargs)
         else:
@@ -252,7 +278,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         return loss, log_vars
 
     def save_the_result_img(self, data):
-        cls_scores_all = self.features['rpn_head.rpn_cls']  # {list:5}  (3, 3, H', W')
+        cls_scores_all = self.features['rpn_head.rpn_cls']  # {list:5} (3, 3, H', W')
 
         # Get gt_scores
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores_all]
@@ -269,7 +295,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             label_channels=label_channels)
         del anchor_list, valid_flag_list
         # edited by dnwn24
-        labels_flatten, labels_flatten_weight = cls_reg_targets[0], cls_reg_targets[1] # {list:5}  (num_types, H' * W' * num_priors)
+        labels_flatten, labels_flatten_weight = cls_reg_targets[0], cls_reg_targets[1] # {list:5} (num_types, H' * W' * num_priors)
         labels_flatten = cls_reg_targets[0]
 
         num_priors = 3
@@ -291,7 +317,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             label = label.permute(0, 3, 1, 2).contiguous()  # (num_types, num_priors, H', W')
             labels_all.append(label)
         del featmap_sizes, cls_reg_targets, labels_flatten, label
-        # labels_all : {list:5}  (num_types, num_priors, H', W')
+        # labels_all : {list:5} (num_types, num_priors, H', W')
 
         # Let's visualize
         H, W = int(cls_scores_all[0].size()[2]), int(cls_scores_all[0].size()[3])
