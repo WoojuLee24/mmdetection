@@ -232,23 +232,6 @@ class DefaultFormatBundle:
                 results[key] = DC(
                     to_tensor(img), padding_value=self.pad_val['img'], stack=True)
 
-            ##################
-            ##original code###
-            ##################
-            # img = results['img']
-            # if self.img_to_float is True and img.dtype == np.uint8:
-            #     # Normally, image is of uint8 type without normalization.
-            #     # At this time, it needs to be forced to be converted to
-            #     # flot32, otherwise the model training and inference
-            #     # will be wrong. Only used for YOLOX currently .
-            #     img = img.astype(np.float32)
-            # # add default meta keys
-            # results = self._add_default_meta_keys(results)
-            # if len(img.shape) < 3:
-            #     img = np.expand_dims(img, -1)
-            # img = np.ascontiguousarray(img.transpose(2, 0, 1))
-            # results['img'] = DC(
-            #     to_tensor(img), padding_value=self.pad_val['img'], stack=True)
         for key in ['proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels']:
             if key not in results:
                 continue
@@ -263,6 +246,13 @@ class DefaultFormatBundle:
                 to_tensor(results['gt_semantic_seg'][None, ...]),
                 padding_value=self.pad_val['seg'],
                 stack=True)
+
+        # DEV[CODE=101]: GenAutoAugment
+        if 'custom_field' in results:
+            for key in results['custom_field']:
+                if (key not in results) or ('img' in key):
+                    continue
+                results[key] = DC(to_tensor(results[key]))
         return results
 
     def _add_default_meta_keys(self, results):

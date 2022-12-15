@@ -410,11 +410,26 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             # settings
             self.wandb_data = data
 
-            # concatenate the original image and augmix images.
-            data['img'] = torch.cat((data['img'], data['img2'], data['img3']), dim=0)
-            data['gt_bboxes'] += data['gt_bboxes'] + data['gt_bboxes']
-            data['gt_labels'] += data['gt_labels'] + data['gt_labels']
-            data['img_metas'] += data['img_metas'] + data['img_metas']
+            # DEV[CODE=101]
+            # concatenate the original image and augmented images.
+            i_list = ['']
+            for i in range(5):
+                if f'img{i}' in data:
+                    i_list.append(f'{i}')
+            data['img'] = torch.cat([data[f'img{i}'] for i in i_list], dim=0)
+            # list and delete each augmented element.
+            for i in range(1, len(data['img']) + 1):
+                if i == 1:
+                    continue
+                for key in ['img', 'gt_bboxes', 'gt_labels', 'gt_instance_inds', 'img_metas']:
+                    if f'{key}{i}' in data:
+                        if key != 'img':
+                            data[key] += data[f'{key}{i}']
+                        del data[f'{key}{i}']
+                    else:
+                        if not key in data:
+                            continue
+                        data[key].append(data[key][0])
 
             losses = self(**data)
 

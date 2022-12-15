@@ -1,5 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from .auto_augment import (AutoAugment, BrightnessTransform, ColorTransform,
+# from .auto_augment import (AutoAugment, BrightnessTransform, ColorTransform,
+#                            ContrastTransform, EqualizeTransform, Rotate, Shear,
+#                            Translate)
+from .gen_auto_augment import (GenAutoAugment, BrightnessTransform, ColorTransform,
                            ContrastTransform, EqualizeTransform, Rotate, Shear,
                            Translate)
 from .compose import Compose
@@ -22,8 +25,9 @@ __all__ = [
     'LoadMultiChannelImageFromFiles', 'LoadProposals', 'MultiScaleFlipAug',
     'Resize', 'RandomFlip', 'Pad', 'RandomCrop', 'Normalize', 'SegRescale',
     'MinIoURandomCrop', 'Expand', 'PhotoMetricDistortion', 'Albu',
-    'InstaBoost', 'RandomCenterCropPad', 'AutoAugment', 'CutOut', 'Shear',
+    'InstaBoost', 'RandomCenterCropPad', 'CutOut', 'Shear',
     'Rotate', 'ColorTransform', 'EqualizeTransform', 'BrightnessTransform',
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
-    'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix'
+    'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix',
+    'GenAutoAugment', # 'AutoAugment',
 ]

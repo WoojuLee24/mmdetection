@@ -123,71 +123,8 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,
                                                     gt_bboxes, gt_labels,
-                                                    img_metas)
+                                                    img_metas, **kwargs)
             losses.update(bbox_results['loss_bbox'])
-
-        if hasattr(self.bbox_head.loss_cls, 'kwargs'):
-            if 'contrastive_loss' in self.bbox_head.loss_cls.kwargs:
-                try:
-                    ############################
-                    ### Contrastive learning ###
-                    ###            by dshong ###
-                    ############################
-                    ''' Step1. Get cls_feats and cls_feats_gt '''
-                    cls_score = bbox_results['cls_score'] # (1536=512*3, num_classes+1=9)
-                    cls_feats = self.bbox_head.cls_feats # (1536=512*3, feat_dim=1024)
-                    cls_feats = F.normalize(cls_feats, dim=1)
-
-                    ''' Step2. Ready the features and labels
-                        - features = (num_samples, num_aug, feats_dim)
-                        - labels = (num_samples, )
-                    '''
-                    num_pos, num_neg = sampling_result.pos_bboxes.size(0), sampling_result.neg_bboxes.size(0)
-                    num_samples, feats_dim = num_pos+num_neg, cls_feats.shape[-1]
-                    num_aug = int(cls_score.size(0) / num_samples)
-
-                    features = cls_feats.reshape(num_aug, num_samples, feats_dim).permute(1, 0, 2)
-                    labels, label_weights, bbox_targets, bbox_weights = self.bbox_targets  # labels=(1536=512*3,) bbox_targets=(1536=512*3,4)
-                    labels = torch.chunk(labels, 3)[0]
-                    labels = labels.contiguous().view(-1, 1)
-
-                    mask = torch.eq(labels, labels.T).float() # (num_samples, num_samples)
-
-                    ''' Step3. '''
-                    contrast_count = features.shape[1] # = num_aug
-                    contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0) # =(num_samples*num_aug, feats_dim)
-                    anchor_count = contrast_count
-                    anchor_feature = contrast_feature
-
-                    ''' Step4. '''
-                    temperature = 0.07
-                    anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T), temperature)
-                    logits_max = torch.max(anchor_dot_contrast, dim=1, keepdim=True)[0]
-                    logits = anchor_dot_contrast - logits_max.detach()
-
-                    ''' Step6. '''
-                    batch_size = num_samples
-                    mask = mask.repeat(anchor_count, contrast_count) # (num_samples*anchor_count, num_samples*contrast_count) = (num_samples*num_aug, num_samples*num_aug)
-                    logits_mask = torch.scatter(torch.ones_like(mask), 1,
-                                                torch.arange(batch_size * anchor_count).view(-1, 1).to('cuda'), 0) # (num_samples*num_aug, num_samples*num_aug)
-                    mask = mask * logits_mask
-
-                    ''' Step7. '''
-                    exp_logits = torch.exp(logits) * logits_mask
-                    log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-
-                    base_temperature = 0.07
-                    mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1) # (num_samples*num_aug)
-                    loss = -(temperature / base_temperature) * mean_log_prob_pos # (num_samples*num_aug)
-                    loss = loss.view(anchor_count, batch_size).mean() # (num_aug, num_samples) -> (,)
-
-                    loss_supcon = {'loss_supcon': loss}
-                    losses.update(loss_supcon)
-                    #################################################
-                except:
-                    import pdb
-                    pdb.set_trace()
-                    print('nn')
 
         # mask head forward and loss
         if self.with_mask:
@@ -212,7 +149,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
-                            img_metas):
+                            img_metas, gt_instance_inds=None):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -225,6 +162,16 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                         *bbox_targets)
 
         bbox_results.update(loss_bbox=loss_bbox)
+
+        # DEV[CODE=101]: Contrastive learning using gt_instance_inds
+        if gt_instance_inds is not None:
+            gt_rois = []
+            for i in range(len(gt_bboxes)):
+                batch_inds = gt_bboxes[i].new_full((gt_bboxes[i].size(0), 1), i)
+                _rois = torch.cat([batch_inds, gt_bboxes[i]], dim=1)
+                gt_rois.append(_rois)
+            raise NotImplementedError('Not implemented yet.')
+
         return bbox_results
 
     def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks,
