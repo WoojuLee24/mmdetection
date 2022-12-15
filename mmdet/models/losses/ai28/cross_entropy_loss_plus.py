@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 from ...builder import LOSSES
 from ..utils import weight_reduce_loss
+import mmdet.models.detectors.base as base
+from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02
 
 
 def cross_entropy(pred,
@@ -418,6 +420,130 @@ def jsdv1_3(pred,
                       'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
                       'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
                       'p_mixture': p_mixture}
+
+    return loss, p_distribution
+
+
+def ntxent(pred,
+           label,
+           weight=None,
+           reduction='mean',
+           avg_factor=None,
+           **kwargs):
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    from mmdet.models.detectors.base import FEATURES
+    k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    if k.dim() == 4: # if rpn
+        pass
+    elif k.dim() == 2: # if roi
+        features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
+        label_orig, _, _ = torch.chunk(label, 3)
+        label_orig = label_orig.unsqueeze(dim=1)
+        ntxent_loss = supcontrast(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+    loss = ntxent_loss
+    p_distribution = {}
+
+    return loss, p_distribution
+
+
+def ntxentv0_01(pred,
+                label,
+                weight=None,
+                reduction='mean',
+                avg_factor=None,
+                **kwargs):
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    from mmdet.models.detectors.base import FEATURES
+    k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    if k.dim() == 4: # if rpn
+        pass
+    elif k.dim() == 2: # if roi
+        features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
+        label_orig, _, _ = torch.chunk(label, 3)
+        label_orig = label_orig.unsqueeze(dim=1)
+        ntxent_loss = supcontrastv0_01(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+    loss = ntxent_loss
+    p_distribution = {}
+
+    return loss, p_distribution
+
+
+def ntxentv0_02(pred,
+                label,
+                weight=None,
+                reduction='mean',
+                avg_factor=None,
+                **kwargs):
+
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    from mmdet.models.detectors.base import FEATURES
+    k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    if k.dim() == 4: # if rpn
+        pass
+    elif k.dim() == 2: # if roi
+        features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
+        label_orig, _, _ = torch.chunk(label, 3)
+        label_orig = label_orig.unsqueeze(dim=1)
+        ntxent_loss = supcontrastv0_02(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+    loss = ntxent_loss
+    p_distribution = {}
 
     return loss, p_distribution
 
@@ -1172,6 +1298,8 @@ class CrossEntropyLossPlus(nn.Module):
                  additional_loss='jsd',
                  additional_loss_weight_reduce=False,
                  lambda_weight=0.0001,
+                 additional_loss2=None,
+                 lambda_weight2=0.0001,
                  temper=1,
                  add_act=None,
                  wandb_name=None,
@@ -1202,7 +1330,9 @@ class CrossEntropyLossPlus(nn.Module):
         self.ignore_index = ignore_index
         self.additional_loss = additional_loss
         self.additional_loss_weight_reduce = additional_loss_weight_reduce
+        self.additional_loss2 = additional_loss2
         self.lambda_weight = lambda_weight
+        self.lambda_weight2 = lambda_weight2
         self.temper = temper
         self.add_act = add_act
         self.wandb_name = wandb_name
@@ -1211,6 +1341,7 @@ class CrossEntropyLossPlus(nn.Module):
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
+        self.wandb_features[f'additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
 
         if self.use_sigmoid:
@@ -1228,6 +1359,12 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_2
         elif self.additional_loss == 'jsdv1_3':
             self.cls_additional = jsdv1_3
+        elif self.additional_loss == 'jsdv1_3_ntxent':
+            self.cls_additional = jsdv1_3_ntxent
+        elif self.additional_loss == 'jsdv1_3_ntxentv0_01':
+            self.cls_additional = jsdv1_3_ntxentv0_01
+        elif self.additional_loss == 'jsdv1_3_ntxentv0_02':
+            self.cls_additional = jsdv1_3_ntxentv0_02
         elif self.additional_loss == 'jsdv1_3_1':
             self.cls_additional = jsdv1_3_1
         elif self.additional_loss == 'jsdv1_3_2':
@@ -1248,6 +1385,15 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdy
         else:
             self.cls_additional = None
+
+        if self.additional_loss2 == 'ntxent':
+            self.cls_additional2 = ntxent
+        elif self.additional_loss2 == 'ntxentv0_01':
+            self.cls_additional2 = ntxentv0_01
+        elif self.additional_loss2 == 'ntxentv0_02':
+            self.cls_additional2 = ntxentv0_02
+        else:
+            self.cls_additional2 = None
 
     def forward(self,
                 cls_score,
@@ -1315,17 +1461,53 @@ class CrossEntropyLossPlus(nn.Module):
                 if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
                     self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
+                    self.wandb_features[f'lam_additional_loss({self.wandb_name})'].clear()
                 self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
-                self.wandb_features[f'additional_loss({self.wandb_name})'].append(
+                self.wandb_features[f'additional_loss({self.wandb_name})'].append(loss_additional)
+                self.wandb_features[f'lam_additional_loss({self.wandb_name})'].append(
                     self.lambda_weight * loss_additional)
             else:
                 self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
-                self.wandb_features[f'additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
+                self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
+                self.wandb_features[f'lam_additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
 
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 
-        loss = loss_cls + self.lambda_weight * loss_additional
+        loss_additional2 = 0
+        if self.cls_additional2 is not None:
+            if self.additional_loss_weight_reduce == False:
+                weight = None
+            loss_additional2, p_distribution2 = self.cls_additional2(
+                cls_score,
+                label,
+                weight,
+                reduction=reduction,
+                avg_factor=avg_factor,
+                temper=self.temper,
+                add_act=self.add_act,
+                ignore_index=ignore_index,
+                class_weight=class_weight,
+                lambda_weight=self.lambda_weight
+            )
+
+            # wandb for rpn
+            if self.use_sigmoid:
+                if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
+                    self.wandb_features[f'additional_loss2({self.wandb_name})'].clear()
+                    self.wandb_features[f'lam_additional_loss2({self.wandb_name})'].clear()
+                self.wandb_features[f'additional_loss2({self.wandb_name})'].append(loss_additional2)
+                self.wandb_features[f'lam_additional_loss2({self.wandb_name})'].append(
+                    self.lambda_weight2 * loss_additional2)
+            else:
+                self.wandb_features[f'additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
+                self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
+
+            for key, value in p_distribution2.items():
+                self.wandb_features[f'{key}({self.wandb_name})'] = value
+
+
+        loss = loss_cls + self.lambda_weight * loss_additional + self.lambda_weight2 * loss_additional2
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
         return loss

@@ -19,6 +19,8 @@ from mmdet.models.losses.ai28.additional_loss import fpn_loss
 
 # use_wandb = True # False True
 
+FEATURES = dict()
+
 def images_to_levels(target, num_levels):
     """Convert targets by image to targets by feature level.
 
@@ -198,6 +200,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             return self.onnx_export(img[0], img_metas[0])
 
         if return_loss:
+            global FEATURES
+            FEATURES = self.features    # is it true?
             return self.forward_train(img, img_metas, **kwargs)
         else:
             return self.forward_test(img, img_metas, **kwargs)

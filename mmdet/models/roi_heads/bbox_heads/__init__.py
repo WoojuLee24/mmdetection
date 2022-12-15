@@ -10,5 +10,5 @@ from .scnet_bbox_head import SCNetBBoxHead
 __all__ = [
     'BBoxHead', 'ConvFCBBoxHead', 'Shared2FCBBoxHead',
     'Shared4Conv1FCBBoxHead', 'DoubleConvFCBBoxHead', 'SABLHead', 'DIIHead',
-    'SCNetBBoxHead'
+    'SCNetBBoxHead', 'Shared2FCBBoxHeadXent',
 ]
