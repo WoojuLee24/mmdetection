@@ -38,7 +38,7 @@ def fpn_loss(pred,
 
     if add_act == None:
         # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] is 1:    # if rpn
+        if pred_orig.shape[-1] == 1:    # if rpn
             p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
                                       torch.sigmoid(pred_aug1 / temper), \
                                       torch.sigmoid(pred_aug2 / temper)

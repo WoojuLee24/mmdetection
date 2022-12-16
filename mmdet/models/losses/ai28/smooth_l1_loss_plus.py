@@ -200,7 +200,7 @@ def jsdy(pred,
     label, _, _ = torch.chunk(label, 3)
 
     if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] is 1: # if rpn
+        if pred_orig.shape[-1] == 1: # if rpn
             label = label.reshape(label.shape+(1,)).contiguous()
         else: # else roi
             label = F.one_hot(label, num_classes=pred_orig.shape[-1]) # TO-DO: need to check

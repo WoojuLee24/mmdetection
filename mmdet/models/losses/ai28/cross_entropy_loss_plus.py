@@ -1341,7 +1341,9 @@ class CrossEntropyLossPlus(nn.Module):
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
+        self.wandb_features[f'lam_additional_loss({self.wandb_name})'] = []
         self.wandb_features[f'additional_loss2({self.wandb_name})'] = []
+        self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
 
         if self.use_sigmoid:
