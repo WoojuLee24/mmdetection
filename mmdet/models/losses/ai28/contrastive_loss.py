@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 
-def supcontrast(logits_clean, logits_aug1, logits_aug2, labels=None, lambda_weight=0.1, temper=0.07, reduction='batchmean', contrast_mode='all'):
+def supcontrast(logits_clean, logits_aug1, logits_aug2, labels=None, lambda_weight=0.1, temper=0.07, reduction='batchmean', contrast_mode='all', eps=1e-8):
 
     """
     original supcontrast loss
@@ -75,7 +75,7 @@ def supcontrast(logits_clean, logits_aug1, logits_aug2, labels=None, lambda_weig
 
     # compute log_prob
     exp_logits = torch.exp(logits) * logits_mask
-    log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+    log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True) + eps)
 
     # compute mean of log-likelihood over positive
     mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
