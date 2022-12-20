@@ -446,6 +446,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         self.features.clear()
         self.wandb_features.clear()
+        # self.save_tensor(data, name='ori')
         # self.save_tensor(data[0], name='ori')
         # self.save_tensor(data[1], name='aug')
 
@@ -474,6 +475,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         img = data['img'][0]
         img = img.detach().cpu().numpy()
         img = np.transpose(img, (1, 2, 0))
+        img = img * 255.
         img = img.astype(np.uint8).copy()
         for i in range(np.shape(bboxes)[0]):
             # draw bbox
@@ -481,7 +483,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             right_bottom = int(bboxes[i, 2]), int(bboxes[i, 3])
             # mask = mask * 255
             cv2.rectangle(img, left_top, right_bottom, color=(0, 0, 255), thickness=3)
-        cv2.imwrite("/ws/data2/debug/{}.png".format(name), img)
+        cv2.imwrite("/ws/data/log_kt/debug/tensor/{}.png".format(name), img)
 
 
     def save_ori_feature_tensor(self, feature, data, aug_parameters, name, visualize=False):
@@ -493,11 +495,11 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         b, c, h, w = np.shape(feature)
 
         # k = get_affine_matrix2d(translations=translation, center=center, scale=scale_factor, angle=angle)
-        warp_matrix = aug_parameters['warp_matrix']
+        warp_matrix = aug_parameters['warp_matrix'] # (B, 3, 3)
         trans_x = aug_parameters['trans_x'].clone().detach() * w / W
         trans_y = aug_parameters['trans_y'].clone().detach() * h / H
-        warp_matrix[0, 0, 2] = trans_x
-        warp_matrix[0, 1, 2] = trans_y
+        warp_matrix[:, 0, 2] = trans_x # (B, )
+        warp_matrix[:, 1, 2] = trans_y # (B, )
         feature = warp_perspective(feature, warp_matrix, (h, w), mode='bilinear')
         # feature = (feature - feature.mean()) / (feature.std() + 1e-6)
         out = self.slice_feature_tensor(feature, trans_x, trans_y)
@@ -539,10 +541,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
     def slice_feature_tensor(self, feature, trans_x, trans_y):
 
         # trans_x = torch.round(trans_x).int()
-        trans_x = torch.round(trans_x).int().data
+        trans_x = torch.round(trans_x).int().data[0] # trans_x is same along the batch
         # trans_y = torch.round(trans_y).int()
-        trans_y = torch.round(trans_y).int().data
+        trans_y = torch.round(trans_y).int().data[0]
         feature = feature.clone()
+        B = feature.size(0)
+
         if trans_x > 0:
             feature[:, :, :, :trans_x] = 0
         else:
@@ -551,6 +555,18 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             feature[:, :, :trans_y, :] = 0
         else:
             feature[:, :, trans_y:, :] = 0
+
+        # for i in range(B):
+        #     x = trans_x[i]
+        #     y = trans_y[i]
+        #     if x > 0:
+        #         feature[i, :, :, :x] = 0
+        #     else:
+        #         feature[i, :, :, x:] = 0
+        #     if y > 0:
+        #         feature[i, :, :y, :] = 0
+        #     else:
+        #         feature[i, :, y:, :] = 0
 
         return feature
 
@@ -576,17 +592,18 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         ori_data = data[0]
         aug_data = data[1]
+        B = ori_data['img'].size(0)
         aug_parameters = data[1]['aug_parameters']
         con_data = self.concat_data(ori_data, aug_data)
         losses = self(**con_data)
-        self.save_tensor(ori_data, name='ori_data')
-        self.save_tensor(aug_data, name='aug_data')
+        # self.save_tensor(ori_data, name='ori_data')
+        # self.save_tensor(aug_data, name='aug_data')
 
         additional_loss = 0
         # pdb.set_trace()
         for i, (key, features) in enumerate(self.features.items()):
-            ori_features = features[0][0:1]
-            aug_features = features[0][1:]
+            ori_features = features[0][:B]
+            aug_features = features[0][B:]
             ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name=f'{key}_ori_features', visualize=False)
             aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name=f'{key}_aug_features', visualize=False)
 

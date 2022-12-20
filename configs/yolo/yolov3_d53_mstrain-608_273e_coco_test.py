@@ -68,21 +68,25 @@ model = dict(
 dataset_type = 'CocoDataset'
 data_root = '/ws/data/coco/'
 img_norm_cfg = dict(mean=[0, 0, 0], std=[255., 255., 255.], to_rgb=True)
+# img_norm_cfg = dict(
+#     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(
-        type='Expand',
-        mean=img_norm_cfg['mean'],
-        to_rgb=img_norm_cfg['to_rgb'],
-        ratio_range=(1, 2)),
-    dict(
-        type='MinIoURandomCrop',
-        min_ious=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-        min_crop_size=0.3),
-    dict(type='Resize', img_scale=[(320, 320), (608, 608)], keep_ratio=True),
-    dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='PhotoMetricDistortion'),
+    # dict(
+    #     type='Expand',
+    #     mean=img_norm_cfg['mean'],
+    #     to_rgb=img_norm_cfg['to_rgb'],
+    #     ratio_range=(1, 2),
+    #     prob=0.0),  # turn off
+    # dict(
+    #     type='MinIoURandomCrop',
+    #     min_ious=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+    #     min_crop_size=0.3),   # turn off
+    # dict(type='Resize', img_scale=[(320, 320), (608, 608)], keep_ratio=True),
+    dict(type='Resize', img_scale=(608, 608), keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.0),
+    # dict(type='PhotoMetricDistortion'), # to do, not yet
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
@@ -105,7 +109,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=8,
-    workers_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_train2017.json',
@@ -133,6 +137,16 @@ lr_config = dict(
     step=[218, 246])
 # runtime settings
 runner = dict(type='EpochBasedRunner', max_epochs=273)
+
+custom_hooks = [
+    dict(type='FeatureHook',
+         layer_list=['neck.detect1',
+                     'neck.detect2',
+                     'neck.detect3',
+             ]),]
+
+
+
 evaluation = dict(interval=1, metric=['bbox'])
 
 log_config = dict(interval=50,
@@ -140,7 +154,7 @@ log_config = dict(interval=50,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "KT_AI", 'entity': "kaist-url-ai28",
-                                              'name': "yolov3_d53_mstrain-608_273e_coco",
+                                              'name': "yolov3_d53_mstrain-608_273e_coco_test-photo-expand-miniou-resize",
                                               },
                            log_map_every_iter=False,
                            interval=500,
