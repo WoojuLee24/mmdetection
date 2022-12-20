@@ -161,7 +161,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
         bbox_results = dict(
-            cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+            cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats, cls_feats=self.bbox_head.cls_feats)
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
@@ -180,49 +180,17 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_results.update(loss_bbox=loss_bbox)
 
         # DEV[CODE=102]: Contrastive loss with GenAutoAugment
-        if gt_instance_inds is not None:
-            # Only gt_instance_inds shared by all views are classified as valid_inds.
-            if len(gt_instance_inds[0]) != len(gt_instance_inds[1]) or len(gt_instance_inds[0]) != len(
-                    gt_instance_inds[2]):
-                valid_gt_bboxes = []
-                valid_gt_instance_inds = gt_instance_inds[0].tolist()
-                for i in range(len(gt_bboxes)):
-                    valid_gt_bbox = torch.zeros_like(gt_bboxes[0])
+        if self.loss_feat != None:
+            # Ground-truth
+            valid_gt_bboxes, valid_gt_instance_inds, valid_gt_rois = \
+                self.loss_feat.filter_and_collect(gt_bboxes, gt_instance_inds)
 
-                    bbox_index = 0
-                    for instance_index in gt_instance_inds[0]:
-                        if instance_index in gt_instance_inds[i]:
-                            valid_gt_bbox[instance_index] = gt_bboxes[i][bbox_index]
-                            bbox_index += 1
-                        else:
-                            valid_gt_bbox[instance_index] = -1 * torch.ones(4)
-                            if instance_index in valid_gt_instance_inds:
-                                valid_gt_instance_inds.remove(instance_index)
-                    valid_gt_bboxes.append(valid_gt_bbox)
-                valid_gt_instance_inds = torch.tensor(valid_gt_instance_inds)
-            else:
-                valid_gt_bboxes = gt_bboxes
-                valid_gt_instance_inds = gt_instance_inds[0]
+            gt_bbox_results = []
+            for i in range(len(valid_gt_rois)):
+                gt_bbox_results.append(self._bbox_forward(x, valid_gt_rois[i]))
 
-            if len(valid_gt_instance_inds) != 0:
-                # Filter using valid_inds
-                gt_rois, gt_bbox_results = [], []
-                for i in range(len(valid_gt_bboxes)):
-                    _gt_bbox = valid_gt_bboxes[i][valid_gt_instance_inds]
-                    batch_inds = _gt_bbox.new_full((_gt_bbox.size(0), 1), i)
-                    _roi = torch.cat([batch_inds, _gt_bbox], dim=1)
-                    _gt_bbox_result = self._bbox_forward(x, _roi)
-                    gt_rois.append(_roi)
-                    gt_bbox_results.append(_gt_bbox_result)
-                    del _gt_bbox, _roi, _gt_bbox_result
+            loss_feat = self.loss_feat(gt_bbox_results, gt_labels, valid_gt_instance_inds)
 
-                from mmdet.models.losses.ai28.contrastive_loss import supcontrast
-                loss_feat = supcontrast(gt_bbox_results[0]['bbox_feats'],
-                                   gt_bbox_results[1]['bbox_feats'],
-                                   gt_bbox_results[2]['bbox_feats'],
-                                   labels=gt_labels[0][valid_gt_instance_inds], )
-            else:
-                loss_feat = torch.zeros(1)
             bbox_results.update(loss_feat=loss_feat * 0.01)
 
         return bbox_results

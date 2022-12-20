@@ -5,6 +5,7 @@ from mmcv.runner import BaseModule
 
 from ..builder import build_shared_head
 
+from mmdet.models.builder import build_loss # DEV[CODE=201]: Contrastive Loss
 
 class BaseRoIHead(BaseModule, metaclass=ABCMeta):
     """Base class for RoIHeads."""
@@ -18,6 +19,7 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None,
+                 loss_feat=None, # DEV[CODE=201]: Contrastive Loss
                  init_cfg=None):
         super(BaseRoIHead, self).__init__(init_cfg)
         self.train_cfg = train_cfg
@@ -31,6 +33,11 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
 
         if mask_head is not None:
             self.init_mask_head(mask_roi_extractor, mask_head)
+
+        if loss_feat == None: # DEV[CODE=201]: Contrastive Loss
+            self.loss_feat = None
+        else:
+            self.loss_feat = build_loss(loss_feat)
 
         self.init_assigner_sampler()
 

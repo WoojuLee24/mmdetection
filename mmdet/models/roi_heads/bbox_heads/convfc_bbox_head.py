@@ -202,12 +202,12 @@ class ConvFCBBoxHead(BBoxHead):
 @HEADS.register_module()
 class Shared2FCBBoxHead(ConvFCBBoxHead):
 
-    def __init__(self, fc_out_channels=1024, *args, **kwargs):
+    def __init__(self, fc_out_channels=1024, num_cls_convs=0, num_cls_fcs=0, *args, **kwargs): # DEV[CODE=201]
         super(Shared2FCBBoxHead, self).__init__(
             num_shared_convs=0,
             num_shared_fcs=2,
-            num_cls_convs=0,
-            num_cls_fcs=0,
+            num_cls_convs=num_cls_convs, # DEV[CODE=201]
+            num_cls_fcs=num_cls_fcs, # DEV[CODE=201]
             num_reg_convs=0,
             num_reg_fcs=0,
             fc_out_channels=fc_out_channels,
