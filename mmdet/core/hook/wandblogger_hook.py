@@ -283,9 +283,26 @@ class WandbLogger(WandbLoggerHook):
             loss_module.wandb_features[f'L1_loss({loss_module.wandb_name})'].clear()
             loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
+        # import pdb
+        # pdb.set_trace()
         if hasattr(runner.model.module.roi_head.bbox_head.loss_cls, 'wandb_features'):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_cls.wandb_features.items():
-                self.wandb.log({split + wandb_feature: value})
+                if 'confusion_matrix' in wandb_feature:
+                    # pdb.set_trace()
+                    value = value / (runner.model.module.roi_head.bbox_head.loss_cls.wandb_features['matrix_sample_number(roi_cls)'] + 1e-8)
+                    value = value.detach().cpu().numpy()
+                    # save
+                    plt = plot_matrix(value, normalize=True, title=wandb_feature)
+                    # plt.savefig(f"/ws/data/log/cityscapes/debug/{wandb_feature}.jpg")
+                    self.wandb.log({split + wandb_feature: plt})
+                elif 'matrix_sample_number' in wandb_feature:
+                    plt = plot_matrix(value, normalize=True, title=wandb_feature)
+                    self.wandb.log({split + wandb_feature: plt})
+
+                else:
+                    self.wandb.log({split + wandb_feature: value})
+
+
             loss_module = runner.model.module.roi_head.bbox_head.loss_cls
             if isinstance(loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'], list):
                 loss_module.wandb_features[f'ce_loss({loss_module.wandb_name})'].clear()
@@ -565,3 +582,50 @@ class WandbLogger(WandbLoggerHook):
             f'run_{self.wandb.run.name}_pred', type='evaluation')
         pred_artifact.add(self.eval_table, 'eval_data')
         self.wandb.run.log_artifact(pred_artifact)
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_matrix(cm,
+                classes=['person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle','bicycle', 'background'],
+                normalize=False,
+                title='Matrix',
+                cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+
+    plt.figure(figsize=(len(classes), len(classes)))
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-8)
+        # print("Normalized confusion matrix")
+    else:
+        # print('Confusion matrix, without normalization')
+        pass
+
+    # print(cm)
+    # print(cm.diag() / cm.sum(1))
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else '.2f' #'d'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(j, i, format(cm[i, j], fmt),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('anchor class')
+    plt.xlabel('Contrast class')
+    # wandb.log({title: plt})
+    return plt
+    # plt.savefig('/ws/external/visualization_results/confusion_matrix.png')

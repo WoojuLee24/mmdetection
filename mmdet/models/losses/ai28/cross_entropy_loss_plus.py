@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
-from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02
+from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, analyze_representations
 
 
 def cross_entropy(pred,
@@ -429,6 +429,7 @@ def ntxent(pred,
            weight=None,
            reduction='mean',
            avg_factor=None,
+           analysis=False,
            **kwargs):
     """Calculate the ntxent loss
 
@@ -459,10 +460,18 @@ def ntxent(pred,
         label_orig = label_orig.unsqueeze(dim=1)
         ntxent_loss = supcontrast(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    loss = ntxent_loss
-    p_distribution = {}
+        assert label.max() == 8
+        # background_ratio = (label == 8).sum() / label.size(0)
 
-    return loss, p_distribution
+    if analysis:
+        features = analyze_representations(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+
+
+    loss = ntxent_loss
+    # p_distribution = {'background_ratio': background_ratio}
+
+    return loss, features
 
 
 def ntxentv0_01(pred,
@@ -470,6 +479,7 @@ def ntxentv0_01(pred,
                 weight=None,
                 reduction='mean',
                 avg_factor=None,
+                analysis=False,
                 **kwargs):
     """Calculate the ntxent loss
 
@@ -511,6 +521,7 @@ def ntxentv0_02(pred,
                 weight=None,
                 reduction='mean',
                 avg_factor=None,
+                analysis=False,
                 **kwargs):
 
     """Calculate the ntxent loss
@@ -1301,6 +1312,7 @@ class CrossEntropyLossPlus(nn.Module):
                  additional_loss2=None,
                  lambda_weight2=0.0001,
                  temper=1,
+                 analysis=False,
                  add_act=None,
                  wandb_name=None,
                  **kwargs):
@@ -1334,6 +1346,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.lambda_weight = lambda_weight
         self.lambda_weight2 = lambda_weight2
         self.temper = temper
+        self.analysis = analysis
         self.add_act = add_act
         self.wandb_name = wandb_name
 
@@ -1490,7 +1503,8 @@ class CrossEntropyLossPlus(nn.Module):
                 add_act=self.add_act,
                 ignore_index=ignore_index,
                 class_weight=class_weight,
-                lambda_weight=self.lambda_weight
+                lambda_weight=self.lambda_weight,
+                analysis=self.analysis
             )
 
             # wandb for rpn
