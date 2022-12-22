@@ -9,6 +9,25 @@ import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02
 
 
+class SelfJSD(nn.Module):
+    def __init__(self, jsd_criterion, reduction='mean'):
+        super(SelfJSD, self).__init__()
+        self.jsd_criterion = jsd_criterion
+        self.reduction = reduction
+
+    def forward(self, logits_clean, logits_aug1, logits_aug2, labels=None):
+        # temporary deprecated
+        logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
+                                                 F.normalize(logits_aug1, dim=1), \
+                                                 F.normalize(logits_aug2, dim=1),
+
+        prob_list = [logits_aug1, logits_aug2]
+        targets = logits_clean
+        jsd = self.jsd_criterion(prob_list, targets, reduction=self.reduction)
+
+        return jsd
+
+
 @LOSSES.register_module()
 class ContrastiveLossPlus(nn.Module):
 
@@ -24,12 +43,18 @@ class ContrastiveLossPlus(nn.Module):
 
         if self.version in ['0.0.1', '0.0.2']:
             self.loss_criterion = supcontrast
+        elif self.version in ['0.0.3']:
+            from mmdet.models.losses.ai28.divergence import WeightedGeneralizedJSD
+            M = 3
+            weights = torch.ones(M) / M
+            weighted_generalized_jsd = WeightedGeneralizedJSD(weights=weights, scale=True)
+            self.loss_criterion = SelfJSD(jsd_criterion=weighted_generalized_jsd, reduction='mean')
         else:
             raise NotImplementedError(f'does not support version=={version}')
 
         if self.version in ['0.0.1']:
             self.target = 'bbox_feats'
-        elif self.version in ['0.0.2']:
+        elif self.version in ['0.0.2', '0.0.3']:
             self.target = 'cls_feats'
         else:
             raise NotImplementedError(f'does not support version=={version}')

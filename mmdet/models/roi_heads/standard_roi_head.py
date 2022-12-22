@@ -191,7 +191,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
             loss_feat = self.loss_feat(gt_bbox_results, gt_labels, valid_gt_instance_inds)
 
-            bbox_results.update(loss_feat=loss_feat * 0.01)
+            bbox_results.update(loss_feat=loss_feat)
 
         return bbox_results
 
