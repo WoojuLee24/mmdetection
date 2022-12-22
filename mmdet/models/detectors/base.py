@@ -450,10 +450,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         # self.save_tensor(data[0], name='ori')
         # self.save_tensor(data[1], name='aug')
 
-        # pdb.set_trace()
         if 'frame_loss' in self.train_cfg.additional_loss:
+            outputs = self.forward_frame(data)
+        elif 'frame_mask_loss' in self.train_cfg.additional_loss:
             outputs = self.forward_mask_frame(data)
-
         elif 'aug_loss' in self.train_cfg.additional_loss:
             if 'gt_masks' in data[0].keys():
                 outputs = self.forward_aug_frame_instance(data)
@@ -719,7 +719,72 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return con_data
 
+
+    def forward_frame(self, data):
+        additional_loss = torch.tensor(0.).cuda()
+
+        if self.prev_data != None:
+            # concatenate the current data and previous data.
+            consecutive_data = dict()
+            for key in data.keys():
+                if key == 'img':
+                    consecutive_data['img'] = torch.cat((data['img'], self.prev_data['img']), dim=0)
+                else:
+                    consecutive_data[key] = data[key] + self.prev_data[key]
+
+            losses = self(**consecutive_data)
+
+            pres = dict()
+            prev = dict()
+
+            for key, feature in self.features.items():
+                pres_feature = feature[0][0:1]
+                prev_feature = feature[0][1:]
+                loss_ = self.mse_loss(pres_feature, prev_feature)
+                additional_loss += loss_
+
+            # print('additional_loss: ', additional_loss)
+            losses['additional_loss'] = additional_loss
+            loss, log_vars = self._parse_losses(losses)
+            # loss += additional_loss
+
+            # # wandb
+            # for layer_name in self.train_cfg.wandb.log.features_list:
+            #     self.wandb_features[layer_name] = self.features[layer_name]
+            # if 'log_vars' in self.train_cfg.wandb.log.vars:
+            #     for name, value in log_vars.items():
+            #         self.wandb_features[name] = np.mean(value)
+            # self.wandb_features['additional_loss'] = additional_loss
+            self.prev_data = data
+
+        else:
+            losses = self(**data)
+
+            loss, log_vars = self._parse_losses(losses)
+
+            # # wandb
+            # for layer_name in self.train_cfg.wandb.log.features_list:
+            #     self.wandb_features[layer_name] = self.features[layer_name]
+            # if 'log_vars' in self.train_cfg.wandb.log.vars:
+            #     for name, value in log_vars.items():
+            #         self.wandb_features[name] = np.mean(value)
+
+            self.prev_data = data
+
+        outputs = dict(
+            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
+        return outputs
+
+
     def forward_mask_frame(self, data):
+        additional_loss = torch.tensor(0.).cuda()
+
         if self.prev_data != None:
             # concatenate the current data and previous data.
             consecutive_data = dict()
@@ -746,10 +811,10 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 # pres = self.process_results(pres_data_result[0], data)
                 # prev = self.process_results(prev_data_result[0], self.prev_data)
 
-                pres['mask'] = consecutive_data['gt_masks'][0].masks
+                # pres['mask'] = consecutive_data['gt_masks'][0].masks
                 pres['bboxes'] = consecutive_data['gt_bboxes'][0].cpu().detach().numpy()
                 pres['labels'] = consecutive_data['gt_labels'][0].cpu().detach().numpy()
-                prev['mask'] = consecutive_data['gt_masks'][1].masks
+                # prev['mask'] = consecutive_data['gt_masks'][1].masks
                 prev['bboxes'] = consecutive_data['gt_bboxes'][1].cpu().detach().numpy()
                 prev['labels'] = consecutive_data['gt_labels'][1].cpu().detach().numpy()
 
@@ -876,6 +941,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+
+        # wandb
+        if 'log_vars' in self.train_cfg.wandb.log.vars:
+            for name, value in log_vars.items():
+                self.wandb_features[name] = np.mean(value)
+
 
         return outputs
 
