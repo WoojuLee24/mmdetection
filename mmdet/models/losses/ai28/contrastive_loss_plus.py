@@ -4,9 +4,45 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...builder import LOSSES
-from ..utils import weight_reduce_loss
-import mmdet.models.detectors.base as base
-from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02
+from .contrastive_loss import supcontrast
+from .divergence import kl_div
+
+
+class SupJSD(nn.Module):
+    def __init__(self, reduction='mean'):
+        super(SupJSD, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, logits_clean, logits_aug1, logits_aug2, labels=None, eps=1e-7):
+        logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
+                                                 F.normalize(logits_aug1, dim=1), \
+                                                 F.normalize(logits_aug2, dim=1),
+
+        probs = torch.stack([logits_clean, logits_aug1, logits_aug2], dim=0) # (M, B, D)
+        probs = probs.reshape(-1, probs.shape[-1]) # (M*B, D)
+        labels = labels.repeat(3) # (M,)
+
+        weighted_kld_list = []
+        for i in range(len(probs)):
+            # Anchor
+            anchor = probs[i]
+
+            # Mixture of positives (with same label)
+            y_mask = torch.eq(labels, labels[i])
+            num_pos = torch.sum(y_mask)
+            y_mask = y_mask.unsqueeze(-1).expand(probs.size())
+
+            mixture = torch.sum(probs * y_mask, dim=0) / num_pos
+
+            # Calculate JSD
+            weighted_kld = kl_div(mixture.clamp(min=eps).log().unsqueeze(0),
+                                  anchor.unsqueeze(0),
+                                  reduction=self.reduction) / num_pos
+            weighted_kld_list.append(weighted_kld)
+
+        weighted_kld = torch.stack(weighted_kld_list, dim=0)
+        jsd = torch.sum(weighted_kld)
+        return jsd
 
 
 class SelfJSD(nn.Module):
@@ -16,7 +52,6 @@ class SelfJSD(nn.Module):
         self.reduction = reduction
 
     def forward(self, logits_clean, logits_aug1, logits_aug2, labels=None):
-        # temporary deprecated
         logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
                                                  F.normalize(logits_aug1, dim=1), \
                                                  F.normalize(logits_aug2, dim=1),
@@ -49,12 +84,14 @@ class ContrastiveLossPlus(nn.Module):
             weights = torch.ones(M) / M
             weighted_generalized_jsd = WeightedGeneralizedJSD(weights=weights, scale=True)
             self.loss_criterion = SelfJSD(jsd_criterion=weighted_generalized_jsd, reduction='mean')
+        elif self.version in ['0.0.4']:
+            self.loss_criterion = SupJSD(reduction='mean')
         else:
             raise NotImplementedError(f'does not support version=={version}')
 
         if self.version in ['0.0.1']:
             self.target = 'bbox_feats'
-        elif self.version in ['0.0.2', '0.0.3']:
+        elif self.version in ['0.0.2', '0.0.3', '0.0.4']:
             self.target = 'cls_feats'
         else:
             raise NotImplementedError(f'does not support version=={version}')
