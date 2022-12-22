@@ -5,6 +5,7 @@
 from .gen_auto_augment import (GenAutoAugment, BrightnessTransform, ColorTransform,
                            ContrastTransform, EqualizeTransform, Rotate, Shear,
                            Translate)
+from .rand_auto_augment import RandAutoAugment
 from .compose import Compose
 from .formating import (Collect, DefaultFormatBundle, ImageToTensor,
                         ToDataContainer, ToTensor, Transpose, to_tensor)
@@ -29,5 +30,5 @@ __all__ = [
     'Rotate', 'ColorTransform', 'EqualizeTransform', 'BrightnessTransform',
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
     'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix',
-    'GenAutoAugment', # 'AutoAugment',
+    'GenAutoAugment', 'RandAutoAugment', # 'AutoAugment',
 ]
