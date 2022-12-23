@@ -9,14 +9,20 @@ from .divergence import kl_div
 
 
 class SupJSD(nn.Module):
-    def __init__(self, reduction='mean'):
+    def __init__(self, reduction='mean', use_softmax=False):
         super(SupJSD, self).__init__()
         self.reduction = reduction
+        self.use_softmax = use_softmax
 
     def forward(self, logits_clean, logits_aug1, logits_aug2, labels=None, eps=1e-7):
-        logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
-                                                 F.normalize(logits_aug1, dim=1), \
-                                                 F.normalize(logits_aug2, dim=1),
+        if self.use_softmax:
+            logits_clean, logits_aug1, logits_aug2 = F.softmax(logits_clean, dim=1), \
+                                                     F.softmax(logits_aug1, dim=1), \
+                                                     F.softmax(logits_aug2, dim=1),
+        else: # F.normalize
+            logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
+                                                     F.normalize(logits_aug1, dim=1), \
+                                                     F.normalize(logits_aug2, dim=1),
 
         probs = torch.stack([logits_clean, logits_aug1, logits_aug2], dim=0) # (M, B, D)
         probs = probs.reshape(-1, probs.shape[-1]) # (M*B, D)
@@ -92,14 +98,14 @@ class ContrastiveLossPlus(nn.Module):
             weights = torch.ones(M) / M
             weighted_generalized_jsd = WeightedGeneralizedJSD(weights=weights, scale=True)
             self.loss_criterion = SelfJSD(jsd_criterion=weighted_generalized_jsd, reduction='mean', use_softmax=self.use_softmax)
-        elif self.version in ['0.0.4']:
-            self.loss_criterion = SupJSD(reduction='mean')
+        elif self.version in ['0.0.4', '0.0.6']:
+            self.loss_criterion = SupJSD(reduction='mean', use_softmax=self.use_softmax)
         else:
             raise NotImplementedError(f'does not support version=={version}')
 
         if self.version in ['0.0.1']:
             self.target = 'bbox_feats'
-        elif self.version in ['0.0.2', '0.0.3', '0.0.4', '0.0.5']:
+        elif self.version in ['0.0.2', '0.0.3', '0.0.4', '0.0.5', '0.0.6']:
             self.target = 'cls_feats'
         else:
             raise NotImplementedError(f'does not support version=={version}')
