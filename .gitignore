@@ -5,6 +5,10 @@ __pycache__/
 
 # npy
 outputs/
+src/
+
+configs/aioneteam/outdated/
+
 
 # C extensions
 *.so
