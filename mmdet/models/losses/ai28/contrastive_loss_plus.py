@@ -46,15 +46,21 @@ class SupJSD(nn.Module):
 
 
 class SelfJSD(nn.Module):
-    def __init__(self, jsd_criterion, reduction='mean'):
+    def __init__(self, jsd_criterion, reduction='mean', use_softmax=False):
         super(SelfJSD, self).__init__()
         self.jsd_criterion = jsd_criterion
         self.reduction = reduction
+        self.use_softmax = use_softmax
 
     def forward(self, logits_clean, logits_aug1, logits_aug2, labels=None):
-        logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
-                                                 F.normalize(logits_aug1, dim=1), \
-                                                 F.normalize(logits_aug2, dim=1),
+        if self.use_softmax:
+            logits_clean, logits_aug1, logits_aug2 = F.softmax(logits_clean, dim=1), \
+                                                     F.softmax(logits_aug1, dim=1), \
+                                                     F.softmax(logits_aug2, dim=1),
+        else: # F.normalize
+            logits_clean, logits_aug1, logits_aug2 = F.normalize(logits_clean, dim=1), \
+                                                     F.normalize(logits_aug1, dim=1), \
+                                                     F.normalize(logits_aug2, dim=1),
 
         prob_list = [logits_aug1, logits_aug2]
         targets = logits_clean
@@ -69,21 +75,23 @@ class ContrastiveLossPlus(nn.Module):
     def __init__(self,
                  version='0.0.1',
                  loss_weight=0.01,
+                 use_softmax=False,
                  **kwargs):
         """ContrastiveLossPlus."""
         super(ContrastiveLossPlus, self).__init__()
         self.version = version
         self.loss_weight = loss_weight
+        self.use_softmax = use_softmax
         self.kwargs = kwargs
 
         if self.version in ['0.0.1', '0.0.2']:
             self.loss_criterion = supcontrast
-        elif self.version in ['0.0.3']:
+        elif self.version in ['0.0.3', '0.0.5']:
             from mmdet.models.losses.ai28.divergence import WeightedGeneralizedJSD
             M = 3
             weights = torch.ones(M) / M
             weighted_generalized_jsd = WeightedGeneralizedJSD(weights=weights, scale=True)
-            self.loss_criterion = SelfJSD(jsd_criterion=weighted_generalized_jsd, reduction='mean')
+            self.loss_criterion = SelfJSD(jsd_criterion=weighted_generalized_jsd, reduction='mean', use_softmax=self.use_softmax)
         elif self.version in ['0.0.4']:
             self.loss_criterion = SupJSD(reduction='mean')
         else:
@@ -91,7 +99,7 @@ class ContrastiveLossPlus(nn.Module):
 
         if self.version in ['0.0.1']:
             self.target = 'bbox_feats'
-        elif self.version in ['0.0.2', '0.0.3', '0.0.4']:
+        elif self.version in ['0.0.2', '0.0.3', '0.0.4', '0.0.5']:
             self.target = 'cls_feats'
         else:
             raise NotImplementedError(f'does not support version=={version}')
