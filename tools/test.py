@@ -17,6 +17,7 @@ from mmdet.apis import multi_gpu_test, single_gpu_test, single_gpu_test_fpn, sin
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.models import build_detector
+from mmdet.core.hook import FeatureHook
 
 
 def parse_args():
@@ -212,11 +213,16 @@ def main():
     else:
         model.CLASSES = dataset.CLASSES
 
+    features_list = ['neck.detect1', 'neck.detect2', 'neck.detect3', ]
+    hook = FeatureHook(features_list)
+    hook.hook_multi_layer(model, features_list)
+
     if not distributed:
         model = MMDataParallel(model, device_ids=cfg.gpu_ids)
         # outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
         #                           args.show_score_thr)
         # if 'demo' in cfg.data.test.img_prefix:
+
         if args.save_fpn:
             outputs = single_gpu_test_feature(model, data_loader, cfg, args.show, args.show_dir,
                                           args.show_score_thr, args.save_fpn)

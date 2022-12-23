@@ -115,10 +115,10 @@ def single_gpu_test_feature(model,
                 img_show = mmcv.imresize(img_show, (ori_w, ori_h))
 
                 if out_dir:
-                    pred_dir = osp.join(out_dir, 'pred')
-                    if not osp.exists(pred_dir):
-                        os.mkdir(pred_dir)
-                    out_file = osp.join(pred_dir, img_meta['ori_filename'])
+                    # pred_dir = osp.join(out_dir, 'pred')
+                    # if not osp.exists(pred_dir):
+                    #     os.mkdir(pred_dir)
+                    out_file = osp.join(out_dir, img_meta['ori_filename'])
                 else:
                     out_file = None
 
@@ -138,30 +138,41 @@ def single_gpu_test_feature(model,
         if save_fpn:
             assert out_dir != None
 
-            # save bbox or mask results
             img_metas = data['img_metas'][0].data[0][0]
             scene, filename = osp.split(img_metas['ori_filename'])
             scene_dir = osp.join(out_dir, scene)
             if not osp.exists(scene_dir):
                 os.mkdir(scene_dir)
-            result_dir = osp.join(scene_dir, 'result')
-            if not osp.exists(result_dir):
-                os.mkdir(result_dir)
-            result_file = osp.join(result_dir, filename[:-4] + ".npy")
-            np.save(result_file, result[0])
 
-            for i, fpn in enumerate(model.module.fpn_features):
-                fpn = fpn.squeeze(dim=0)
-                fpn_dir = osp.join(scene_dir, 'fpn{}'.format(i))
-                if not osp.exists(fpn_dir):
-                    os.mkdir(fpn_dir)
-                out_file = osp.join(fpn_dir, filename[:-4] + ".npy")
-                np.save(out_file, fpn.cpu().detach().numpy())
-                if show:
-                    out_png = osp.join(fpn_dir, filename[:-4] + ".png")
-                    k = fpn.cpu().detach().numpy()
-                    k = k.mean(axis=0)
-                    plt.imsave(out_png, k, cmap='gray')
+            # # save bbox or mask results
+            # result_dir = osp.join(scene_dir, 'result')
+            # if not osp.exists(result_dir):
+            #     os.mkdir(result_dir)
+            # result_file = osp.join(result_dir, filename[:-4] + ".npy")
+            # np.save(result_file, result[0])
+
+            # for i, fpn in enumerate(model.module.fpn_features)
+            #     fpn = fpn.squeeze(dim=0)
+            #     fpn_dir = osp.join(scene_dir, 'fpn{}'.format(i))
+            #     if not osp.exists(fpn_dir):
+            #         os.mkdir(fpn_dir)
+            #     out_file = osp.join(fpn_dir, filename[:-4] + ".npy")
+            #     np.save(out_file, fpn.cpu().detach().numpy())
+            #     if show:
+            #         out_png = osp.join(fpn_dir, filename[:-4] + ".png")
+            #         k = fpn.cpu().detach().numpy()
+            #         k = k.mean(axis=0)
+            #         plt.imsave(out_png, k, cmap='gray')
+            for key, feature in model.module.features.items():
+                feature = feature[0].squeeze(dim=0)
+                # feature_dir = osp.join(scene_dir, f'{filename[:-4]}_{key}')
+                # if not osp.exists(feature_dir):
+                #     os.mkdir(feature_dir)
+                out_png = osp.join(scene_dir, f'{filename[:-4]}_{key}.png')
+                k = feature.cpu().detach().numpy()
+                k = k.mean(axis=0)
+                plt.imsave(out_png, k, cmap='gray')
+
 
         for _ in range(batch_size):
             prog_bar.update()
