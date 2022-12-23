@@ -18,6 +18,7 @@ from .transforms import (Albu, CutOut, Expand, MinIoURandomCrop, MixUp, Mosaic,
                          RandomCenterCropPad, RandomCrop, RandomFlip,
                          RandomShift, Resize, SegRescale, YOLOXHSVRandomAug)
 from .pixmix import PixMix
+from .augmix_detection import AugMixDetection
 
 __all__ = [
     'Compose', 'to_tensor', 'ToTensor', 'ImageToTensor', 'ToDataContainer',
@@ -31,4 +32,5 @@ __all__ = [
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
     'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix',
     'GenAutoAugment', 'RandAutoAugment', # 'AutoAugment',
+    'AugMixDetection',
 ]
