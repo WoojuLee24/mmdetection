@@ -483,7 +483,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             right_bottom = int(bboxes[i, 2]), int(bboxes[i, 3])
             # mask = mask * 255
             cv2.rectangle(img, left_top, right_bottom, color=(0, 0, 255), thickness=3)
-        cv2.imwrite("/ws/data/log_kt/debug/tensor/{}.png".format(name), img)
+        cv2.imwrite("/ws/data/log_kt/debug/{}.png".format(name), img)
 
 
     def save_ori_feature_tensor(self, feature, data, aug_parameters, name, visualize=False):
@@ -508,8 +508,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             img = torch.squeeze(out)
             img = img.detach().cpu().numpy()
             img = img.copy()
-            plt.imsave(f"/ws/data2/debug/{name}.png", img, cmap='gray')
-            pdb.set_trace()
+            plt.imsave(f"/ws/data/log_kt/debug/{name}.png", img, cmap='gray')
 
         return out
 
@@ -533,8 +532,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             img = torch.squeeze(feature)
             img = img.detach().cpu().numpy()
             img = img.copy()
-            plt.imsave(f"/ws/data2/debug/{name}.png", img, cmap='gray')
-            pdb.set_trace()
+            plt.imsave(f"/ws/data/log_kt/debug/{name}.png", img, cmap='gray')
 
         return out
 
@@ -674,23 +672,25 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         ori_data = data[0]
         aug_data = data[1]
-        aug_parameters = data[1]['aug_parameters']
+        aug_parameters = aug_data.pop('aug_parameters')
+        # aug_parameters = data[1]['aug_parameters']
         # con_data = self.concat_data(ori_data, aug_data)
         losses = self(**ori_data)
-        _ = self(**aug_data)
+        # _ = self(**aug_data)
+        fe = self.extract_feat(aug_data['img'])
         # self.save_tensor(ori_data, name='ori_data')
         # self.save_tensor(aug_data, name='aug_data')
 
         additional_loss = 0
-        for key, features in self.features.items():
+        for i, (key, features) in enumerate(self.features.items()):
             ori_features = features[0]
             aug_features = features[1]
             ori_out = self.save_ori_feature_tensor(ori_features, ori_data, aug_parameters, name='ori_features',
                                                    visualize=False)
             aug_out = self.save_aug_feature_tensor(aug_features, aug_data, aug_parameters, name='aug_features',
                                                    visualize=False)
-
-            loss_ = self.mse_loss(ori_out, aug_out)
+            lambda_weight = self.train_cfg.lambda_weight[i]
+            loss_ = self.mse_loss(ori_out, aug_out, lambda_weight)
             # loss_2 = self.cosine_similarity(ori_out, aug_out)
             additional_loss += loss_
 
