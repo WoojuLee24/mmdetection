@@ -6,7 +6,8 @@ import torch.nn.functional as F
 from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
-from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02
+from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
+    analyze_representations_1input, analyze_representations_3input
 
 
 def cross_entropy(pred,
@@ -14,6 +15,7 @@ def cross_entropy(pred,
                   weight=None,
                   reduction='mean',
                   avg_factor=None,
+                  analysis=False,
                   class_weight=None,
                   ignore_index=-100):
     """Calculate the CrossEntropy loss.
@@ -424,11 +426,51 @@ def jsdv1_3(pred,
     return loss, p_distribution
 
 
+def analyze_shared_fcs(pred,
+                        label,
+                        weight=None,
+                        reduction='mean',
+                        avg_factor=None,
+                        analysis=False,
+                        **kwargs):
+
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    feature = feature_cls_feats
+
+    feature_analysis = analyze_representations_1input(feature, label,)
+
+    return loss, feature_analysis
+
+
 def ntxent(pred,
            label,
            weight=None,
            reduction='mean',
            avg_factor=None,
+           analysis=False,
            **kwargs):
     """Calculate the ntxent loss
 
@@ -448,21 +490,32 @@ def ntxent(pred,
     # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
 
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
     from mmdet.models.detectors.base import FEATURES
-    k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
-    if k.dim() == 4: # if rpn
-        pass
-    elif k.dim() == 2: # if roi
-        features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
-        label_orig, _, _ = torch.chunk(label, 3)
-        label_orig = label_orig.unsqueeze(dim=1)
-        ntxent_loss = supcontrast(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+    k = FEATURES
+    # from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
 
-    loss = ntxent_loss
-    p_distribution = {}
+    for key, feature in FEATURES.items():
+        k = feature[0]
+        if k.dim() == 4: # if rpn
+            pass
+        elif k.dim() == 2: # if roi
+            features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
+            label_orig, _, _ = torch.chunk(label, 3)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    return loss, p_distribution
+        if analysis:
+            feature_analysis = analyze_representations(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
 
 
 def ntxentv0_01(pred,
@@ -470,6 +523,7 @@ def ntxentv0_01(pred,
                 weight=None,
                 reduction='mean',
                 avg_factor=None,
+                analysis=False,
                 **kwargs):
     """Calculate the ntxent loss
 
@@ -489,6 +543,7 @@ def ntxentv0_01(pred,
     # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
+    features = {}
 
     from mmdet.models.detectors.base import FEATURES
     k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
@@ -500,10 +555,12 @@ def ntxentv0_01(pred,
         label_orig = label_orig.unsqueeze(dim=1)
         ntxent_loss = supcontrastv0_01(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    loss = ntxent_loss
-    p_distribution = {}
+    if analysis:
+        features = analyze_representations(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    return loss, p_distribution
+    loss = ntxent_loss
+
+    return loss, features
 
 
 def ntxentv0_02(pred,
@@ -511,6 +568,7 @@ def ntxentv0_02(pred,
                 weight=None,
                 reduction='mean',
                 avg_factor=None,
+                analysis=False,
                 **kwargs):
 
     """Calculate the ntxent loss
@@ -531,6 +589,7 @@ def ntxentv0_02(pred,
     # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
+    features = {}
 
     from mmdet.models.detectors.base import FEATURES
     k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
@@ -542,10 +601,12 @@ def ntxentv0_02(pred,
         label_orig = label_orig.unsqueeze(dim=1)
         ntxent_loss = supcontrastv0_02(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    loss = ntxent_loss
-    p_distribution = {}
+    if analysis:
+        features = analyze_representations(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
-    return loss, p_distribution
+    loss = ntxent_loss
+
+    return loss, features
 
 
 def jsdv1_3_1(pred,
@@ -1301,6 +1362,7 @@ class CrossEntropyLossPlus(nn.Module):
                  additional_loss2=None,
                  lambda_weight2=0.0001,
                  temper=1,
+                 analysis=False,
                  add_act=None,
                  wandb_name=None,
                  **kwargs):
@@ -1334,6 +1396,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.lambda_weight = lambda_weight
         self.lambda_weight2 = lambda_weight2
         self.temper = temper
+        self.analysis = analysis
         self.add_act = add_act
         self.wandb_name = wandb_name
 
@@ -1345,6 +1408,8 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_features[f'additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
+
+        self.sum_features = dict()
 
         if self.use_sigmoid:
             self.cls_criterion = binary_cross_entropy
@@ -1394,6 +1459,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxentv0_01
         elif self.additional_loss2 == 'ntxentv0_02':
             self.cls_additional2 = ntxentv0_02
+        elif self.additional_loss2 == 'analyze_shared_fcs':
+            self.cls_additional2 = analyze_shared_fcs
         else:
             self.cls_additional2 = None
 
@@ -1490,7 +1557,7 @@ class CrossEntropyLossPlus(nn.Module):
                 add_act=self.add_act,
                 ignore_index=ignore_index,
                 class_weight=class_weight,
-                lambda_weight=self.lambda_weight
+                lambda_weight=self.lambda_weight,
             )
 
             # wandb for rpn
@@ -1505,8 +1572,17 @@ class CrossEntropyLossPlus(nn.Module):
                 self.wandb_features[f'additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
                 self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
 
+            if any(self.sum_features) == False:
+                self.sum_features[f'iteration'] = 1
+                for key, value in p_distribution2.items():
+                    self.sum_features[f'{key}({self.wandb_name})'] = 0
+
             for key, value in p_distribution2.items():
-                self.wandb_features[f'{key}({self.wandb_name})'] = value
+                self.sum_features[f'{key}({self.wandb_name})'] += value
+
+            self.wandb_features.update(self.sum_features)
+
+                # self.wandb_features[f'{key}({self.wandb_name})'] = value
 
 
         loss = loss_cls + self.lambda_weight * loss_additional + self.lambda_weight2 * loss_additional2

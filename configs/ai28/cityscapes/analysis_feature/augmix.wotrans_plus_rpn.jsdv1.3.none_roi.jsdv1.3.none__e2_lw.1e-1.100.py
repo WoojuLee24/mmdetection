@@ -32,29 +32,32 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
+            , additional_loss='None', lambda_weight=0.1, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls'
-                , contrastive_loss=dict(type='supcon')),
+                , additional_loss='None', lambda_weight=100, wandb_name='roi_cls',
+                additional_loss2='analyze_shared_fcs', lambda_weight2=0, analysis=True,),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))
-        loss_feat=dict(type='ContrastiveLossPlus', version='0.0.2', loss_weight=0.01),
-    ),
+                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
-                features_list=[],
+                features_list=['roi_head.bbox_head.shared_fcs.1'],
                 vars=['log_vars']),
         )))
 
 ###############
 ### DATASET ###
 ###############
+
+# dataset settings
+dataset_type = 'CityscapesDataset'
+data_root = '/ws/data/cityscapes/'
+
 custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix'], allow_failed_imports=False)
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -69,20 +72,86 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'img2', 'img3', 'gt_bboxes', 'gt_labels']),
+    dict(type='Collect', keys=['img', 'img2', 'img3', 'gt_bboxes', 'gt_labels', ]),
 ]
+
+test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='Resize', img_scale=(2048, 1024), keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.0),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size_divisor=32),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', ]),
+]
+
+# test_pipeline = [
+#     dict(type='LoadImageFromFile'),
+#     dict(type='LoadAnnotations', with_bbox=True),
+#     dict(
+#         type='MultiScaleFlipAug',
+#         img_scale=(2048, 1024),
+#         flip=False,
+#         transforms=[
+#             dict(type='Resize', keep_ratio=True),
+#             dict(type='RandomFlip'),
+#             dict(type='Normalize', **img_norm_cfg),
+#             dict(type='Pad', size_divisor=32),
+#             dict(type='ImageToTensor', keys=['img']),
+#             dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+#         ])
+# ]
+
+# data = dict(
+#     samples_per_gpu=1,
+#     workers_per_gpu=1,
+#     train=dict(
+#         dataset=dict(
+#             pipeline=train_pipeline)),
+#     val=dict(
+#         pipeline=test_pipeline,
+#     ),
+# )
+
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=2,
     train=dict(
+        type='RepeatDataset',
+        times=8,
         dataset=dict(
-            pipeline=train_pipeline)),)
+            type=dataset_type,
+            ann_file=data_root +
+            'annotations/instancesonly_filtered_gtFine_train.json',
+            img_prefix=data_root + 'leftImg8bit/train/',
+            pipeline=train_pipeline)),
+    val=dict(
+        type=dataset_type,
+        ann_file=data_root +
+        'annotations/instancesonly_filtered_gtFine_val.json',
+        img_prefix=data_root + 'leftImg8bit/val/',
+        pipeline=test_pipeline),
+    test=dict(
+        type=dataset_type,
+        ann_file=data_root +
+        'annotations/instancesonly_filtered_gtFine_val.json',
+        img_prefix=data_root + 'leftImg8bit/val/',
+        pipeline=test_pipeline))
+
 
 ################
 ### RUN TIME ###
 ################
 runner = dict(
-    type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
+    type='EpochBasedRunner', max_epochs=2)  # actual epoch = 8 * 8 = 64
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    # [7] yields higher performance than [6]
+    step=[1])
 
 ###########
 ### LOG ###
@@ -130,8 +199,6 @@ elif str_loss == 'augmix':
     str_each_loss += f".{'jsd' if (roi_loss_bbox['type'] == 'L1LossAugMix') or (roi_loss_bbox['type'] == 'SmoothL1LossAugMix') else 'none'}"
 else:
     str_each_loss = "rpn.none.none_roi.none.none"
-if 'contrastive_loss' in roi_loss_cls:
-    str_each_loss = str_each_loss.replace(f"_roi.{roi_loss_cls['additional_loss'].lower()}", f"_roi.{roi_loss_cls['contrastive_loss']['type']}")
 # parameters
 str_parameters = '__'
 str_parameters += 'e'+str(runner['max_epochs'])
@@ -151,24 +218,24 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
-                                              'config': {
-                                                  # data pipeline
-                                                  'data pipeline': f"{str_pipeline}",
-                                                  # losses
-                                                  'loss type(rpn_cls)': f"{rpn_loss_cls['type']}",
-                                                  'loss type(rpn_bbox)': f"{rpn_loss_bbox['type']}",
-                                                  'loss type(roi_cls)': f"{roi_loss_cls['type']}",
-                                                  'loss type(roi_bbox)': f"{roi_loss_bbox['type']}",
-                                                  # parameters
-                                                  'epoch': runner['max_epochs'],
-                                              }},
-                           interval=500,
-                           log_checkpoint=True,
-                           log_checkpoint_metadata=True,
-                           num_eval_images=5),
+                      # dict(type='WandbLogger',
+                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                      #                         'name': "augmix.wotrans_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none__e2_lw.1e-1.100",
+                      #                         'config': {
+                      #                             # data pipeline
+                      #                             'data pipeline': f"{str_pipeline}",
+                      #                             # losses
+                      #                             'loss type(rpn_cls)': f"{rpn_loss_cls['type']}",
+                      #                             'loss type(rpn_bbox)': f"{rpn_loss_bbox['type']}",
+                      #                             'loss type(roi_cls)': f"{roi_loss_cls['type']}",
+                      #                             'loss type(roi_bbox)': f"{roi_loss_bbox['type']}",
+                      #                             # parameters
+                      #                             'epoch': runner['max_epochs'],
+                      #                         }},
+                      #      interval=500,
+                      #      log_checkpoint=True,
+                      #      log_checkpoint_metadata=True,
+                      #      num_eval_images=5),
                   ]
                   )
 

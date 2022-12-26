@@ -31,24 +31,34 @@ _base_ = [
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
+            additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls',
+            additional_loss2=None, lambda_weight2=1),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
+            type='Shared2FCBBoxHeadXent',
+            in_channels=256,
+            fc_out_channels=1024,
+            roi_feat_size=7,
+            num_cls_fcs=1,
+            num_classes=8,
+            bbox_coder=dict(
+                type='DeltaXYWHBBoxCoder',
+                target_means=[0., 0., 0., 0.],
+                target_stds=[0.1, 0.1, 0.2, 0.2]),
+            reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls'
-                , contrastive_loss=dict(type='supcon')),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
+                additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls',
+                additional_loss2='ntxent', lambda_weight2=0, analysis=True,),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))
-        loss_feat=dict(type='ContrastiveLossPlus', version='0.0.2', loss_weight=0.01),
-    ),
+                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
-                features_list=[],
+                features_list=['roi_head.bbox_head.cls_fcs.0', "rpn_head.rpn_cls"],
                 vars=['log_vars']),
         )))
 
@@ -73,7 +83,7 @@ train_pipeline = [
 ]
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=2,
     train=dict(
         dataset=dict(
             pipeline=train_pipeline)),)
@@ -82,7 +92,14 @@ data = dict(
 ### RUN TIME ###
 ################
 runner = dict(
-    type='EpochBasedRunner', max_epochs=1)  # actual epoch = 8 * 8 = 64
+    type='EpochBasedRunner', max_epochs=2)  # actual epoch = 8 * 8 = 64
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    # [7] yields higher performance than [6]
+    step=[1])
 
 ###########
 ### LOG ###
@@ -130,8 +147,6 @@ elif str_loss == 'augmix':
     str_each_loss += f".{'jsd' if (roi_loss_bbox['type'] == 'L1LossAugMix') or (roi_loss_bbox['type'] == 'SmoothL1LossAugMix') else 'none'}"
 else:
     str_each_loss = "rpn.none.none_roi.none.none"
-if 'contrastive_loss' in roi_loss_cls:
-    str_each_loss = str_each_loss.replace(f"_roi.{roi_loss_cls['additional_loss'].lower()}", f"_roi.{roi_loss_cls['contrastive_loss']['type']}")
 # parameters
 str_parameters = '__'
 str_parameters += 'e'+str(runner['max_epochs'])
@@ -152,8 +167,8 @@ log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "ai28",
-                                              'name': f"{str_pipeline}_{str_loss}_{str_each_loss}{str_parameters}",
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': "augmix.wotrans_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none.ntxent__e2_lw.1e-1.100.0",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{str_pipeline}",

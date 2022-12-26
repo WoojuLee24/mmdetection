@@ -207,7 +207,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
 
     @auto_fp16(apply_to=('img', ))
-    def forward(self, img, img_metas, return_loss=True, **kwargs):
+    def forward(self, img, img_metas, return_loss=True, analysis=False, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
 
@@ -224,6 +224,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         if 'analysis_background' in kwargs: # ANALYSIS[CODE=001]
             if kwargs['analysis_background']:
                 return self.analysis_background(img, img_metas, **kwargs)
+
+        if analysis == True:
+            return self.forward_analysis(img, img_metas, **kwargs)
 
         if return_loss:
             global FEATURES # DEV[CODE=201]: Contrastive Loss
