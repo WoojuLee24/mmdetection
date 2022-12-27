@@ -83,6 +83,7 @@ def evalimage(img):
             # target_index = target_names.index(class_names[label]) + 1
             bboxes.append(bbox)
             labels.append(label)
+    print("labels: ", labels)
 
     # print("bboxes_target: ", bboxes_target)
     # print("labels_target: ", labels_target)
@@ -136,6 +137,7 @@ def callback_img(data):
 
     t0 = time.time()
     feature_points = []
+    feature_maps = []
 
     if args.name == 'yolo':
         selected_feature = 2
@@ -145,8 +147,6 @@ def callback_img(data):
     with torch.no_grad():
         for i, feature in enumerate(feats):
             feature = feature[0]
-            print("key: ", i)
-            print("feature shape: ", feature.size())
 
             if args.show and i==selected_feature:
                 feature_npy = feature.mean(dim=0).cpu().detach().numpy()
@@ -183,12 +183,12 @@ def callback_img(data):
             feature = feature[:128]
             inds = get_feature_percentage(feature)
 
-            print("inds size: ", inds.size())
             feature_selected = feature[:, inds[:, 0], inds[:, 1]]  # (C, N)
             feature_selected = feature_selected.transpose(1, 0)  # (N, C)
             feature_point = torch.cat([inds, feature_selected], dim=1)  # (N, 2+C)
             feature_point = feature_point.flatten()  # (N*(2+C),)
             feature_points.append(feature_point)
+            feature_maps.append(feature)
             print('feature_point shape: ', feature_point.size())
 
 
@@ -204,6 +204,9 @@ def callback_img(data):
         img_H = np.shape(img_debug)[0]  # 480
         img_W = np.shape(img_debug)[1]  # 848
 
+        print('img_H: ', img_H)
+        print('img_W: ', img_W)
+
         # bbox : (X1, X2, Y1, Y2, Score)
         # print('bboxes:', bboxes)
 
@@ -215,13 +218,14 @@ def callback_img(data):
         xy = 2
         stride = channel + xy
         if args.name == 'yolo':
-            scale_x = 44
-            scale_y = 76
+            scale_x = 76
+            scale_y = 44
             feat_0 = feature_points[2]
+            print("feat_0 shape: ", feat_0.size())
             N_feat0 = len(feat_0) // stride
         elif args.name == 'fast':
-            scale_x = 120  # 120, 60, 30
-            scale_y = 216  # 216, 108, 54
+            scale_x = 216 #120  # 120, 60, 30
+            scale_y = 120 #216  # 216, 108, 54
             feat_0 = feature_points[0]
             print("feat_0 shape: ", feat_0.size())
             N_feat0 = len(feat_0) // stride
@@ -229,14 +233,21 @@ def callback_img(data):
             scale_x = 80  # 80, 40, 20
             scale_y = 80  # 80, 40, 20
 
+
         ## feature 정보 이미지로 만들기
         # featImg = np.zeros((img_H, img_W), dtype=np.uint8)  # 480 * 848
 
         t0 = time.time()
         for i in range(N_feat0):
-            up_x = round(feat_0[i * stride].item() * img_H / scale_x)
-            up_y = round(feat_0[i * stride + 1].item() * img_W / scale_y)
-            # print("x, y", feat_0[i*stride].item(), feat_0[i*stride+1].item())
+
+
+            print("x, y", feat_0[i*stride+1].item(), feat_0[i*stride].item())
+            up_y = round(feat_0[i * stride].item() * img_H / scale_y)
+            up_x = round(feat_0[i * stride + 1].item() * img_W / scale_x)
+            # up_x = round(feat_0[i * stride].item() * img_W / scale_x)
+            # up_y = round(feat_0[i * stride + 1].item() * img_H / scale_y)
+            print("x, y", feat_0[i*stride+1].item(), feat_0[i*stride].item())
+
             img_debug = cv2.circle(img_debug, (up_x, up_y), 6, (0, 0, 255), -1)
             #### 아래 부분은 피쳐정보를 segmentation image 처럼 이미지화하기 위함.
             #### 굳이 필요없음.
@@ -250,6 +261,7 @@ def callback_img(data):
             #     featImg[up_x, up_y] = 255
             # else: featImg[up_x, up_y] = round(feat_sum)
             # print("x, y, f", up_x, up_y, feat_sum, featImg[up_x, up_y])
+
 
         plt.imsave(f'/ws/data/log_kt/demo/debug/{t0}_debug.png', img_debug)
 
