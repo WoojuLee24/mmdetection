@@ -320,7 +320,8 @@ class BBoxHead(BaseModule):
                                 bbox_targets,
                                 bbox_weights)
 
-        return losses, self.loss_cls.wandb_features
+        # return losses, self.loss_cls.wandb_features # analysis feature code
+        return losses
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
     def get_bboxes(self,
