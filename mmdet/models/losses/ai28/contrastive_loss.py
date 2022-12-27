@@ -173,20 +173,20 @@ def analyze_representations_1input(logits, labels=None, lambda_weight=12, temper
     mse_matrix = make_matrix(logits, logits, criterion=nn.MSELoss(reduction='none'), reduction='mean')
 
     mse_matrix_diff_class = mse_matrix * mask_diff_triuu
-    mse_distance_diff_class = mse_matrix_diff_class.sum() / mask_diff_triuu.sum().detach()
+    mse_distance_diff_class = mse_matrix_diff_class.sum() # / mask_diff_triuu.sum().detach()
 
     mse_matrix_same_class = mse_matrix * mask_same_triuu
-    mse_distance_same_class = mse_matrix_same_class.sum() / mask_same_triuu.sum().detach()
+    mse_distance_same_class = mse_matrix_same_class.sum() # / mask_same_triuu.sum().detach()
 
     # Cosine Similarity matrix
     cs_matrix = make_matrix(logits, logits, criterion=nn.CosineSimilarity(dim=1), reduction='none')
     cs_matrix = cs_matrix.squeeze(dim=-1)
 
     cs_matrix_diff_class = cs_matrix * mask_diff_triuu
-    cs_distance_diff_class = cs_matrix_diff_class.sum() / mask_diff_triuu.sum().detach()
+    cs_distance_diff_class = cs_matrix_diff_class.sum() # / mask_diff_triuu.sum().detach()
 
     cs_matrix_same_class = cs_matrix * mask_same_triuu
-    cs_distance_same_class = cs_matrix_same_class.sum() / mask_same_triuu.sum().detach()
+    cs_distance_same_class = cs_matrix_same_class.sum() # / mask_same_triuu.sum().detach()
 
     # class-wise distance
     # confusion_matrix_jsd = torch.zeros(9, 9)
@@ -221,14 +221,14 @@ def analyze_representations_1input(logits, labels=None, lambda_weight=12, temper
     features = {
                 # 'jsd_distance_diff_class': jsd_distance_diff_class.detach(),
                 # 'jsd_distance_same_class': jsd_distance_same_class.detach(),
-                'mse_distance_diff_class': mse_distance_diff_class.detach(),
-                'mse_distance_same_class': mse_distance_same_class.detach(),
-                'cs_distance_diff_class': cs_distance_diff_class.detach(),
-                'cs_distance_same_class': cs_distance_same_class.detach(),
+                'mse_distance_diff_class': mse_distance_diff_class.detach().cpu().numpy(),
+                'mse_distance_same_class': mse_distance_same_class.detach().cpu().numpy(),
+                'cs_distance_diff_class': cs_distance_diff_class.detach().cpu().numpy(),
+                'cs_distance_same_class': cs_distance_same_class.detach().cpu().numpy(),
                 # 'confusion_matrix_jsd': confusion_matrix_jsd.detach(),
-                'confusion_matrix_l2': confusion_matrix_l2.detach(),
-                'confusion_matrix_cs': confusion_matrix_cs.detach(),
-                'matrix_sample_number': confusion_matrix_sample_number.detach(),
+                'confusion_matrix_l2': confusion_matrix_l2.detach().cpu().numpy(),
+                'confusion_matrix_cs': confusion_matrix_cs.detach().cpu().numpy(),
+                'matrix_sample_number': confusion_matrix_sample_number.detach().cpu().numpy(),
                 }
 
     return features

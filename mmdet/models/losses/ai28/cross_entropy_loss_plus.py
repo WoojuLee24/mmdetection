@@ -15,7 +15,6 @@ def cross_entropy(pred,
                   weight=None,
                   reduction='mean',
                   avg_factor=None,
-                  analysis=False,
                   class_weight=None,
                   ignore_index=-100):
     """Calculate the CrossEntropy loss.
@@ -56,6 +55,53 @@ def cross_entropy(pred,
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
 
     return loss
+
+
+def cross_entropy_analysis(pred,
+                          label,
+                          weight=None,
+                          reduction='mean',
+                          avg_factor=None,
+                          class_weight=None,
+                          ignore_index=-100):
+    """Calculate the CrossEntropy loss.
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+        class_weight (list[float], optional): The weight for each class.
+        ignore_index (int | None): The label index to be ignored.
+            If None, it will be set to default value. Default: -100.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+    # The default value of ignore_index is the same as F.cross_entropy
+    ignore_index = -100 if ignore_index is None else ignore_index
+
+    pred_orig = pred
+    label = label
+
+    loss = F.cross_entropy(
+        pred_orig,
+        label,
+        weight=class_weight,
+        reduction='none',
+        ignore_index=ignore_index)
+
+    # apply weights and do the reduction
+    if weight is not None:
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    return loss
+
 
 
 def _expand_onehot_labels(labels, label_weights, label_channels, ignore_index):
@@ -1415,6 +1461,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_criterion = binary_cross_entropy
         elif self.use_mask:
             self.cls_criterion = mask_cross_entropy
+        elif self.analysis:
+            self.cls_criterion = cross_entropy_analysis
         else:
             self.cls_criterion = cross_entropy
 

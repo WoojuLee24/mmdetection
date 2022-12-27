@@ -62,6 +62,59 @@ def l1_loss(pred, target):
     return loss_orig
 
 
+def smooth_l1_loss_analysis(pred, target, weight, reduction='mean', avg_factor=None, beta=1.0, ):
+    """Smooth L1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        target (torch.Tensor): The learning target of the prediction.
+        beta (float, optional): The threshold in the piecewise function.
+            Defaults to 1.0.
+
+    Returns:
+        torch.Tensor: Calculated loss
+    """
+    pred_orig = pred
+    target = target
+
+    assert beta > 0
+    if target.numel() == 0:
+        return pred_orig.sum() * 0
+
+    assert pred_orig.size() == target.size()
+    diff = torch.abs(pred_orig - target)
+    loss_orig = torch.where(diff < beta, 0.5 * diff * diff / beta,
+                       diff - 0.5 * beta)
+    loss_orig = weight_reduce_loss(loss_orig, weight, reduction, avg_factor)
+
+    return loss_orig
+
+
+def l1_loss_analysis(pred, target, weight, reduction='mean', avg_factor=None):
+    """L1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        target (torch.Tensor): The learning target of the prediction.
+
+    Returns:
+        torch.Tensor: Calculated loss
+    """
+    pred_orig = pred
+    target = target
+
+    if target.numel() == 0:
+        return pred_orig.sum() * 0
+
+    assert pred_orig.size() == target.size()
+    loss_orig = torch.abs(pred_orig - target)
+
+    loss_orig = weight_reduce_loss(loss_orig, weight, reduction, avg_factor)
+
+    return loss_orig
+
+
+
 def smooth_l1_dg_loss(pred, target, beta=1.0, weight=None, reduction=None, avg_factor=None):
     """Smooth L1 loss.
 
@@ -252,7 +305,8 @@ class SmoothL1LossPlus(nn.Module):
     def __init__(self, beta=1.0, reduction='mean', loss_weight=1.0,
                  additional_loss='jsd',
                  lambda_weight=0.0001,
-                 wandb_name=None
+                 wandb_name=None,
+                 analysis=False
                  ):
         super(SmoothL1LossPlus, self).__init__()
         self.beta = beta
@@ -265,6 +319,11 @@ class SmoothL1LossPlus(nn.Module):
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
         self.wandb_features[f'smoothL1_loss({self.wandb_name})'] = []
+
+        if analysis:
+            self.reg_criterion = smooth_l1_loss_analysis
+        else:
+            self.reg_criterion = smooth_l1_loss
 
         if self.additional_loss == 'jsd':
             self.cls_additional = jsd
@@ -300,7 +359,7 @@ class SmoothL1LossPlus(nn.Module):
         assert reduction_override in (None, 'none', 'mean', 'sum')
         reduction = (
             reduction_override if reduction_override else self.reduction)
-        loss_bbox = self.loss_weight * smooth_l1_loss(
+        loss_bbox = self.loss_weight * self.reg_criterion(
             pred,
             target,
             weight,
@@ -341,7 +400,8 @@ class L1LossPlus(nn.Module):
     def __init__(self, reduction='mean', loss_weight=1.0,
                  additional_loss='jsd',
                  lambda_weight=0.0001,
-                 wandb_name=None
+                 wandb_name=None,
+                 analysis=False,
                  ):
         super(L1LossPlus, self).__init__()
         self.reduction = reduction
@@ -349,10 +409,16 @@ class L1LossPlus(nn.Module):
         self.additional_loss = additional_loss
         self.lambda_weight = lambda_weight
         self.wandb_name = wandb_name
+        self.analysis = analysis
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
         self.wandb_features[f'L1_loss({self.wandb_name})'] = []
+
+        if analysis:
+            self.reg_criterion = l1_loss_analysis
+        else:
+            self.reg_criterion = l1_loss
 
         if self.additional_loss == 'jsd':
             self.cls_additional = jsd
@@ -388,7 +454,7 @@ class L1LossPlus(nn.Module):
         assert reduction_override in (None, 'none', 'mean', 'sum')
         reduction = (
             reduction_override if reduction_override else self.reduction)
-        loss_bbox = self.loss_weight * l1_loss(
+        loss_bbox = self.loss_weight * self.reg_criterion(
             pred, target, weight, reduction=reduction, avg_factor=avg_factor)
 
         loss_additional = 0

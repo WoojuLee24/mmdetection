@@ -339,3 +339,53 @@ def multi_plot_tsne(test_features_list, targets_list=None, title_list=None, rows
 # if not os.path.exists(dirname):
 # os.makedirs(dirname)
 # plt.savefig(save)
+
+
+def plot_matrix(cm,
+                dataset='cityscapes',
+                normalize=False,
+                title='Matrix',
+                cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+
+
+    if dataset == 'cityscapes':
+        classes = ['person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'background']
+    elif dataset == 'coco':
+        classes = []
+
+    plt.figure(figsize=(len(classes), len(classes)))
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-8)
+        # print("Normalized confusion matrix")
+    else:
+        # print('Confusion matrix, without normalization')
+        pass
+
+    # print(cm)
+    # print(cm.diag() / cm.sum(1))
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else '.2f' #'d'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(j, i, format(cm[i, j], fmt),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('anchor class')
+    plt.xlabel('Contrast class')
+    # wandb.log({title: plt})
+    return plt
+    # plt.savefig('/ws/external/visualization_results/confusion_matrix.png')

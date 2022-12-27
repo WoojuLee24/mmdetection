@@ -4,6 +4,8 @@ import pickle
 import shutil
 import tempfile
 import time
+import copy
+import numpy as np
 
 import mmcv
 import torch
@@ -13,7 +15,7 @@ from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
 
 from mmdet.core import encode_mask_results
-
+from mmdet.utils.visualize import plot_matrix
 
 def single_gpu_analysis_background(model,
                     data_loader,
@@ -47,55 +49,71 @@ def single_gpu_analysis_background(model,
 def single_gpu_test_feature(model,
                             data_loader,
                             show=False,
-                            out_dir=None,
+                            show_dir=None,
                             show_score_thr=0.3):
+    ####
+    # [DEV 001]
+    ####
     model.eval()
     results = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
+    batch_size = 1
+    features_sum = dict()
     for i, data in enumerate(data_loader):
         with torch.no_grad():
             loss, features = model(return_loss=True, analysis=True, **data)
             # result = model(return_loss=False, rescale=True, **data)
-        batch_size = len(result)
 
-        if show or out_dir:
-            if batch_size == 1 and isinstance(data['img'][0], torch.Tensor):
-                img_tensor = data['img'][0]
+            if i == 0:
+                features_sum = copy.deepcopy(features)
+
+
+            elif i >= 490:
+                for key, value in features.items():
+                    if not 'loss' in key:
+                        features_sum[key] += value
             else:
-                img_tensor = data['img'][0].data[0]
-            img_metas = data['img_metas'][0].data[0]
-            imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
-            assert len(imgs) == len(img_metas)
+                for key, value in features.items():
+                    if not 'loss' in key:
+                        features_sum[key] += value
 
-            for i, (img, img_meta) in enumerate(zip(imgs, img_metas)):
-                h, w, _ = img_meta['img_shape']
-                img_show = img[:h, :w, :]
-
-                ori_h, ori_w = img_meta['ori_shape'][:-1]
-                img_show = mmcv.imresize(img_show, (ori_w, ori_h))
-
-                if out_dir:
-                    out_file = osp.join(out_dir, img_meta['ori_filename'])
-                else:
-                    out_file = None
-
-                model.module.show_result(
-                    img_show,
-                    result[i],
-                    show=show,
-                    out_file=out_file,
-                    score_thr=show_score_thr)
-
-        # encode mask results
-        if isinstance(result[0], tuple):
-            result = [(bbox_results, encode_mask_results(mask_results))
-                      for bbox_results, mask_results in result]
-        results.extend(result)
+        # # debug
+        # if i == 5:
+        #     break
 
         for _ in range(batch_size):
             prog_bar.update()
-    return results
+
+    # get sum of samples with mask
+    matrix_sample_number = features_sum['matrix_sample_number(roi_cls)']
+    classes = np.shape(matrix_sample_number)[0]
+    mask_eye = np.identity(classes, dtype=np.float32)  # [B, B]
+
+    class_matrix = features_sum['matrix_sample_number(roi_cls)']
+    class_matrix_same = mask_eye * class_matrix
+    class_sum_same = class_matrix_same.sum()
+    class_matrix_diff = class_matrix - class_matrix_same
+    class_sum_diff = class_matrix_diff.sum() / 2
+
+    for key, value in features_sum.items():
+        if 'confusion_matrix' in key:
+            features_sum[key] = value / (matrix_sample_number + 1e-6)
+            feature_matrix = features_sum[key]
+            plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key)
+            plt.savefig(f'{show_dir}/{key}.png')
+        elif 'distance_diff' in key:
+            features_sum[key] = value / class_sum_diff
+            print('{key}: ', features_sum[key])
+        elif 'distance_same' in key:
+            features_sum[key] = value / class_sum_same
+            print(f'{key}: ', features_sum[key])
+        elif 'matrix_sample_number' in key:
+            plt = plot_matrix(matrix_sample_number, dataset='cityscapes', title=key)
+            plt.savefig(f'{show_dir}/{key}.png')
+
+
+    return features_sum
 
 
 def single_gpu_test(model,

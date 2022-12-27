@@ -34,7 +34,7 @@ model = dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
             , additional_loss='None', lambda_weight=0.1, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
+                       , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox', analysis=True)),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
@@ -42,7 +42,7 @@ model = dict(
                 , additional_loss='None', lambda_weight=100, wandb_name='roi_cls',
                 additional_loss2='analyze_shared_fcs', lambda_weight2=0, analysis=True,),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
+                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox', analysis=True))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
