@@ -533,12 +533,12 @@ def jsdv1_5_1(pred,
               reduction='mean',
               avg_factor=None,
               **kwargs):
-
     # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    label, _, _ = torch.chunk(label, 3)
 
     if pred_orig.shape[-1] == 1:  # if rpn
         # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
@@ -552,9 +552,12 @@ def jsdv1_5_1(pred,
         p_clean, p_aug1, p_aug2 = F.softmax(pred_orig, dim=1), \
                                   F.softmax(pred_aug1, dim=1), \
                                   F.softmax(pred_aug2, dim=1)
+        label = F.one_hot(label, num_classes=9)
 
-    p_clean, p_aug1, = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
-                       p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
+    label = label.reshape((1,) + label.shape).contiguous().type(p_clean.dtype)
 
     # Clamp mixture distribution to avoid exploding KL divergence
     p_mixture = torch.clamp((p_clean + p_aug1 + label) / 3., 1e-7, 1).log()
