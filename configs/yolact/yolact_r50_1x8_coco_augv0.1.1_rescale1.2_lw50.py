@@ -172,8 +172,8 @@ train2 = dict(
     pipeline=train_pipeline2,),
 
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=2,
+    samples_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type='ConDataset',
         datasets=[train1, train2]),

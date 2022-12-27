@@ -263,8 +263,8 @@ class CocoDataset(CustomDataset):
                     data['bbox'] = self.xyxy2xywh(bboxes[i])
                     data['score'] = float(mask_score[i])
                     data['category_id'] = self.cat_ids[label]
-                    if isinstance(segms[i]['counts'], bytes):
-                        segms[i]['counts'] = segms[i]['counts'].decode()
+                    # if isinstance(segms[i]['counts'], bytes):
+                    #     segms[i]['counts'] = segms[i]['counts'].decode()
                     data['segmentation'] = segms[i]
                     segm_json_results.append(data)
         return bbox_json_results, segm_json_results
