@@ -103,9 +103,16 @@ def get_aug_list(version):
             bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
             bboxes_only_translate_x, bboxes_only_translate_y,
         ]
+        return aug_list
+    elif version == '0.2':
+        aug_color_list = [autocontrast, equalize, posterize, solarize, color, contrast, brightness, sharpness,]
+        aug_geo_list = [
+            bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
+            bboxes_only_translate_x, bboxes_only_translate_y,
+        ]
+        return aug_color_list, aug_geo_list
     else:
         raise NotImplementedError
-    return aug_list
 
 
 @PIPELINES.register_module()
@@ -123,6 +130,7 @@ class AugMixDetection:
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.num_views = num_views
+        self.version = version
         self.aug_list = get_aug_list(version)
         self.aug_severity = aug_severity
         self.to_rgb = to_rgb
@@ -132,7 +140,10 @@ class AugMixDetection:
             return self.aug_and_mix(results['img'], results['gt_bboxes'])
 
         for i in range(2, self.num_views+1):
-            img_augmix = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
+            if isinstance(self.aug_list, tuple):
+                img_augmix = self.multiaug_and_mix(results['img'].copy(), results['gt_bboxes'])
+            else:
+                img_augmix = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
             results[f'img{i}'] = np.array(img_augmix, dtype=results['img'].dtype)
             results[f'gt_bboxes{i}'] = copy.deepcopy(results['gt_bboxes']) # TODO: allow to geometric operations containing bbox
             results[f'gt_labels{i}'] = copy.deepcopy(results['gt_labels']) # TODO: allow to geometric operations containing bbox
@@ -141,6 +152,37 @@ class AugMixDetection:
 
         return results
 
+    def multiaug_and_mix(self, img_orig, gt_bboxes):
+        # TODO: change library to albumentation. It will make it faster.
+        img_height, img_width, _ = img_orig.shape
+        img_size = (img_width, img_height)
+
+        # Sample
+        #   > mixing_weights: [w1, w2, ..., wk] ~ Dirichlet(alpha, alpha, ..., alpha)
+        #   > sample_weight: m ~ Beta(alpha, alpha)
+        mixing_weights = np.float32(np.random.dirichlet([self.aug_prob_coeff] * self.mixture_width))
+        sample_weight = np.float32(np.random.beta(self.aug_prob_coeff, self.aug_prob_coeff))
+
+        # Fill x_aug with zeros
+        img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
+
+        for i in range(self.mixture_width):
+            img_aug = img_orig.copy()
+            for aug_list in self.aug_list:
+                # Sample operations : [op1, op2, op3] ~ O
+                depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 3)
+                op_chain = np.random.choice(aug_list, depth, replace=False)  # not allow same aug if replace is False.
+
+                # Augment
+                img_aug = self.chain(img_aug, op_chain, img_size, gt_bboxes=gt_bboxes)
+
+            # Mixing
+            img_aug = np.asarray(img_aug, dtype=np.float32)
+            img_mix += mixing_weights[i] * img_aug
+
+        img_augmix = (1-sample_weight) * img_orig + sample_weight * img_mix
+        img_augmix = np.array(img_augmix, dtype=np.float32)
+        return img_augmix
 
     def aug_and_mix(self, img_orig, gt_bboxes):
         # TODO: change library to albumentation. It will make it faster.
@@ -175,7 +217,12 @@ class AugMixDetection:
         '''
         img: np.array
         '''
-        img_aug = Image.fromarray(img, 'RGB') # pil_img
+        if isinstance(img, np.ndarray):
+            img_aug = Image.fromarray(img, 'RGB') # pil_img
+        elif isinstance(img, Image.Image):
+            img_aug = img
+        else:
+            raise TypeError
 
         for op in op_chain:
             img_aug = op(img_aug, level=self.aug_severity,
