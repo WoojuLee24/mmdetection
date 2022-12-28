@@ -386,7 +386,7 @@ def supcontrast_maskv0_01(logits_anchor, logits_contrast, targets, mask_anchor, 
 
     exp_logits = torch.exp(logits) * mask_contrast
     log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
-    mean_log_prob_pos = (mask_anchor * log_prob).sum(1) / mask_anchor.sum(1)
+    mean_log_prob_pos = (mask_anchor * log_prob).sum(1) / (mask_anchor.sum(1) + 1e-8)
     loss = - (temper / base_temper) * mean_log_prob_pos
     loss = loss.mean()
 
