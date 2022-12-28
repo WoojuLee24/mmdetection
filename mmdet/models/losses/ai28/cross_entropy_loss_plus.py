@@ -7,6 +7,7 @@ from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
+    supcontrast_clean, supcontrast_clean_kpositive, \
     analyze_representations_1input, analyze_representations_3input
 
 
@@ -654,6 +655,7 @@ def ntxent(pred,
     for key, feature in FEATURES.items():
         k = feature[0]
         if k.dim() == 4: # if rpn
+            ntxent_loss = 0
             pass
         elif k.dim() == 2: # if roi
             features_orig, features_aug1, features_aug2 = torch.chunk(k, 3)
@@ -662,7 +664,112 @@ def ntxent(pred,
             ntxent_loss = supcontrast(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
 
         if analysis:
-            feature_analysis = analyze_representations(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+            feature_analysis = analyze_representations_3input(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
+
+
+def ntxent_clean(pred,
+                       label,
+                       weight=None,
+                       reduction='mean',
+                       avg_factor=None,
+                       analysis=False,
+                       **kwargs):
+    """Calculate the ntxent loss on the clean samples
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.detectors.base import FEATURES
+    k = FEATURES
+    # from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+
+    for key, feature in FEATURES.items():
+        k = feature[0]
+        if k.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif k.dim() == 2: # if roi
+            features_orig, _, _ = torch.chunk(k, 3)
+            label_orig, _, _ = torch.chunk(label, 3)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast_clean(features_orig, label_orig, temper=temper)
+
+        if analysis:
+            feature_analysis = analyze_representations_3input(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
+
+
+def kntxent_clean(pred,
+                       label,
+                       weight=None,
+                       reduction='mean',
+                       avg_factor=None,
+                       analysis=False,
+                       **kwargs):
+    """Calculate the ntxent loss on the clean samples
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    k = kwargs['kpositive']
+    classes = kwargs['classes']
+    feature_analysis = {}
+    loss = 0
+
+    from mmdet.models.detectors.base import FEATURES
+
+    for key, feature in FEATURES.items():
+        feature = feature[0]
+        if feature.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif feature.dim() == 2: # if roi
+            features_orig, _, _ = torch.chunk(feature, 3)
+            label_orig, _, _ = torch.chunk(label, 3)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast_clean_kpositive(features_orig, label_orig, k=k, classes=classes, temper=temper)
+
+        if analysis:
+            feature_analysis = analyze_representations_1input(features_orig, label_orig, temper=temper)
 
         loss += ntxent_loss
 
@@ -1512,6 +1619,8 @@ class CrossEntropyLossPlus(nn.Module):
                  lambda_weight=0.0001,
                  additional_loss2=None,
                  lambda_weight2=0.0001,
+                 kpositive=3,
+                 classes=9,
                  temper=1,
                  analysis=False,
                  add_act=None,
@@ -1546,6 +1655,8 @@ class CrossEntropyLossPlus(nn.Module):
         self.additional_loss2 = additional_loss2
         self.lambda_weight = lambda_weight
         self.lambda_weight2 = lambda_weight2
+        self.kpositive = kpositive
+        self.classes = classes
         self.temper = temper
         self.analysis = analysis
         self.add_act = add_act
@@ -1612,6 +1723,10 @@ class CrossEntropyLossPlus(nn.Module):
 
         if self.additional_loss2 == 'ntxent':
             self.cls_additional2 = ntxent
+        elif self.additional_loss2 == 'ntxent.clean':
+            self.cls_additional2 = ntxent_clean
+        elif self.additional_loss2 == 'kntxent.clean':
+            self.cls_additional2 = kntxent_clean
         elif self.additional_loss2 == 'ntxentv0_01':
             self.cls_additional2 = ntxentv0_01
         elif self.additional_loss2 == 'ntxentv0_02':
@@ -1715,6 +1830,8 @@ class CrossEntropyLossPlus(nn.Module):
                 ignore_index=ignore_index,
                 class_weight=class_weight,
                 lambda_weight=self.lambda_weight,
+                kpositive=self.kpositive,
+                classes=self.classes,
             )
 
             # wandb for rpn
