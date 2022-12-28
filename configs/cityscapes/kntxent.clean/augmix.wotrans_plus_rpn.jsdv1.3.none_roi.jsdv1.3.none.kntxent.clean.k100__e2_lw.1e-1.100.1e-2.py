@@ -180,7 +180,7 @@ log_config = dict(interval=100,
                                                   # parameters
                                                   'epoch': runner['max_epochs'],
                                               }},
-                           interval=5,
+                           interval=500,
                            log_checkpoint=True,
                            log_checkpoint_metadata=True,
                            num_eval_images=5),
