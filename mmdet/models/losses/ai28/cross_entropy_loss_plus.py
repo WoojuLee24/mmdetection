@@ -580,6 +580,69 @@ def jsdv1_5_1(pred,
     return loss, p_distribution
 
 
+def jsdv1_5_2(pred,
+              label,
+              weight=None,
+              reduction='mean',
+              avg_factor=None,
+              **kwargs):
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    label, _, _ = torch.chunk(label, 3)
+
+    weight_bg = 0.1 * (label == 8).float()
+    weight_fg = 0.5 * (label != 8).float()
+    weight_y = weight_bg + weight_fg
+    weight_p = (1.0 - weight_y) / 3.0
+
+    if pred_orig.shape[-1] == 1:  # if rpn
+        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
+        #                           torch.sigmoid(pred_aug1),\
+        #                           torch.sigmoid(pred_aug2)
+        p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug2), 1 - torch.sigmoid(pred_aug2)), dim=1),
+
+    else:  # else roi
+        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig, dim=1), \
+                                  F.softmax(pred_aug1, dim=1), \
+                                  F.softmax(pred_aug2, dim=1)
+        label = F.one_hot(label, num_classes=9)
+
+    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
+                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
+    label = label.reshape((1,) + label.shape).contiguous().type(p_clean.dtype)
+
+    weight_y = weight_y.unsqueeze(0).unsqueeze(-1).repeat(1, 1, label.shape[-1])
+    weight_p = weight_p.unsqueeze(0).unsqueeze(-1).repeat(1, 1, label.shape[-1])
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = weight_y * label + weight_p * (p_clean + p_aug1 + p_aug2)
+    p_mixture = torch.clamp(p_mixture, 1e-7, 1).log()
+    loss = weight_p * F.kl_div(p_mixture, p_clean, reduction='none') + \
+           weight_p * F.kl_div(p_mixture, p_aug1, reduction='none') + \
+           weight_p * F.kl_div(p_mixture, p_aug2, reduction='none') + \
+           weight_y * F.kl_div(p_mixture, label, reduction='none')
+    loss = torch.sum(loss) / len(pred_orig)
+    # apply weights and do the reduction
+    if weight is not None:
+        weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
+                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
+                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
+                      'p_mixture': p_mixture}
+
+    return loss, p_distribution
+
+
 def analyze_shared_fcs(pred,
                         label,
                         weight=None,
@@ -1586,6 +1649,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_5
         elif self.additional_loss == 'jsdv1_5_1':
             self.cls_additional = jsdv1_5_1
+        elif self.additional_loss == 'jsdv1_5_2':
+            self.cls_additional = jsdv1_5_2
         elif self.additional_loss == 'jsdv1_3_ntxent':
             self.cls_additional = jsdv1_3_ntxent
         elif self.additional_loss == 'jsdv1_3_ntxentv0_01':
