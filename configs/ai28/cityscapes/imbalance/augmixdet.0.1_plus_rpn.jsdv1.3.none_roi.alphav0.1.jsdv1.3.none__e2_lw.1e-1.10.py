@@ -102,7 +102,7 @@ custom_hooks = [
 pipeline = 'augmixdet.0.1'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
-roi_loss = 'jsdv1.3.none'
+roi_loss = 'alphav0.1.jsdv1.3.none'
 lambda_weight = '1e-1.10'
 
 name = f"{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
@@ -115,23 +115,23 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      # dict(type='WandbLogger',
-                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                      #                         'name': name,
-                      #                         'config': {
-                      #                             # data pipeline
-                      #                             'data pipeline': f"{pipeline}",
-                      #                             # losses
-                      #                             'loss type(rpn)': f"{rpn_loss}",
-                      #                             'loss type(roi)': f"{roi_loss}",
-                      #                             # parameters
-                      #                             'epoch': runner['max_epochs'],
-                      #                             'lambda_weight': lambda_weight,
-                      #                         }},
-                      #      interval=500,
-                      #      log_checkpoint=True,
-                      #      log_checkpoint_metadata=True,
-                      #      num_eval_images=5),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': name,
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{pipeline}",
+                                                  # losses
+                                                  'loss type(rpn)': f"{rpn_loss}",
+                                                  'loss type(roi)': f"{roi_loss}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                                  'lambda_weight': lambda_weight,
+                                              }},
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )
 
@@ -139,4 +139,4 @@ log_config = dict(interval=100,
 ### LOAD ###
 ############
 # For better, more stable performance initialize from COCO
-# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
