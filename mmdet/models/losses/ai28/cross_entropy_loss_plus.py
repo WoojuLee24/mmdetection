@@ -1872,6 +1872,7 @@ class CrossEntropyLossPlus(nn.Module):
                     self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'lam_additional_loss({self.wandb_name})'].clear()
+                    self.wandb_features[f'additional_loss_ratio({self.wandb_name})'].clear()
                 self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
                 self.wandb_features[f'additional_loss({self.wandb_name})'].append(loss_additional)
                 self.wandb_features[f'lam_additional_loss({self.wandb_name})'].append(
