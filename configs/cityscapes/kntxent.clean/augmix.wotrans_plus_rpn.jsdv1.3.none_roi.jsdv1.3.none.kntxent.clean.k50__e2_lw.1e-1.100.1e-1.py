@@ -31,21 +31,34 @@ _base_ = [
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
+            additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls',
+            additional_loss2=None, lambda_weight2=0),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
+            type='Shared2FCBBoxHeadXent',
+            in_channels=256,
+            fc_out_channels=1024,
+            roi_feat_size=7,
+            num_cls_fcs=1,
+            num_classes=8,
+            bbox_coder=dict(
+                type='DeltaXYWHBBoxCoder',
+                target_means=[0., 0., 0., 0.],
+                target_stds=[0.1, 0.1, 0.2, 0.2]),
+            reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls'),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
+                additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls',
+                additional_loss2='kntxent.clean', lambda_weight2=0.1, kpositive=50, classes=9),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
                            , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
-                features_list=[],
+                features_list=['roi_head.bbox_head.cls_fcs.0', "rpn_head.rpn_cls"],
                 vars=['log_vars']),
         )))
 
@@ -70,7 +83,7 @@ train_pipeline = [
 ]
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=1,
+    workers_per_gpu=2,
     train=dict(
         dataset=dict(
             pipeline=train_pipeline)),)
@@ -155,7 +168,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': "augmix.wotrans_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none__e2_lw.1e-1.100",
+                                              'name': "augmix.wotrans_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none.kntxent.clean.k50__e2_lw.1e-1.100.1e-1",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{str_pipeline}",
