@@ -290,10 +290,15 @@ class BBoxHead(BaseModule):
                     losses['acc_neg'] = accuracy(cls_score[mask_neg, :], labels[mask_neg])
 
                     # acc_pos, acc_neg for each
-                    cls_score_list = torch.chunk(cls_score, 3)
-                    label = torch.chunk(labels, 3)[0]
+                    if len(cls_score) != 512:
+                        cls_score_list = torch.chunk(cls_score, 3)
+                        label = torch.chunk(labels, 3)[0]
+                        loss_name = ['orig', 'aug1', 'aug2']
+                    else:
+                        cls_score_list = [cls_score]
+                        label = labels
+                        loss_name = ['orig']
                     mask_pos, mask_neg = (label != 8), (label == 8)
-                    loss_name = ['orig', 'aug1', 'aug2']
                     for i in range(len(cls_score_list)):
                         losses[f'acc_{loss_name[i]}'] = accuracy(cls_score_list[i], label)
                         losses[f'acc_{loss_name[i]}_pos'] = accuracy(cls_score_list[i][mask_pos, :], label[mask_pos])
@@ -301,10 +306,11 @@ class BBoxHead(BaseModule):
 
                     # Consistency
                     pred_cls = torch.argmax(cls_score, dim=-1)
-                    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred_cls, 3)
-                    consistency = ((pred_orig == pred_aug1) * (pred_orig == pred_aug2)).float()
-                    consistency = torch.sum(consistency) / len(pred_orig)
-                    losses['consistency'] = consistency
+                    if len(pred_cls) != 512:
+                        pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred_cls, 3)
+                        consistency = ((pred_orig == pred_aug1) * (pred_orig == pred_aug2)).float()
+                        consistency = torch.sum(consistency) / len(pred_orig)
+                        losses['consistency'] = consistency
 
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
