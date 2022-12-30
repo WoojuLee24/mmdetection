@@ -116,6 +116,84 @@ def single_gpu_test_feature(model,
     return features_sum
 
 
+def single_gpu_test_feature_multi_domain(model,
+                                          data_loader,
+                                          orig_dataset=None,
+                                          show=False,
+                                          show_dir=None,
+                                          show_score_thr=0.3):
+
+    ####
+    # [DEV 002]
+    ####
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    prog_bar = mmcv.ProgressBar(len(dataset))
+    batch_size = 1
+    features_sum = dict()
+
+    for i, data in enumerate(data_loader):
+        orig_data = orig_dataset[i]
+        # img = orig_data['img'].data
+        # img = img.unsqueeze(dim=0)
+        img = orig_data['img'].data.unsqueeze(dim=0)
+        data['img2'] = img
+
+        with torch.no_grad():
+            loss, features = model(return_loss=True, analysis=True, **data)
+            # result = model(return_loss=False, rescale=True, **data)
+
+            if i == 0:
+                features_sum = copy.deepcopy(features)
+
+            elif i >= 490:
+                for key, value in features.items():
+                    if not 'loss' in key:
+                        features_sum[key] += value
+            else:
+                for key, value in features.items():
+                    if not 'loss' in key:
+                        features_sum[key] += value
+
+        # # debug
+        # if i == 5:
+        #     break
+
+        for _ in range(batch_size):
+            prog_bar.update()
+
+    # get sum of samples with mask
+    matrix_sample_number = features_sum['matrix_sample_number(roi_cls)']
+    classes = np.shape(matrix_sample_number)[0]
+    mask_eye = np.identity(classes, dtype=np.float32)  # [B, B]
+
+    class_matrix = features_sum['matrix_sample_number(roi_cls)']
+    class_matrix_same = mask_eye * class_matrix
+    class_sum_same = class_matrix_same.sum()
+    class_matrix_diff = class_matrix - class_matrix_same
+    class_sum_diff = class_matrix_diff.sum() / 2
+
+    for key, value in features_sum.items():
+        if 'confusion_matrix' in key:
+            features_sum[key] = value / (matrix_sample_number + 1e-6)
+            feature_matrix = features_sum[key]
+            plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key)
+            plt.savefig(f'{show_dir}/{key}.png')
+        elif 'distance_diff' in key:
+            features_sum[key] = value / class_sum_diff
+            print('{key}: ', features_sum[key])
+        elif 'distance_same' in key:
+            features_sum[key] = value / class_sum_same
+            print(f'{key}: ', features_sum[key])
+        elif 'matrix_sample_number' in key:
+            plt = plot_matrix(matrix_sample_number, dataset='cityscapes', title=key)
+            plt.savefig(f'{show_dir}/{key}.png')
+
+
+    return features_sum
+
+
 def single_gpu_test(model,
                     data_loader,
                     show=False,

@@ -8,7 +8,7 @@ from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
     supcontrast_clean, supcontrast_clean_kpositive, \
-    analyze_representations_1input, analyze_representations_3input
+    analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
 
 
 def cross_entropy(pred,
@@ -644,7 +644,7 @@ def jsdv1_5_2(pred,
     return loss, p_distribution
 
 
-def analyze_shared_fcs(pred,
+def analyze_shared_fcs_1input(pred,
                         label,
                         weight=None,
                         reduction='mean',
@@ -682,6 +682,45 @@ def analyze_shared_fcs(pred,
 
     return loss, feature_analysis
 
+
+def analyze_shared_fcs_2input(pred,
+                        label,
+                        weight=None,
+                        reduction='mean',
+                        avg_factor=None,
+                        analysis=False,
+                        **kwargs):
+
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    feature = feature_cls_feats
+    feature_clean, feature_aug1, _ = torch.chunk(feature, 3)
+    label, _, _ = torch.chunk(label, 3)
+    feature_analysis = analyze_representations_2input(feature_clean, feature_aug1, label,)
+
+    return loss, feature_analysis
 
 def ntxent(pred,
            label,
@@ -1799,8 +1838,10 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxentv0_01
         elif self.additional_loss2 == 'ntxentv0_02':
             self.cls_additional2 = ntxentv0_02
-        elif self.additional_loss2 == 'analyze_shared_fcs':
-            self.cls_additional2 = analyze_shared_fcs
+        elif self.additional_loss2 == 'analyze_shared_fcs_1input':
+            self.cls_additional2 = analyze_shared_fcs_1input
+        elif self.additional_loss2 == 'analyze_shared_fcs_2input':
+            self.cls_additional2 = analyze_shared_fcs_2input
         else:
             self.cls_additional2 = None
 

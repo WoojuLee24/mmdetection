@@ -192,6 +192,18 @@ class TwoStageDetector(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+
+        if 'img2' in kwargs:
+            # img2 = kwargs.pop('img2')   # orig data
+            img2 = kwargs['img2']   # orig data
+            img = torch.cat([img2, img, img], dim=0)
+            gt_bboxes.append(gt_bboxes[0])
+            gt_bboxes.append(gt_bboxes[0])
+            gt_labels.append(gt_labels[0])
+            gt_labels.append(gt_labels[0])
+            img_metas.append(img_metas[0])
+            img_metas.append(img_metas[0])
+
         x = self.extract_feat(img)
 
         losses = dict()
@@ -211,6 +223,13 @@ class TwoStageDetector(BaseDetector):
             losses.update(rpn_losses)
         else:
             proposal_list = proposals
+
+        if 'img2' in kwargs:
+            # proposal list of original image
+            proposal_list[1] = proposal_list[0]
+            proposal_list[2] = proposal_list[0]
+            _ = kwargs.pop('img2')
+
 
         roi_losses, features = self.roi_head.forward_analysis(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
