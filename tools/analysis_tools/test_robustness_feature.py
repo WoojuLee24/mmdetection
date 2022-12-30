@@ -15,7 +15,7 @@ from pycocotools.cocoeval import COCOeval
 from tools.analysis_tools.robustness_eval import get_results
 
 from mmdet import datasets
-from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, single_gpu_test_feature
+from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, single_gpu_test_feature, single_gpu_test_feature_multi_domain
 from mmdet.core import eval_map
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
@@ -122,6 +122,12 @@ def parse_args():
         type=str,
         nargs='+',
         choices=['proposal', 'proposal_fast', 'bbox', 'segm', 'keypoints'],
+        help='eval types')
+    parser.add_argument(
+        '--analysis',
+        type=str,
+        nargs='+',
+        choices=['single_domain', 'multi_domain'],
         help='eval types')
     parser.add_argument(
         '--iou-thr',
@@ -306,6 +312,17 @@ def main():
                 dist=distributed,
                 shuffle=False)
 
+
+            orig_test_data_cfg = copy.deepcopy(test_data_cfg)
+            orig_test_data_cfg['img_prefix'] = '/ws/data/cityscapes/leftImg8bit/val'
+            orig_dataset = build_dataset(orig_test_data_cfg)
+            orig_data_loader = build_dataloader(
+                orig_dataset,
+                samples_per_gpu=1,
+                workers_per_gpu=args.workers,
+                dist=distributed,
+                shuffle=False)
+
             # build the model and load checkpoint
             model = build_detector(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
             # cfg.model.train_cfg = None
@@ -336,8 +353,13 @@ def main():
                 hook.hook_multi_layer(model, features_list)
                 hook.hook_multi_layer(model.module, features_list)
 
-                outputs = single_gpu_test_feature(model, data_loader, args.show,
-                                          show_dir, args.show_score_thr)
+                if 'single_domain' in args.analysis:
+                    outputs = single_gpu_test_feature(model, data_loader, args.show,
+                                              show_dir, args.show_score_thr)
+                elif 'multi_domain' in args.analysis:
+                    outputs = single_gpu_test_feature_multi_domain(model, data_loader, orig_dataset, args.show,
+                                                  show_dir, args.show_score_thr)
+
             else:
                 model = MMDistributedDataParallel(
                     model.cuda(),

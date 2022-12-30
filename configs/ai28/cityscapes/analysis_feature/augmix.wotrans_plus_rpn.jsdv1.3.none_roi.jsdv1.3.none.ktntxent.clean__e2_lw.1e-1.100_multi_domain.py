@@ -37,16 +37,27 @@ model = dict(
                        , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox', analysis=True)),
     roi_head=dict(
         bbox_head=dict(
+            type='Shared2FCBBoxHeadXent',
+            in_channels=256,
+            fc_out_channels=1024,
+            roi_feat_size=7,
+            num_cls_fcs=1,
+            num_classes=8,
+            bbox_coder=dict(
+                type='DeltaXYWHBBoxCoder',
+                target_means=[0., 0., 0., 0.],
+                target_stds=[0.1, 0.1, 0.2, 0.2]),
+            reg_class_agnostic=False,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
                 , additional_loss='None', lambda_weight=100, wandb_name='roi_cls',
-                additional_loss2='analyze_shared_fcs_1input', lambda_weight2=0, analysis=True,),
+                additional_loss2='analyze_shared_fcs_2input', lambda_weight2=0, analysis=True,),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
                            , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox', analysis=True))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
-                features_list=['roi_head.bbox_head.shared_fcs.1'],
+                features_list=['roi_head.bbox_head.cls_fcs.0'],
                 vars=['log_vars']),
         )))
 

@@ -251,7 +251,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         feature_cls_feats = self.bbox_head.cls_feats
 
         self.bbox_targets = bbox_targets
-        loss_bbox, features = self.bbox_head.loss(bbox_results['cls_score'],
+        loss_bbox, features = self.bbox_head.loss_with_feature(bbox_results['cls_score'],
                                         bbox_results['bbox_pred'], rois,
                                         *bbox_targets)
 

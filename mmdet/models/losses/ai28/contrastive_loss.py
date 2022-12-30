@@ -197,7 +197,6 @@ def analyze_representations_1input(logits, labels=None, lambda_weight=12, temper
 
     B, _ = targets.size()
     targets1 = targets.repeat(1, B).unsqueeze(0)
-    a = targets.T
     targets2 = targets.T.repeat(B, 1).unsqueeze(0)
     target_matrix = torch.cat([targets1, targets2], dim=0) # class index of batch sampe (2, 512, 512) (target, target) tuple
     target_matrix_np = target_matrix.detach().cpu().numpy()
@@ -234,6 +233,124 @@ def analyze_representations_1input(logits, labels=None, lambda_weight=12, temper
 
     return features
 
+
+def analyze_representations_2input(logits_clean, logits_aug1, labels=None, lambda_weight=12, temper=1.0, reduction='batchmean'):
+    '''
+    logging representations by jsdv4 and L2 distance
+    3 inputs
+    '''
+
+    device = logits_clean.device
+    targets = labels
+
+    pred_clean = logits_clean.data.max(1)[1]
+    pred_aug1 = logits_aug1.data.max(1)[1]
+
+    logits_clean = logits_clean.detach()
+    logits_aug1 = logits_aug1.detach()
+
+    # logging
+    batch_size = logits_clean.size()[0]
+    targets = targets.contiguous().view(-1, 1)  # [B, 1]
+    temper = 1.0
+
+    # mask
+    mask_identical = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+    mask_triu = torch.triu(mask_identical.clone().detach())
+    mask_same_instance = torch.eye(batch_size, dtype=torch.float32).to(device)  # [B, B]
+    mask_triuu = mask_triu - mask_same_instance
+    mask_same_class = torch.eq(targets, targets.T).float()  # [B, B]
+    mask_same_triuu = mask_same_class * mask_triuu
+    mask_diff_class = 1 - mask_same_class  # [B, B]
+    mask_diff_triuu = mask_diff_class * mask_triuu
+
+    # softmax
+    p_clean, p_aug1  = F.softmax(logits_clean / temper, dim=1), \
+                       F.softmax(logits_aug1 / temper, dim=1)
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
+
+    # JSD matrix
+    jsd_matrix = (make_matrix(p_clean, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum') + \
+                  make_matrix(p_aug1, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum')) / 2
+
+    jsd_matrix_same_instance = jsd_matrix * mask_same_instance
+    jsd_distance = jsd_matrix_same_instance.sum()
+
+    jsd_matrix_diff_class = jsd_matrix * mask_diff_triuu
+    jsd_distance_diff_class = jsd_matrix_diff_class.sum()
+
+    jsd_matrix_same_class = jsd_matrix * mask_same_triuu
+    jsd_distance_same_class = jsd_matrix_same_class.sum()
+
+    # MSE matrix
+    mse_matrix = make_matrix(logits_clean, logits_aug1, criterion=nn.MSELoss(reduction='none'), reduction='mean')
+
+    mse_matrix_same_instance = mse_matrix * mask_same_instance
+    mse_distance = mse_matrix_same_instance.sum()
+
+    mse_matrix_diff_class = mse_matrix * mask_diff_triuu
+    mse_distance_diff_class = mse_matrix_diff_class.sum()
+
+    mse_matrix_same_class = mse_matrix * mask_same_triuu
+    mse_distance_same_class = mse_matrix_same_class.sum()
+
+    # Cosine Similarity matrix
+    cs_matrix = make_matrix(logits_clean, logits_aug1, criterion=nn.CosineSimilarity(dim=1), reduction='none')
+    cs_matrix = cs_matrix.squeeze(dim=-1)
+
+    cs_matrix_same_instance = cs_matrix * mask_same_instance
+    cs_distance = cs_matrix_same_instance.sum()
+
+    cs_matrix_diff_class = cs_matrix * mask_diff_triuu
+    cs_distance_diff_class = cs_matrix_diff_class.sum()
+
+    cs_matrix_same_class = cs_matrix * mask_same_triuu
+    cs_distance_same_class = cs_matrix_same_class.sum()
+
+    # class-wise distance
+    confusion_matrix_jsd = torch.zeros(9, 9)
+    confusion_matrix_l2 = torch.zeros(9, 9)
+    confusion_matrix_cs = torch.zeros(9, 9)
+    confusion_matrix_sample_number = torch.zeros(9, 9)
+
+    B, _ = targets.size()
+    targets1 = targets.repeat(1, B).unsqueeze(0)
+    targets2 = targets.T.repeat(B, 1).unsqueeze(0)
+    target_matrix = torch.cat([targets1, targets2], dim=0) # class index of batch sampe (2, 512, 512) (target, target) tuple
+    target_matrix_np = target_matrix.detach().cpu().numpy()
+
+
+    for i in range(9):
+        for j in range(9):
+            a = target_matrix[0, :, :] == i
+            b = target_matrix[1, :, :] == j
+            class_mask = a & b
+
+            class_jsd_matrix = jsd_matrix * class_mask
+            class_mse_matrix = mse_matrix * class_mask
+            class_cs_matrix = cs_matrix * class_mask
+
+            confusion_matrix_jsd[i, j] = class_jsd_matrix.sum()
+            confusion_matrix_l2[i, j] = torch.sqrt(class_mse_matrix).sum()
+            confusion_matrix_cs[i, j] = class_cs_matrix.sum()
+            confusion_matrix_sample_number[i, j] = class_mask.sum()
+
+
+    features = {'jsd_distance': jsd_distance.detach().cpu().numpy(),
+                'jsd_distance_diff_class': jsd_distance_diff_class.detach().cpu().numpy(),
+                'jsd_distance_same_class': jsd_distance_same_class.detach().cpu().numpy(),
+                'mse_distance': mse_distance.detach().cpu().numpy(),
+                'mse_distance_diff_class': mse_distance_diff_class.detach().cpu().numpy(),
+                'mse_distance_same_class': mse_distance_same_class.detach().cpu().numpy(),
+                'confusion_matrix_jsd': confusion_matrix_jsd.detach().cpu().numpy(),
+                'confusion_matrix_l2': confusion_matrix_l2.detach().cpu().numpy(),
+                'confusion_matrix_cs': confusion_matrix_cs.detach().cpu().numpy(),
+                'matrix_sample_number': confusion_matrix_sample_number.detach().cpu().numpy(),
+                }
+
+    return features
 
 def analyze_representations_3input(logits_clean, logits_aug1, logits_aug2, labels=None, lambda_weight=12, temper=1.0, reduction='batchmean'):
     '''
@@ -433,8 +550,10 @@ def supcontrast_clean_kpositive(logits_clean, labels=None, k=3, classes=9, lambd
     """
         supcontrast loss
         input: only clean logit
-        mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
+        mask (mask anchor):original same k class [B, B]
         logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
+                                    original same class + negative case
+
     """
 
     mask = None
@@ -475,6 +594,59 @@ def supcontrast_clean_kpositive(logits_clean, labels=None, k=3, classes=9, lambd
 
     loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
                                   kmask_anchor, mask_contrast_except_eye, lambda_weight, temper)
+
+    loss = loss1
+
+    return loss
+
+
+def supcontrast_clean_kpositivev1_1(logits_clean, labels=None, k=3, classes=9, lambda_weight=0.1, temper=0.07, reduction='batchmean'):
+
+    """
+        supcontrast loss
+        input: only clean logit
+        mask (mask anchor): original same k class [3*B, 3*B]
+        logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
+                                     original same k class + negative case
+    """
+
+    mask = None
+    contrast_mode = 'all'
+    base_temper = temper
+    device = logits_clean.device
+    batch_size = logits_clean.size()[0]
+    targets = labels
+
+    kpositive_class_targets = torch.zeros_like(targets, dtype=torch.float32)
+    for i in range(classes):
+        class_targets, _ = (targets==i).nonzero(as_tuple=True)
+        if class_targets.size(0) == 0:
+            pass
+        elif class_targets.size(0) < k:
+            kpositive_class_targets[class_targets, 0] = 1
+        else:
+            sample_choice = np.random.choice(class_targets.detach().cpu().numpy(), k, replace=False)
+            kpositive_class_targets[sample_choice, 0] = 1
+    kpositive_class_targets = kpositive_class_targets.contiguous().view(-1, 1)
+    kpositive_class_anchor = torch.matmul(kpositive_class_targets, kpositive_class_targets.T).float()
+    # kpositive_class_anchor_npy = kpositive_class_anchor.detach().cpu().numpy()
+    targets = targets.contiguous().view(-1, 1)
+
+
+    mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
+    mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
+    mask_anchor_except_eye = mask_anchor - mask_eye
+    # mask_anchor_np = mask_anchor.detach().cpu().numpy()
+
+    kmask_anchor = mask_anchor_except_eye * kpositive_class_anchor
+    # kmask_anchor_npy = kmask_anchor.detach().cpu().numpy()
+
+    mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+    mask_contrast = mask_contrast - mask_anchor + kmask_anchor
+    # mask_contrast_np = mask_contrast.detach().cpu().numpy()
+
+    loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
+                                  kmask_anchor, mask_contrast, lambda_weight, temper)
 
     loss = loss1
 

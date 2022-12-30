@@ -7,8 +7,8 @@ from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
-    supcontrast_clean, supcontrast_clean_kpositive, \
-    analyze_representations_1input, analyze_representations_3input
+    supcontrast_clean, supcontrast_clean_kpositive, supcontrast_clean_kpositivev1_1, \
+    analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
 
 
 def cross_entropy(pred,
@@ -707,7 +707,7 @@ def jsdv1_5_3(pred,
     return loss, p_distribution
 
 
-def analyze_shared_fcs(pred,
+def analyze_shared_fcs_1input(pred,
                         label,
                         weight=None,
                         reduction='mean',
@@ -745,6 +745,45 @@ def analyze_shared_fcs(pred,
 
     return loss, feature_analysis
 
+
+def analyze_shared_fcs_2input(pred,
+                        label,
+                        weight=None,
+                        reduction='mean',
+                        avg_factor=None,
+                        analysis=False,
+                        **kwargs):
+
+    """Calculate the ntxent loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    feature = feature_cls_feats
+    feature_clean, feature_aug1, _ = torch.chunk(feature, 3)
+    label, _, _ = torch.chunk(label, 3)
+    feature_analysis = analyze_representations_2input(feature_clean, feature_aug1, label,)
+
+    return loss, feature_analysis
 
 def ntxent(pred,
            label,
@@ -895,7 +934,58 @@ def kntxent_clean(pred,
             features_orig, _, _ = torch.chunk(feature, 3)
             label_orig, _, _ = torch.chunk(label, 3)
             label_orig = label_orig.unsqueeze(dim=1)
-            ntxent_loss = supcontrast_clean_kpositive(features_orig, label_orig, k=k, classes=classes, temper=temper)
+            ntxent_loss = supcontrast_clean_kpositivev1_1(features_orig, label_orig, k=k, classes=classes, temper=temper)
+
+        if analysis:
+            feature_analysis = analyze_representations_1input(features_orig, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
+
+
+def kntxent_cleanv1_1(pred,
+                       label,
+                       weight=None,
+                       reduction='mean',
+                       avg_factor=None,
+                       analysis=False,
+                       **kwargs):
+    """Calculate the ntxent loss on the clean samples
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    k = kwargs['kpositive']
+    classes = kwargs['classes']
+    feature_analysis = {}
+    loss = 0
+
+    from mmdet.models.detectors.base import FEATURES
+
+    for key, feature in FEATURES.items():
+        feature = feature[0]
+        if feature.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif feature.dim() == 2: # if roi
+            features_orig, _, _ = torch.chunk(feature, 3)
+            label_orig, _, _ = torch.chunk(label, 3)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast_clean_kpositivev1_1(features_orig, label_orig, k=k, classes=classes, temper=temper)
 
         if analysis:
             feature_analysis = analyze_representations_1input(features_orig, label_orig, temper=temper)
@@ -1439,251 +1529,6 @@ def jsdv1_4(pred,
     return loss, p_distribution
 
 
-def jsdy(pred,
-         label,
-         weight=None,
-         reduction='mean',
-         avg_factor=None,
-         **kwargs):
-    """Calculate the jsdy loss.
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
-    label, _, _ = torch.chunk(label, 3)
-
-    if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] == 1:  # if rpn
-            label = label.reshape(label.shape + (1,)).contiguous()
-        else:  # else roi
-            label = F.one_hot(label, num_classes=pred_orig.shape[-1])  # TO-DO: need to check
-
-    p_clean, p_aug1, p_aug2 = F.softmax(
-        pred_orig, dim=1), F.softmax(
-        pred_aug1, dim=1), F.softmax(
-        pred_aug2, dim=1)
-    p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
-                              p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
-                              p_aug2.reshape((1,) + p_aug2.shape).contiguous()
-    label = label.reshape((1,) + label.shape).contiguous()
-    label = label.type(torch.cuda.FloatTensor)
-
-    # Clamp mixture distribution to avoid exploding KL divergence
-    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2 + label.contiguous()) / 4., 1e-7, 1).log()
-    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug2, reduction='batchmean') +
-            F.kl_div(p_mixture, label, reduction='batchmean')) / 4.
-
-    # apply weights and do the reduction
-    if weight is not None:
-        weight, _, _ = torch.chunk(weight, 3)
-        weight = weight.float()
-    loss = weight_reduce_loss(
-        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
-
-    p_distribution = {'p_clean': p_clean,
-                      'p_aug1': p_aug1,
-                      'p_aug2': p_aug2,
-                      'p_mixture': p_mixture,
-                      'label': label}
-
-    return loss, p_distribution
-
-
-def jsdv2(pred,
-          label,
-          weight=None,
-          reduction='mean',
-          avg_factor=None,
-          ignore_index=-100,
-          **kwargs):
-    """Calculate the jsdy loss.
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-        temper (int, optional): temperature scaling for softmax function.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-
-    # chunk the data to get p_orig, label_orig, and weight_orig
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
-    label, _, _ = torch.chunk(label, 3)
-    if weight is not None:
-        weight, _, _ = torch.chunk(weight, 3)
-        weight = weight.float()
-
-    # match the shape: label and weight with pred
-    if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] == 1:  # if rpn
-            ignore_index = -100 if ignore_index is None else ignore_index
-            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
-        else:  # else roi
-            # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
-            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
-
-    if add_act == None:
-        # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] == 1:  # if rpn
-            p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
-                                      torch.sigmoid(pred_aug1 / temper), \
-                                      torch.sigmoid(pred_aug2 / temper)
-        else:  # else roi
-            p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
-                                      F.softmax(pred_aug1 / temper, dim=1), \
-                                      F.softmax(pred_aug2 / temper, dim=1)
-    elif add_act == 'softmax':
-        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
-                                  F.softmax(pred_aug1 / temper, dim=1), \
-                                  F.softmax(pred_aug2 / temper, dim=1)
-    elif add_act == 'sigmoid':
-        p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
-                                  torch.sigmoid(pred_aug1 / temper), \
-                                  torch.sigmoid(pred_aug2 / temper)
-
-    label = label.float()
-
-    # Clamp mixture distribution to avoid exploding KL divergence
-    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
-            F.kl_div(p_mixture, p_aug1, reduction='none') +
-            F.kl_div(p_mixture, p_aug2, reduction='none')) / 3.
-
-    # apply weights and do the reduction
-    loss = weight_reduce_loss(
-        loss, weight=weight, reduction=reduction, avg_factor=None)  # avg_factor=avg_factor is deprecated
-
-    if weight is not None:
-        assert p_clean.size() == label.size() == weight.size(), \
-            "The size of tensors does not match"
-        # get valid predictions for wandb log
-        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight != 0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug1[weight != 0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug2[weight != 0], 1e-7, 1).log(), \
-                                                    p_mixture[weight != 0], \
-                                                    torch.clamp(label[weight != 0], 1e-7, 1).log()
-
-    # logging
-    p_distribution = {'p_clean': p_clean,
-                      'p_aug1': p_aug1,
-                      'p_aug2': p_aug2,
-                      'p_mixture': p_mixture,
-                      'label': label, }
-
-    return loss, p_distribution
-
-
-def jsdv3(pred,
-          label,
-          weight=None,
-          reduction='mean',
-          avg_factor=None,
-          ignore_index=-100,
-          **kwargs):
-    """Calculate the jsdy loss.
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-        temper (int, optional): temperature scaling for softmax function.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-
-    # chunk the data to get p_orig, label_orig, and weight_orig
-    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
-    label, _, _ = torch.chunk(label, 3)
-    if weight is not None:
-        weight, _, _ = torch.chunk(weight, 3)
-        weight = weight.float()
-
-    # match the shape: label and weight with pred
-    if pred_orig.shape != label.shape:
-        if pred_orig.shape[-1] == 1:  # if rpn
-            ignore_index = -100 if ignore_index is None else ignore_index
-            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # label conversion
-        else:  # else roi
-            # label_ = F.one_hot(label, num_classes=pred_orig.shape[-1])  # deprecated
-            label, weight = _expand_onehot_labels(label, weight, pred_orig.size(-1), ignore_index)  # same as F.one_hot
-
-    if add_act == None:
-        # sigmoid and softmax function for rpn_cls and roi_cls
-        if pred_orig.shape[-1] == 1:  # if rpn
-            p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
-                                      torch.sigmoid(pred_aug1 / temper), \
-                                      torch.sigmoid(pred_aug2 / temper)
-        else:  # else roi
-            p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
-                                      F.softmax(pred_aug1 / temper, dim=1), \
-                                      F.softmax(pred_aug2 / temper, dim=1)
-    elif add_act == 'softmax':
-        p_clean, p_aug1, p_aug2 = F.softmax(pred_orig / temper, dim=1), \
-                                  F.softmax(pred_aug1 / temper, dim=1), \
-                                  F.softmax(pred_aug2 / temper, dim=1)
-    elif add_act == 'sigmoid':
-        p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig / temper), \
-                                  torch.sigmoid(pred_aug1 / temper), \
-                                  torch.sigmoid(pred_aug2 / temper)
-
-    label = label.float()
-
-    # Clamp mixture distribution to avoid exploding KL divergence
-    p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
-
-    # apply weights and do the reduction
-    loss = weight_reduce_loss(
-        loss, weight=weight, reduction=reduction, avg_factor=None)  # avg_factor=avg_factor is deprecated
-
-    if weight is not None:
-        assert p_clean.size() == label.size() == weight.size(), \
-            "The size of tensors does not match"
-        # get valid predictions for wandb log
-        p_clean, p_aug1, p_aug2, p_mixture, label = torch.clamp(p_clean[weight != 0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug1[weight != 0], 1e-7, 1).log(), \
-                                                    torch.clamp(p_aug2[weight != 0], 1e-7, 1).log(), \
-                                                    p_mixture[weight != 0], \
-                                                    torch.clamp(label[weight != 0], 1e-7, 1).log()
-
-    # logging
-    p_distribution = {'p_clean': p_clean,
-                      'p_aug1': p_aug1,
-                      'p_aug2': p_aug2,
-                      'p_mixture': p_mixture,
-                      'label': label, }
-
-    return loss, p_distribution
 
 
 def assert_positive_loss(loss, **kwargs):
@@ -1826,8 +1671,6 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_5_1
         elif self.additional_loss == 'jsdv1_5_2':
             self.cls_additional = jsdv1_5_2
-        elif self.additional_loss == 'jsdv1_5_3':
-            self.cls_additional = jsdv1_5_3
         elif self.additional_loss == 'jsdv1_3_ntxent':
             self.cls_additional = jsdv1_3_ntxent
         elif self.additional_loss == 'jsdv1_3_ntxentv0_01':
@@ -1861,12 +1704,16 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxent_clean
         elif self.additional_loss2 == 'kntxent.clean':
             self.cls_additional2 = kntxent_clean
+        elif self.additional_loss2 == 'kntxent.cleanv1.1':
+            self.cls_additional2 = kntxent_cleanv1_1
         elif self.additional_loss2 == 'ntxentv0_01':
             self.cls_additional2 = ntxentv0_01
         elif self.additional_loss2 == 'ntxentv0_02':
             self.cls_additional2 = ntxentv0_02
-        elif self.additional_loss2 == 'analyze_shared_fcs':
-            self.cls_additional2 = analyze_shared_fcs
+        elif self.additional_loss2 == 'analyze_shared_fcs_1input':
+            self.cls_additional2 = analyze_shared_fcs_1input
+        elif self.additional_loss2 == 'analyze_shared_fcs_2input':
+            self.cls_additional2 = analyze_shared_fcs_2input
         else:
             self.cls_additional2 = None
 
