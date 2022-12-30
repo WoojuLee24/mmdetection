@@ -550,8 +550,10 @@ def supcontrast_clean_kpositive(logits_clean, labels=None, k=3, classes=9, lambd
     """
         supcontrast loss
         input: only clean logit
-        mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
+        mask (mask anchor):original same k class [B, B]
         logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
+                                    original same class + negative case
+
     """
 
     mask = None
@@ -592,6 +594,59 @@ def supcontrast_clean_kpositive(logits_clean, labels=None, k=3, classes=9, lambd
 
     loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
                                   kmask_anchor, mask_contrast_except_eye, lambda_weight, temper)
+
+    loss = loss1
+
+    return loss
+
+
+def supcontrast_clean_kpositivev1_1(logits_clean, labels=None, k=3, classes=9, lambda_weight=0.1, temper=0.07, reduction='batchmean'):
+
+    """
+        supcontrast loss
+        input: only clean logit
+        mask (mask anchor): original same k class [3*B, 3*B]
+        logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
+                                     original same k class + negative case
+    """
+
+    mask = None
+    contrast_mode = 'all'
+    base_temper = temper
+    device = logits_clean.device
+    batch_size = logits_clean.size()[0]
+    targets = labels
+
+    kpositive_class_targets = torch.zeros_like(targets, dtype=torch.float32)
+    for i in range(classes):
+        class_targets, _ = (targets==i).nonzero(as_tuple=True)
+        if class_targets.size(0) == 0:
+            pass
+        elif class_targets.size(0) < k:
+            kpositive_class_targets[class_targets, 0] = 1
+        else:
+            sample_choice = np.random.choice(class_targets.detach().cpu().numpy(), k, replace=False)
+            kpositive_class_targets[sample_choice, 0] = 1
+    kpositive_class_targets = kpositive_class_targets.contiguous().view(-1, 1)
+    kpositive_class_anchor = torch.matmul(kpositive_class_targets, kpositive_class_targets.T).float()
+    # kpositive_class_anchor_npy = kpositive_class_anchor.detach().cpu().numpy()
+    targets = targets.contiguous().view(-1, 1)
+
+
+    mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
+    mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
+    mask_anchor_except_eye = mask_anchor - mask_eye
+    # mask_anchor_np = mask_anchor.detach().cpu().numpy()
+
+    kmask_anchor = mask_anchor_except_eye * kpositive_class_anchor
+    # kmask_anchor_npy = kmask_anchor.detach().cpu().numpy()
+
+    mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+    mask_contrast = mask_contrast - mask_anchor + kmask_anchor
+    # mask_contrast_np = mask_contrast.detach().cpu().numpy()
+
+    loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
+                                  kmask_anchor, mask_contrast, lambda_weight, temper)
 
     loss = loss1
 
