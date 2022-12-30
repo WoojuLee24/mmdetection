@@ -1775,6 +1775,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_features[f'additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
+        self.wandb_features[f'additional_loss_ratio({self.wandb_name})'] = []
 
         self.sum_features = dict()
 
@@ -1912,14 +1913,17 @@ class CrossEntropyLossPlus(nn.Module):
                     self.wandb_features[f'ce_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'additional_loss({self.wandb_name})'].clear()
                     self.wandb_features[f'lam_additional_loss({self.wandb_name})'].clear()
+                    self.wandb_features[f'additional_loss_ratio({self.wandb_name})'].clear()
                 self.wandb_features[f'ce_loss({self.wandb_name})'].append(loss_cls)
                 self.wandb_features[f'additional_loss({self.wandb_name})'].append(loss_additional)
                 self.wandb_features[f'lam_additional_loss({self.wandb_name})'].append(
                     self.lambda_weight * loss_additional)
+                self.wandb_features[f'additional_loss_ratio({self.wandb_name})'].append(self.lambda_weight * loss_additional / loss_cls)
             else:
                 self.wandb_features[f'ce_loss({self.wandb_name})'] = loss_cls
                 self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
                 self.wandb_features[f'lam_additional_loss({self.wandb_name})'] = self.lambda_weight * loss_additional
+                self.wandb_features[f'additional_loss_ratio({self.wandb_name})'] = self.lambda_weight * loss_additional / loss_cls
 
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value

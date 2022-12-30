@@ -104,7 +104,7 @@ def get_aug_list(version):
             bboxes_only_translate_x, bboxes_only_translate_y,
         ]
         return aug_list
-    elif version == '0.2':
+    elif version in ['0.2', '0.3']:
         aug_color_list = [autocontrast, equalize, posterize, solarize, color, contrast, brightness, sharpness,]
         aug_geo_list = [
             bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
@@ -121,10 +121,10 @@ class AugMixDetection:
                  num_views=3,
                  version='0.1',
                  aug_severity=6,
+                 mixture_depth=-1,
                  to_rgb=True,):
         super(AugMixDetection, self).__init__()
         self.mixture_width = 3
-        self.mixture_depth = -1
         self.aug_prob_coeff = 1.
 
         self.mean = np.array(mean, dtype=np.float32)
@@ -133,6 +133,7 @@ class AugMixDetection:
         self.version = version
         self.aug_list = get_aug_list(version)
         self.aug_severity = aug_severity
+        self.mixture_depth = mixture_depth
         self.to_rgb = to_rgb
 
     def __call__(self, results, *args, **kwargs):
@@ -168,10 +169,13 @@ class AugMixDetection:
 
         for i in range(self.mixture_width):
             img_aug = img_orig.copy()
-            for aug_list in self.aug_list:
+            for j in range(len(self.aug_list)):
                 # Sample operations : [op1, op2, op3] ~ O
-                depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 3)
-                op_chain = np.random.choice(aug_list, depth, replace=False)  # not allow same aug if replace is False.
+                if isinstance(self.mixture_depth, list):
+                    depth = np.random.randint(*self.mixture_depth[j])
+                else:
+                    depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 3)
+                op_chain = np.random.choice(self.aug_list[j], depth, replace=False)  # not allow same aug if replace is False.
 
                 # Augment
                 img_aug = self.chain(img_aug, op_chain, img_size, gt_bboxes=gt_bboxes)
