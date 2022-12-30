@@ -457,7 +457,9 @@ def jsdv1_3(pred,
     p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
 
     if use_cls_weight:
-        class_weight = kwargs['class_weight']
+        class_weight = kwargs['add_class_weight']
+        if class_weight is None:
+            class_weight = kwargs['class_weight']
 
         loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
                 F.kl_div(p_mixture, p_aug1, reduction='none') +
@@ -1617,6 +1619,7 @@ class CrossEntropyLossPlus(nn.Module):
                  add_act=None,
                  wandb_name=None,
                  use_cls_weight=False,
+                 add_class_weight=None,
                  **kwargs):
         """CrossEntropyLossPlus.
 
@@ -1654,6 +1657,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.add_act = add_act
         self.wandb_name = wandb_name
         self.use_cls_weight = use_cls_weight
+        self.add_class_weight = add_class_weight
 
         self.kwargs = kwargs
 
@@ -1796,6 +1800,7 @@ class CrossEntropyLossPlus(nn.Module):
                 class_weight=class_weight,
                 lambda_weight=self.lambda_weight,
                 use_cls_weight=self.use_cls_weight,
+                add_class_weight=self.add_class_weight,
                 )
 
             # wandb for rpn
