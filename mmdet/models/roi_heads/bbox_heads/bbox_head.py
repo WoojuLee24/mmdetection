@@ -349,6 +349,8 @@ class BBoxHead(BaseModule):
                                 bbox_targets,
                                 bbox_weights)
 
+        losses['reg_ratio'] = losses['loss_bbox'] / losses['loss_cls']
+
         # return losses, self.loss_cls.wandb_features # analysis feature code
         return losses
 
