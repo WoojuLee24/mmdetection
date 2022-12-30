@@ -31,13 +31,13 @@ _base_ = [
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0, wandb_name='rpn_cls'),
-        loss_bbox=dict(type='L1Loss', loss_weight=1.0, wandb_name='rpn_bbox')),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='L1Loss', loss_weight=1.0)),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0, wandb_name='roi_cls'),
-            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0, wandb_name='roi_bbox'))),
+                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
