@@ -410,6 +410,7 @@ def jsdv1_3(pred,
             weight=None,
             reduction='mean',
             avg_factor=None,
+            use_cls_weight=False,
             **kwargs):
     """Calculate the jsdv1.3 loss.
     jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
@@ -454,9 +455,25 @@ def jsdv1_3(pred,
 
     # Clamp mixture distribution to avoid exploding KL divergence
     p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
-    loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-            F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+
+    if use_cls_weight:
+        class_weight = kwargs['class_weight']
+
+        loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
+                F.kl_div(p_mixture, p_aug1, reduction='none') +
+                F.kl_div(p_mixture, p_aug2, reduction='none')) / 3.
+        loss = torch.sum(loss, dim=-1).squeeze(0)
+
+        label, _, _ = torch.chunk(label, 3)
+        for i in range(len(class_weight)):
+            mask = (label == i)
+            loss[mask] = loss[mask] * class_weight[i]
+
+        loss = torch.sum(loss)
+    else:
+        loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
+                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
+                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
 
     # apply weights and do the reduction
     if weight is not None:
@@ -1599,6 +1616,7 @@ class CrossEntropyLossPlus(nn.Module):
                  analysis=False,
                  add_act=None,
                  wandb_name=None,
+                 use_cls_weight=False,
                  **kwargs):
         """CrossEntropyLossPlus.
 
@@ -1635,6 +1653,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.analysis = analysis
         self.add_act = add_act
         self.wandb_name = wandb_name
+        self.use_cls_weight = use_cls_weight
 
         self.kwargs = kwargs
 
@@ -1775,7 +1794,8 @@ class CrossEntropyLossPlus(nn.Module):
                 add_act=self.add_act,
                 ignore_index=ignore_index,
                 class_weight=class_weight,
-                lambda_weight=self.lambda_weight
+                lambda_weight=self.lambda_weight,
+                use_cls_weight=self.use_cls_weight,
                 )
 
             # wandb for rpn
