@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+# Modifications:
+# Copyright (c) 2022 Urban Robotics Lab. @ KAIST. All rights reserved.
 import argparse
 import copy
 import os
@@ -15,12 +17,10 @@ from pycocotools.cocoeval import COCOeval
 from tools.analysis_tools.robustness_eval import get_results
 
 from mmdet import datasets
-from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, \
-    single_gpu_test_feature
+from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, single_gpu_analyze_feature, single_gpu_analyze_feature_class
 from mmdet.core import eval_map
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
-from mmdet.core.hook import FeatureHook
 
 
 def coco_eval_with_return(result_files,
@@ -96,7 +96,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='MMDet test detector')
     parser.add_argument('config', help='test config file path')
     parser.add_argument('checkpoint', help='checkpoint file')
-    parser.add_argument('--work-dir', type=str, default='/ws/data/log/cityscapes/analysis/')
+    parser.add_argument('--work_dir', type=str, default='analysis_background/')
     parser.add_argument('--out', help='output result file')
     parser.add_argument(
         '--corruptions',
@@ -123,12 +123,6 @@ def parse_args():
         type=str,
         nargs='+',
         choices=['proposal', 'proposal_fast', 'bbox', 'segm', 'keypoints'],
-        help='eval types')
-    parser.add_argument(
-        '--analysis',
-        type=str,
-        nargs='+',
-        choices=['single_domain', 'multi_domain', 'multi_domain_sample'],
         help='eval types')
     parser.add_argument(
         '--iou-thr',
@@ -188,6 +182,18 @@ def parse_args():
         default='original',
         help='Add Corrupt'
     )
+    parser.add_argument(
+        '--proposal-type',
+        type=str,
+        choices=['original', 'duplicate', 'perturb', 'perturb_cutout'],
+        help='which type of proposal list to be used')
+
+    parser.add_argument(
+        '--analysis-which',
+        type=str,
+        choices=['sample', 'class'],
+        help='which type of proposal list to be used')
+
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -296,9 +302,6 @@ def main():
                 raise NotImplementedError(
                     "The types of load_dataset can be 'original' or 'corrupted'.")
 
-            # analysis_mode. test_mode does not return annotations
-            test_data_cfg['test_mode'] = False
-
             # print info
             print(f'\nTesting {corruption} at severity {corruption_severity}')
 
@@ -313,7 +316,7 @@ def main():
                 dist=distributed,
                 shuffle=False)
 
-
+            # original dataset
             orig_test_data_cfg = copy.deepcopy(test_data_cfg)
             orig_test_data_cfg['img_prefix'] = '/ws/data/cityscapes/leftImg8bit/val'
             orig_dataset = build_dataset(orig_test_data_cfg)
@@ -325,9 +328,8 @@ def main():
                 shuffle=False)
 
             # build the model and load checkpoint
-            model = build_detector(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
-            # cfg.model.train_cfg = None
-            # model = build_detector(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
+            cfg.model.train_cfg = None
+            model = build_detector(cfg.model, test_cfg=cfg.get('test_cfg'))
             fp16_cfg = cfg.get('fp16', None)
             if fp16_cfg is not None:
                 wrap_fp16_model(model)
@@ -348,25 +350,91 @@ def main():
                     show_dir = osp.join(show_dir, str(corruption_severity))
                     if not osp.exists(show_dir):
                         os.makedirs(show_dir)
+                if args.analysis_which == 'sample':
+                    outputs = single_gpu_analyze_feature(model, data_loader, orig_dataset, args.show,
+                                                         show_dir, args.show_score_thr, work_dir=args.work_dir,
+                                                         proposal_type=args.proposal_type)
+                elif args.analysis_which == 'class':
+                    outputs = single_gpu_analyze_feature_class(model, data_loader, orig_dataset, args.show,
+                                                         show_dir, args.show_score_thr, work_dir=args.work_dir,
+                                                         proposal_type=args.proposal_type)
 
-                features_list = ['module.roi_head.bbox_head.shared_fcs', 'roi_head.bbox_head.shared_fcs']
-                hook = FeatureHook(features_list)
-                hook.hook_multi_layer(model, features_list)
-                hook.hook_multi_layer(model.module, features_list)
-
-                outputs = single_gpu_test_feature(model, data_loader, orig_dataset, args.show,
-                                              show_dir, args.show_score_thr)
-                # deprecated
-                # elif 'multi_domain_sample' in args.analysis:
-                #     outputs = single_gpu_test_feature_multi_domain_sample(model, data_loader, orig_dataset, args.show,
-                #                                                           show_dir, args.show_score_thr)
-
+                continue
             else:
                 model = MMDistributedDataParallel(
                     model.cuda(),
                     device_ids=[torch.cuda.current_device()],
                     broadcast_buffers=False)
                 outputs = multi_gpu_test(model, data_loader, args.tmpdir)
+
+            if args.out and rank == 0:
+                eval_results_filename = (
+                    osp.splitext(args.out)[0] + '_results' +
+                    osp.splitext(args.out)[1])
+                mmcv.dump(outputs, args.out)
+                eval_types = args.eval
+                if cfg.dataset_type == 'VOCDataset':
+                    if eval_types:
+                        for eval_type in eval_types:
+                            if eval_type == 'bbox':
+                                test_dataset = mmcv.runner.obj_from_dict(
+                                    cfg.data.test, datasets)
+                                logger = 'print' if args.summaries else None
+                                mean_ap, eval_results = \
+                                    voc_eval_with_return(
+                                        args.out, test_dataset,
+                                        args.iou_thr, logger)
+                                aggregated_results[corruption][
+                                    corruption_severity] = eval_results
+                            else:
+                                print('\nOnly "bbox" evaluation \
+                                is supported for pascal voc')
+                else:
+                    if eval_types:
+                        print(f'Starting evaluate {" and ".join(eval_types)}')
+                        if eval_types == ['proposal_fast']:
+                            result_file = args.out
+                        else:
+                            if not isinstance(outputs[0], dict):
+                                result_files = dataset.results2json(
+                                    outputs, args.out)
+                            else:
+                                for name in outputs[0]:
+                                    print(f'\nEvaluating {name}')
+                                    outputs_ = [out[name] for out in outputs]
+                                    result_file = args.out
+                                    + f'.{name}'
+                                    result_files = dataset.results2json(
+                                        outputs_, result_file)
+                        eval_results = coco_eval_with_return(
+                            result_files, eval_types, dataset.coco)
+                        aggregated_results[corruption][
+                            corruption_severity] = eval_results
+                    else:
+                        print('\nNo task was selected for evaluation;'
+                              '\nUse --eval to select a task')
+
+                # save results after each evaluation
+                mmcv.dump(aggregated_results, eval_results_filename)
+    return
+    if rank == 0:
+        # print final results
+        print('\nAggregated results:')
+        prints = args.final_prints
+        aggregate = args.final_prints_aggregate
+
+        if cfg.dataset_type == 'VOCDataset':
+            get_results(
+                eval_results_filename,
+                dataset='voc',
+                prints=prints,
+                aggregate=aggregate)
+        else:
+            get_results(
+                eval_results_filename,
+                dataset='coco',
+                prints=prints,
+                aggregate=aggregate)
 
 
 if __name__ == '__main__':

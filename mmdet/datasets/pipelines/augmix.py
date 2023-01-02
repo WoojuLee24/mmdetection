@@ -170,13 +170,16 @@ class AugMix:
             autocontrast, equalize, posterize, rotate, solarize, shear_x, shear_y,
             translate_x, translate_y
         ]
-        augmentations_all = [
+        augmentations_all = [ # WARN: don't use it if dataset-c
             autocontrast, equalize, posterize, rotate, solarize, shear_x, shear_y,
             translate_x, translate_y, color, contrast, brightness, sharpness
         ]
-        augmentations_without_obj_translation = [
+        augmentations_without_obj_translation = [ # WARN: don't use it if dataset-c
             autocontrast, equalize, posterize, solarize,
             color, contrast, brightness, sharpness
+        ]
+        augmentations_without_geo = [
+            autocontrast, equalize, posterize, solarize
         ]
         if (aug_list == 'augmentations_without_obj_translation') or (aug_list == 'wotrans'):
             self.aug_list = augmentations_without_obj_translation
@@ -186,6 +189,8 @@ class AugMix:
             self.aug_list = augmentations_all
         elif aug_list == 'copy':
             self.aug_list = aug_list
+        elif (aug_list == 'wogeo') or (aug_list == 'augmentations_without_geo'):
+            self.aug_list = augmentations_without_geo
         else: # default = 'augmentations'
             self.aug_list = augmentations
 

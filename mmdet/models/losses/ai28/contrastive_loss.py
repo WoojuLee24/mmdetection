@@ -130,6 +130,53 @@ def make_matrix(p, q, criterion, reduction='none'):
     return matrix
 
 
+def analyze_representations_2input_sample(logits_clean, logits_aug1, lambda_weight=12, temper=1.0, reduction='batchmean'):
+    '''
+    logging representations by jsdv4 and L2 distance
+    3 inputs
+    '''
+
+    device = logits_clean.device
+
+    pred_clean = logits_clean.data.max(1)[1]
+    pred_aug1 = logits_aug1.data.max(1)[1]
+
+    logits_clean = logits_clean.detach()
+    logits_aug1 = logits_aug1.detach()
+
+    # logging
+    batch_size = logits_clean.size()[0]
+    temper = 1.0
+
+    # softmax
+    p_clean, p_aug1  = F.softmax(logits_clean / temper, dim=1), \
+                       F.softmax(logits_aug1 / temper, dim=1)
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
+
+    # JSD matrix
+    jsd_matrix = (make_matrix(p_clean, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum') + \
+                  make_matrix(p_aug1, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum')) / 2
+
+    # MSE matrix
+    mse_matrix = make_matrix(logits_clean, logits_aug1, criterion=nn.MSELoss(reduction='none'), reduction='mean')
+    l2_matrix = torch.sqrt(mse_matrix)
+
+    # Cosine Similarity matrix
+    cs_matrix = make_matrix(logits_clean, logits_aug1, criterion=nn.CosineSimilarity(dim=1), reduction='none')
+    cs_matrix = cs_matrix.squeeze(dim=-1)
+
+
+    features = {
+                'sample_matrix_jsd': jsd_matrix.detach().cpu().numpy(),
+                'sample_matrix_l2': l2_matrix.detach().cpu().numpy(),
+                'sample_matrix_cs': cs_matrix.detach().cpu().numpy(),
+                }
+
+    return features
+
+
 def analyze_representations_1input(logits, labels=None, lambda_weight=12, temper=1.0, reduction='batchmean'):
     '''
     logging representations by jsdv4 and L2 distance

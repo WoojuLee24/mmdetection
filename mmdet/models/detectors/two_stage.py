@@ -196,13 +196,22 @@ class TwoStageDetector(BaseDetector):
         if 'img2' in kwargs:
             # img2 = kwargs.pop('img2')   # orig data
             img2 = kwargs['img2']   # orig data
-            img = torch.cat([img2, img, img], dim=0)
+            # img = torch.cat([img2, img, img], dim=0)
+            img = torch.cat([img2, img], dim=0)
             gt_bboxes.append(gt_bboxes[0])
+            # gt_bboxes.append(gt_bboxes[0])
+            gt_labels.append(gt_labels[0])
+            # gt_labels.append(gt_labels[0])
+            img_metas.append(img_metas[0])
+            # img_metas.append(img_metas[0])
+
+        if 'img3' in kwargs:    # augmented data. img = ['img1', 'img2', 'img3'] = [original, corrupted, augmented]
+            img3 = kwargs['img3']
+            img = torch.cat([img, img3], dim=0)
             gt_bboxes.append(gt_bboxes[0])
             gt_labels.append(gt_labels[0])
-            gt_labels.append(gt_labels[0])
             img_metas.append(img_metas[0])
-            img_metas.append(img_metas[0])
+
 
         x = self.extract_feat(img)
 
@@ -221,21 +230,31 @@ class TwoStageDetector(BaseDetector):
                 proposal_cfg=proposal_cfg,
                 **kwargs)
             losses.update(rpn_losses)
+
+            # proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
+
+
         else:
             proposal_list = proposals
 
         if 'img2' in kwargs:
             # proposal list of original image
             proposal_list[1] = proposal_list[0]
-            proposal_list[2] = proposal_list[0]
+            # proposal_list[2] = proposal_list[0]
             _ = kwargs.pop('img2')
 
+        if 'img3' in kwargs:
+            proposal_list[2] = proposal_list[0]
+            _ = kwargs.pop('img3')
 
-        roi_losses, features = self.roi_head.forward_analysis(x, img_metas, proposal_list,
-                                                 gt_bboxes, gt_labels,
-                                                 gt_bboxes_ignore, gt_masks,
-                                                 **kwargs)
-        losses.update(roi_losses)
+        # roi_losses, features = self.roi_head.forward_analysis(x, img_metas, proposal_list,
+        #                                          gt_bboxes, gt_labels,
+        #                                          gt_bboxes_ignore, gt_masks,
+        #                                          **kwargs)
+        features = self.roi_head.forward_analysis(x, img_metas, proposal_list,
+                                                  gt_bboxes, gt_labels,
+                                                  gt_bboxes_ignore, gt_masks,
+                                                  **kwargs)
 
         return losses, features
 

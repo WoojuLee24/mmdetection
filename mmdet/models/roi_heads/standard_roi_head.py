@@ -6,6 +6,7 @@ from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
 from ..builder import HEADS, build_head, build_roi_extractor
 from .base_roi_head import BaseRoIHead
 from .test_mixins import BBoxTestMixin, MaskTestMixin
+from mmdet.models.losses.ai28.contrastive_loss import analyze_representations_2input_sample, analyze_representations_2input
 
 
 @HEADS.register_module()
@@ -175,53 +176,38 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             sampling_results = []
             # edited by dnwn24
             # assert divmod(num_imgs, 3)[1] == 0
-            if divmod(num_imgs, 3)[1] !=0 :
-                for i in range(num_imgs):
-                    assign_result = self.bbox_assigner.assign(
-                        proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-                        gt_labels[i])
-                    sampling_result = self.bbox_sampler.sample(
-                        assign_result,
-                        proposal_list[i],
-                        gt_bboxes[i],
-                        gt_labels[i],
-                        feats=[lvl_feat[i][None] for lvl_feat in x])
-                    sampling_results.append(sampling_result)
-            else:
-                sampling_results_tmp = []
-                for i in range(int(num_imgs/3)):
-                    assign_result = self.bbox_assigner.assign(
-                        proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-                        gt_labels[i])
-                    sampling_result = self.bbox_sampler.sample(
-                        assign_result,
-                        proposal_list[i],
-                        gt_bboxes[i],
-                        gt_labels[i],
-                        feats=[lvl_feat[i][None] for lvl_feat in x])
-                    sampling_results_tmp.append(sampling_result)
-                sampling_results.extend(sampling_results_tmp)
-                sampling_results.extend(sampling_results_tmp)
-                sampling_results.extend(sampling_results_tmp)
+            # same proposal list -> different sampling results
+            # if divmod(num_imgs, 3)[1] !=0 :
+            #     for i in range(num_imgs):
+            #         assign_result = self.bbox_assigner.assign(
+            #             proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
+            #             gt_labels[i])
+            #         sampling_result = self.bbox_sampler.sample(
+            #             assign_result,
+            #             proposal_list[i],
+            #             gt_bboxes[i],
+            #             gt_labels[i],
+            #             feats=[lvl_feat[i][None] for lvl_feat in x])
+            #         sampling_results.append(sampling_result)
+            assign_result = self.bbox_assigner.assign(
+                proposal_list[0], gt_bboxes[0], gt_bboxes_ignore[0],
+                gt_labels[0])
+            sampling_result = self.bbox_sampler.sample(
+                assign_result,
+                proposal_list[0],
+                gt_bboxes[0],
+                gt_labels[0],
+                feats=[lvl_feat[0][None] for lvl_feat in x])
+            # duplicate sampling results
+            for i in range(num_imgs):
+                sampling_results.append(sampling_result)
 
-        losses = dict()
-        # bbox head forward and loss
-        if self.with_bbox:
-            bbox_results, features = self._bbox_forward_feature_analysis(x, sampling_results,
-                                                    gt_bboxes, gt_labels,
-                                                    img_metas, **kwargs)
-            losses.update(bbox_results['loss_bbox'])
-            if 'loss_feat' in bbox_results: # DEV[CODE=102]: Contrastive loss with GenAutoAugment
-                losses.update({'loss_feat': bbox_results['loss_feat']})
+        features = self._bbox_forward_feature_analysis(x, sampling_results, gt_bboxes, gt_labels, img_metas, **kwargs)
 
-        # mask head forward and loss
-        if self.with_mask:
-            mask_results = self._mask_forward_train(x, sampling_results,
-                                                    bbox_results['bbox_feats'],
-                                                    gt_masks, img_metas)
-            losses.update(mask_results['loss_mask'])
 
-        return losses, features
+        return features
+
+
 
 
     # ANALYSIS[CODE=001]: analysis background
@@ -238,6 +224,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
         return bbox_results
 
+
     def _bbox_forward_feature_analysis(self, x, sampling_results, gt_bboxes, gt_labels,
                             img_metas, gt_instance_inds=None):
         """Run forward function and calculate loss for box head in training."""
@@ -250,29 +237,46 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         global feature_cls_feats
         feature_cls_feats = self.bbox_head.cls_feats
 
+        # To do
+        from mmdet.models.losses.ai28.contrastive_loss import analyze_representations_2input
+        num_imgs = len(sampling_results)
+        feature_analysis = dict()
+        if num_imgs == 2:
+            feature_clean, feature_corr = torch.chunk(feature_cls_feats, num_imgs)
+            label = bbox_targets[0]
+            label, _  = torch.chunk(label, num_imgs)
+            feature_analysis1 = analyze_representations_2input(feature_clean, feature_clean, label, )
+            feature_analysis2 = analyze_representations_2input(feature_clean, feature_corr, label, )
+            feature_analysis3 = analyze_representations_2input(feature_corr, feature_corr, label, )
+
+            for key, value in feature_analysis1.items():
+                feature_analysis[f"clean_clean_{key}"] = value
+                feature_analysis[f"clean_corr_{key}"] = feature_analysis2[key]
+                feature_analysis[f"corr_corr_{key}"] = feature_analysis3[key]
+
+        elif num_imgs == 3:
+            feature_clean, feature_corr, feature_aug = torch.chunk(feature_cls_feats, num_imgs)
+            label = bbox_targets[0]
+            label, _, _ = torch.chunk(label, num_imgs)
+            feature_analysis1 = analyze_representations_2input(feature_clean, feature_clean, label, )
+            feature_analysis2 = analyze_representations_2input(feature_clean, feature_corr, label, )
+            feature_analysis3 = analyze_representations_2input(feature_clean, feature_aug, label, )
+            feature_analysis4 = analyze_representations_2input(feature_corr, feature_corr, label, )
+            feature_analysis5 = analyze_representations_2input(feature_corr, feature_aug, label, )
+            feature_analysis6 = analyze_representations_2input(feature_aug, feature_aug, label, )
+
+
+            for key, value in feature_analysis1.items():
+                feature_analysis[f"clean_clean_{key}"] = feature_analysis1[key]
+                feature_analysis[f"clean_corr_{key}"] = feature_analysis2[key]
+                feature_analysis[f"clean_aug_{key}"] = feature_analysis3[key]
+                feature_analysis[f"corr_corr_{key}"] = feature_analysis4[key]
+                feature_analysis[f"corr_aug_{key}"] = feature_analysis5[key]
+                feature_analysis[f"aug_aug_{key}"] = feature_analysis6[key]
+
         self.bbox_targets = bbox_targets
-        loss_bbox, features = self.bbox_head.loss_with_feature(bbox_results['cls_score'],
-                                        bbox_results['bbox_pred'], rois,
-                                        *bbox_targets)
 
-        bbox_results.update(loss_bbox=loss_bbox)
-
-
-        # DEV[CODE=102]: Contrastive loss with GenAutoAugment
-        if self.loss_feat != None:
-            # Ground-truth
-            valid_gt_bboxes, valid_gt_instance_inds, valid_gt_rois = \
-                self.loss_feat.filter_and_collect(gt_bboxes, gt_instance_inds)
-
-            gt_bbox_results = []
-            for i in range(len(valid_gt_rois)):
-                gt_bbox_results.append(self._bbox_forward(x, valid_gt_rois[i]))
-
-            loss_feat = self.loss_feat(gt_bbox_results, gt_labels, valid_gt_instance_inds)
-
-            bbox_results.update(loss_feat=loss_feat)
-
-        return bbox_results, features
+        return feature_analysis
 
 
     def _bbox_forward(self, x, rois):
@@ -456,6 +460,208 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                                     img_metas=img_metas)
 
         return 0
+
+
+    # ANALYSIS[CODE=001]: analysis background
+    def simple_test_analyze_feature(self,
+                                        x,
+                                        proposal_list,
+                                        img_metas,
+                                        proposals=None,
+                                        rescale=False,
+                                        max_samples=512):
+        assert self.with_bbox, 'Bbox head must be implemented.'
+
+        import numpy as np
+        from mmdet.utils.visualize import plot_matrix
+        import copy
+
+        ''' self.simple_test_bboxes starts from here '''
+        proposals = proposal_list
+        rcnn_test_cfg = self.test_cfg
+
+        rois = bbox2roi(proposals)
+
+        x = list(x)
+        # if img_metas[0]['proposal_type'] == 'perturb_cutout':
+        #     for i in range(len(x)):
+        #         mask = torch.rand_like(x[i][0, 0, :, :]) > 0.5
+        #         mask = mask.float()
+        #         mask = mask.repeat(1, 256, 1, 1)
+        #         x_masked = x[i][0:1] * mask     # original image masked
+        #         x[i] = torch.cat([x[i], x_masked], dim=0)
+
+        if not rois.shape[0] == 0:
+            only_gt = False
+            if only_gt:
+                gt_bboxes = torch.tensor(img_metas[0]['annotations'][0]['bboxes']).to(rois.get_device())
+                gt_labels = torch.tensor(img_metas[0]['annotations'][0]['labels']).to(rois.get_device())
+                batch_inds = gt_bboxes.new_full((gt_bboxes.size(0), 1), 0)
+                rois = torch.cat([batch_inds, gt_bboxes], dim=1)
+
+            bbox_results = self._bbox_forward_analysis_background(x, rois, img_metas)
+
+            img_shapes = tuple(meta['img_shape'] for meta in img_metas)
+            scale_factors = tuple(meta['scale_factor'] for meta in img_metas)
+
+            # split batch bbox prediction back to each image
+            cls_score = bbox_results['cls_score']
+            bbox_pred = bbox_results['bbox_pred']
+
+            if only_gt:
+                num_proposals_per_img = len(rois)
+            else:
+                num_proposals_per_img = tuple(len(p) for p in proposals)
+            rois = rois.split(num_proposals_per_img, 0)
+            cls_score = cls_score.split(num_proposals_per_img, 0)
+
+            # global feature_cls_feats
+            feature_cls_feats = self.bbox_head.cls_feats
+            feature_cls_feats = feature_cls_feats.split(num_proposals_per_img, 0)
+
+            # some detector with_reg is False, bbox_pred will be None
+            if bbox_pred is not None:
+                # TODO move this to a sabl_roi_head
+                # the bbox prediction of some detectors like SABL is not Tensor
+                if isinstance(bbox_pred, torch.Tensor):
+                    bbox_pred = bbox_pred.split(num_proposals_per_img, 0)
+                else:
+                    bbox_pred = self.bbox_head.bbox_pred_split(
+                        bbox_pred, num_proposals_per_img)
+            else:
+                bbox_pred = (None,) * len(proposals)
+
+            # max_samples = 30
+
+            feature_class = True
+            if feature_class:
+                pass
+
+            one_plot = True
+            if one_plot:
+                # 1D plot features
+                from mmdet.utils.visualize import plot_bar
+                for i in range(feature_cls_feats):
+                    for j, value in enumerate(feature_cls_feats[i]):
+                        plt = plot_bar(value.detach().cpu().numpy())
+                        plt.savefig(f"{img_metas[0]['work_dir']}feature1d_{i}_{j}.png")
+
+            feature_sample = True
+            if feature_sample:
+
+                features = analyze_representations_2input_sample(feature_cls_feats[0], feature_cls_feats[1])
+                name = 'orig_corr_'
+                for key, value in features.items():
+                    np.savetxt(f"{img_metas[0]['work_dir']}{name}{key}.txt", value, fmt='%1.3f')
+                    plt = plot_matrix(value, classes=proposals[0].size(0), txt=False)
+                    plt.savefig(f"{img_metas[0]['work_dir']}{name}{key}.png")
+
+                features = analyze_representations_2input_sample(feature_cls_feats[0], feature_cls_feats[0])
+                name = 'orig_oig_'
+                for key, value in features.items():
+                    np.savetxt(f"{img_metas[0]['work_dir']}{name}{key}.txt", value, fmt='%1.3f')
+                    plt = plot_matrix(value, classes=proposals[0].size(0), txt=False)
+                    plt.savefig(f"{img_metas[0]['work_dir']}{name}{key}.png")
+
+                features = analyze_representations_2input_sample(feature_cls_feats[1], feature_cls_feats[1])
+                name = 'corr_corr_'
+                for key, value in features.items():
+                    np.savetxt(f"{img_metas[0]['work_dir']}{name}{key}.txt", value, fmt='%1.3f')
+                    plt = plot_matrix(value, classes=proposals[0].size(0), txt=False)
+                    plt.savefig(f"{img_metas[0]['work_dir']}{name}{key}.png")
+
+            vis_image = True
+            if vis_image:
+                # apply bbox post-processing to each image individually
+                for i in range(len(proposals)):
+                    img_metas_i = copy.deepcopy(img_metas)
+                    img_metas_i[0]['work_dir'] += str(i) + '_'
+
+                    if not rois[i].shape[0] == 0:
+                        self.bbox_head.analysis_regions(rois[i], cls_score[i], bbox_pred[i], img_shapes[0],
+                                                        scale_factors[0], rescale=rescale, cfg=rcnn_test_cfg,
+                                                        img_metas=img_metas_i, each_bbox=True, each_class=False)
+
+
+        return 0
+
+
+    # ANALYSIS[CODE=001]: analysis background
+    def simple_test_analyze_feature_class(self,
+                                        x,
+                                        proposal_list,
+                                        img_metas,
+                                        proposals=None,
+                                        rescale=False,
+                                        max_samples=512):
+        assert self.with_bbox, 'Bbox head must be implemented.'
+
+        import numpy as np
+        from mmdet.utils.visualize import plot_matrix
+        import copy
+
+        ''' self.simple_test_bboxes starts from here '''
+        proposals = proposal_list
+        rcnn_test_cfg = self.test_cfg
+
+        rois = bbox2roi(proposals)
+
+        x = list(x)
+        # if img_metas[0]['proposal_type'] == 'perturb_cutout':
+        #     for i in range(len(x)):
+        #         mask = torch.rand_like(x[i][0, 0, :, :]) > 0.5
+        #         mask = mask.float()
+        #         mask = mask.repeat(1, 256, 1, 1)
+        #         x_masked = x[i][0:1] * mask     # original image masked
+        #         x[i] = torch.cat([x[i], x_masked], dim=0)
+
+        if not rois.shape[0] == 0:
+            only_gt = False
+            if only_gt:
+                gt_bboxes = torch.tensor(img_metas[0]['annotations'][0]['bboxes']).to(rois.get_device())
+                gt_labels = torch.tensor(img_metas[0]['annotations'][0]['labels']).to(rois.get_device())
+                batch_inds = gt_bboxes.new_full((gt_bboxes.size(0), 1), 0)
+                rois = torch.cat([batch_inds, gt_bboxes], dim=1)
+
+            bbox_results = self._bbox_forward_analysis_background(x, rois, img_metas)
+
+            img_shapes = tuple(meta['img_shape'] for meta in img_metas)
+            scale_factors = tuple(meta['scale_factor'] for meta in img_metas)
+
+            # split batch bbox prediction back to each image
+            cls_score = bbox_results['cls_score']
+            bbox_pred = bbox_results['bbox_pred']
+
+            if only_gt:
+                num_proposals_per_img = len(rois)
+            else:
+                num_proposals_per_img = tuple(len(p) for p in proposals)
+            rois = rois.split(num_proposals_per_img, 0)
+            cls_score = cls_score.split(num_proposals_per_img, 0)
+
+            # global feature_cls_feats
+            feature_cls_feats = self.bbox_head.cls_feats
+            feature_cls_feats = feature_cls_feats.split(num_proposals_per_img, 0)
+
+            # to do. how to get gt labels on the test mode???
+            features = analyze_representations_2input(feature_cls_feats[0], feature_cls_feats[1], )
+
+
+            # some detector with_reg is False, bbox_pred will be None
+            if bbox_pred is not None:
+                # TODO move this to a sabl_roi_head
+                # the bbox prediction of some detectors like SABL is not Tensor
+                if isinstance(bbox_pred, torch.Tensor):
+                    bbox_pred = bbox_pred.split(num_proposals_per_img, 0)
+                else:
+                    bbox_pred = self.bbox_head.bbox_pred_split(
+                        bbox_pred, num_proposals_per_img)
+            else:
+                bbox_pred = (None,) * len(proposals)
+
+
+        return 0
+
 
     def simple_test(self,
                     x,

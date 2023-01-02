@@ -46,24 +46,91 @@ def single_gpu_analysis_background(model,
     return results
 
 
-def single_gpu_test_feature(model,
-                            data_loader,
-                            show=False,
-                            show_dir=None,
-                            show_score_thr=0.3):
-    ####
-    # [DEV 001]
-    ####
+def single_gpu_analyze_feature(model,
+                    data_loader,
+                    orig_dataset=None,
+                    show=False,
+                    show_dir=None,
+                    show_score_thr=0.3,
+                    work_dir='analysis_background/',
+                    proposal_type='duplicate'):
+    model.eval()
+    results = []
+    dataset = data_loader.dataset
+    for i, data in enumerate(data_loader):
+        _transform = dataset.pipeline.transforms[1]
+        if _transform.__class__.__name__ == 'Corrupt':
+            data['img_metas'][0].data[0][0]['corruption'] = _transform.corruption
+            data['img_metas'][0].data[0][0]['severity'] = _transform.severity
+        else:
+            data['img_metas'][0].data[0][0]['corruption'] = 'None'
+            data['img_metas'][0].data[0][0]['severity'] = 0
+
+        annotations = [dataset.get_ann_info(i) for i in range(i*data_loader.batch_size, (i+1)*data_loader.batch_size)]
+        data['img_metas'][0].data[0][0]['annotations'] = annotations
+
+        data['img_metas'][0].data[0][0]['work_dir'] = show_dir + "/"
+        data['img_metas'][0].data[0][0]['proposal_type'] = proposal_type
+
+        if orig_dataset != None: # multi domain test
+            orig_data = orig_dataset[i]
+            img = orig_data['img'][0].unsqueeze(dim=0)
+            data['img'][0] = torch.cat([img, data['img'][0]], dim=0)
+
+        with torch.no_grad():
+            model(return_loss=False, rescale=True, **data, analysis='feature')
+        break
+    return results
+
+
+def single_gpu_analyze_feature_class(model,
+                    data_loader,
+                    orig_dataset=None,
+                    show=False,
+                    show_dir=None,
+                    show_score_thr=0.3,
+                    work_dir='analysis_background/',
+                    proposal_type='duplicate'):
+
+    # to do:
+    # test feature on the test mode
     model.eval()
     results = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
-    batch_size = 1
     features_sum = dict()
+
     for i, data in enumerate(data_loader):
+        _transform = dataset.pipeline.transforms[1]
+        if _transform.__class__.__name__ == 'Corrupt':
+            data['img_metas'][0].data[0][0]['corruption'] = _transform.corruption
+            data['img_metas'][0].data[0][0]['severity'] = _transform.severity
+        else:
+            data['img_metas'][0].data[0][0]['corruption'] = 'None'
+            data['img_metas'][0].data[0][0]['severity'] = 0
+
+        annotations = [dataset.get_ann_info(i) for i in range(i*data_loader.batch_size, (i+1)*data_loader.batch_size)]
+        data['img_metas'][0].data[0][0]['annotations'] = annotations
+
+        data['img_metas'][0].data[0][0]['work_dir'] = show_dir + "/"
+        data['img_metas'][0].data[0][0]['proposal_type'] = proposal_type
+
+        if orig_dataset != None: # multi domain test
+            orig_data = orig_dataset[i]
+            img = orig_data['img'][0].unsqueeze(dim=0)
+            data['img'][0] = torch.cat([img, data['img'][0]], dim=0)
+
+        aug = False
+        if aug:
+            img = data['img'][0]
+            mask = torch.rand_like(img[0:1, 0, :, :]) > 0.8
+            mask = mask.float()
+            mask = mask.repeat(1, 3, 1, 1)
+            img_masked = img * mask  # original image masked
+            data['img'][0] = torch.cat([img, img_masked], dim=0) # orig, corr, aug
+
         with torch.no_grad():
-            loss, features = model(return_loss=True, analysis=True, **data)
-            # result = model(return_loss=False, rescale=True, **data)
+            features = model(return_loss=False, rescale=True, **data, analysis='feature_class')
 
             if i == 0:
                 features_sum = copy.deepcopy(features)
@@ -78,53 +145,56 @@ def single_gpu_test_feature(model,
                     if not 'loss' in key:
                         features_sum[key] += value
 
-        # # debug
-        # if i == 5:
-        #     break
+            # # debug
+            # if i == 5:
+            #     break
 
         for _ in range(batch_size):
             prog_bar.update()
 
-    # get sum of samples with mask
-    matrix_sample_number = features_sum['matrix_sample_number(roi_cls)']
-    classes = np.shape(matrix_sample_number)[0]
-    mask_eye = np.identity(classes, dtype=np.float32)  # [B, B]
+        # get sum of samples with mask
+        matrix_sample_number = features_sum['matrix_sample_number(roi_cls)']
+        classes = np.shape(matrix_sample_number)[0]
+        mask_eye = np.identity(classes, dtype=np.float32)  # [B, B]
 
-    class_matrix = features_sum['matrix_sample_number(roi_cls)']
-    class_matrix_same = mask_eye * class_matrix
-    class_sum_same = class_matrix_same.sum()
-    class_matrix_diff = class_matrix - class_matrix_same
-    class_sum_diff = class_matrix_diff.sum() / 2
+        class_matrix = features_sum['matrix_sample_number(roi_cls)']
+        class_matrix_same = mask_eye * class_matrix
+        class_sum_same = class_matrix_same.sum()
+        class_matrix_diff = class_matrix - class_matrix_same
+        class_sum_diff = class_matrix_diff.sum() / 2
 
-    for key, value in features_sum.items():
-        if 'confusion_matrix' in key:
-            features_sum[key] = value / (matrix_sample_number + 1e-6)
-            feature_matrix = features_sum[key]
-            plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key)
-            plt.savefig(f'{show_dir}/{key}.png')
-        elif 'distance_diff' in key:
-            features_sum[key] = value / class_sum_diff
-            print('{key}: ', features_sum[key])
-        elif 'distance_same' in key:
-            features_sum[key] = value / class_sum_same
-            print(f'{key}: ', features_sum[key])
-        elif 'matrix_sample_number' in key:
-            plt = plot_matrix(matrix_sample_number, dataset='cityscapes', title=key)
-            plt.savefig(f'{show_dir}/{key}.png')
+        for key, value in features_sum.items():
+            if 'confusion_matrix' in key:
+                features_sum[key] = value / (matrix_sample_number + 1e-6)
+                feature_matrix = features_sum[key]
+                plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key)
+                plt.savefig(f'{show_dir}/{key}.png')
+                plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key, normalize='y')
+                plt.savefig(f'{show_dir}/{key}_ynorm.png')
+            elif 'distance_diff' in key:
+                features_sum[key] = value / class_sum_diff
+                print('{key}: ', features_sum[key])
+            elif 'distance_same' in key:
+                features_sum[key] = value / class_sum_same
+                print(f'{key}: ', features_sum[key])
+            elif 'matrix_sample_number' in key:
+                plt = plot_matrix(matrix_sample_number, dataset='cityscapes', title=key, normalize='xy')
+                plt.savefig(f'{show_dir}/{key}_xynorm.png')
+        break
+    return results
 
 
-    return features_sum
-
-
-def single_gpu_test_feature_multi_domain(model,
-                                          data_loader,
-                                          orig_dataset=None,
-                                          show=False,
-                                          show_dir=None,
-                                          show_score_thr=0.3):
+def single_gpu_test_feature(model,
+                            data_loader,
+                            orig_dataset=None,
+                            show=False,
+                            show_dir=None,
+                            show_score_thr=0.3):
 
     ####
-    # [DEV 002]
+    # [DEV 003]
+    # test feature on the single and multi domain
+    # forward train mode
     ####
     model.eval()
     results = []
@@ -140,8 +210,15 @@ def single_gpu_test_feature_multi_domain(model,
         img = orig_data['img'].data.unsqueeze(dim=0)
         data['img2'] = img
 
+        aug = True
+        if aug:
+            mask = torch.rand_like(img[:, 0, :, :]) > 0.8
+            mask = mask.float()
+            mask = mask.repeat(1, 3, 1, 1)
+            data['img3'] = img * mask  # original image masked
+
         with torch.no_grad():
-            loss, features = model(return_loss=True, analysis=True, **data)
+            loss, features = model(return_loss=True, analysis='multi_domain', **data)
             # result = model(return_loss=False, rescale=True, **data)
 
             if i == 0:
@@ -164,11 +241,11 @@ def single_gpu_test_feature_multi_domain(model,
             prog_bar.update()
 
     # get sum of samples with mask
-    matrix_sample_number = features_sum['matrix_sample_number(roi_cls)']
+    matrix_sample_number = features_sum['clean_clean_matrix_sample_number']
     classes = np.shape(matrix_sample_number)[0]
     mask_eye = np.identity(classes, dtype=np.float32)  # [B, B]
 
-    class_matrix = features_sum['matrix_sample_number(roi_cls)']
+    class_matrix = features_sum['clean_clean_matrix_sample_number']
     class_matrix_same = mask_eye * class_matrix
     class_sum_same = class_matrix_same.sum()
     class_matrix_diff = class_matrix - class_matrix_same
