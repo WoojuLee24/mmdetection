@@ -111,6 +111,11 @@ def get_aug_list(version):
             bboxes_only_translate_x, bboxes_only_translate_y,
         ]
         return aug_color_list, aug_geo_list
+    elif version in ['1.1']:
+        aug_color_list = [autocontrast, equalize, posterize, solarize]
+        aug_geo_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
+                       bboxes_only_translate_x, bboxes_only_translate_y]
+        return aug_color_list, aug_geo_list
     else:
         raise NotImplementedError
 
