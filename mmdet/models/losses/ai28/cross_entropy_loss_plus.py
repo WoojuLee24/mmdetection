@@ -802,6 +802,11 @@ def analyze_shared_fcs_2input(pred,
     label, _, _ = torch.chunk(label, 3)
     feature_analysis = analyze_representations_2input(feature_clean, feature_aug1, label,)
 
+    pred_clean, pred_aug1, _ = torch.chunk(pred, 3)
+    pred_analysis = analyze_representations_2input(pred_clean, pred_aug1, label,)
+    feature_analysis.update(pred_analysis)
+
+
     return loss, feature_analysis
 
 def ntxent(pred,

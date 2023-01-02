@@ -12,6 +12,7 @@ from mmdet.core.visualization import imshow_det_bboxes
 
 # import wandb
 import matplotlib.pyplot as plt
+import copy
 import os
 import pdb
 from collections import OrderedDict
@@ -205,6 +206,101 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         return
 
+    # ANALYSIS[CODE=001]: from analysis background code
+    def analyze_feature(self, imgs, img_metas, **kwargs):
+        for img, img_meta in zip(imgs, img_metas):
+            batch_size = len(img_meta)
+            for img_id in range(batch_size):
+                img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
+
+        img = imgs[0]
+        img_metas = img_metas[0]
+        img_metas[0]['img'] = img
+        rescale = kwargs['rescale'] if 'rescale' in kwargs else False
+
+        x = self.extract_feat(img)
+
+        proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
+
+        # to do: proposal list same or not, or gt
+        proposal_type = img_metas[0]['proposal_type']
+
+        # select indexes
+        inds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, ]
+        proposal_list[0] = proposal_list[0][inds]
+
+        if proposal_type == 'original':
+            pass
+        elif proposal_type == 'duplicate':
+            proposal_list.append(proposal_list[0])
+        elif proposal_type == 'perturb':
+            # select indexes
+            inds = [0]
+            k = proposal_list[0][inds]
+
+            k = k.repeat(13, 1)
+            k[1, 0] += 20
+            k[2, 1] += 20
+            k[3, 2] -= 20
+            k[4, 3] -= 20
+            k[5, 0] += 40
+            k[6, 1] += 40
+            k[7, 2] -= 40
+            k[8, 3] -= 40
+
+            k[9, 0] += 40
+            k[9, 2] += 40
+            k[10, 1] += 40
+            k[10, 3] += 40
+
+            k[11, 0] += 60
+            k[11, 2] += 60
+            k[12, 1] += 60
+            k[12, 3] += 60
+
+            proposal_list[0] = k
+
+            proposal_list.append(proposal_list[0])
+
+        elif proposal_type == 'perturb_cutout':
+            proposal_list.append(proposal_list[0])
+            proposal_list.append(proposal_list[0])
+
+        bbox_results = self.roi_head.simple_test_analyze_feature(x, proposal_list, img_metas, rescale=rescale)
+
+        return
+
+        # ANALYSIS[CODE=001]: from analysis background code
+    def analyze_feature_class(self, imgs, img_metas, **kwargs):
+        for img, img_meta in zip(imgs, img_metas):
+            batch_size = len(img_meta)
+            for img_id in range(batch_size):
+                img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
+
+        img = imgs[0]
+        img_metas = img_metas[0]
+        img_metas[0]['img'] = img
+        rescale = kwargs['rescale'] if 'rescale' in kwargs else False
+
+        x = self.extract_feat(img)
+
+        proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
+
+        # to do: proposal list same or not, or gt
+        proposal_type = img_metas[0]['proposal_type']
+
+        if proposal_type == 'original':
+            pass
+        elif proposal_type == 'duplicate':
+            proposal_list.append(proposal_list[0])
+        elif proposal_type == 'perturb_cutout':
+            proposal_list.append(proposal_list[0])
+            proposal_list.append(proposal_list[0])
+
+        feature = self.roi_head.simple_test_analyze_feature_class(x, proposal_list, img_metas, rescale=rescale)
+
+        return feature
+
 
     @auto_fp16(apply_to=('img', ))
     def forward(self, img, img_metas, return_loss=True, analysis=False, **kwargs):
@@ -225,8 +321,15 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             if kwargs['analysis_background']:
                 return self.analysis_background(img, img_metas, **kwargs)
 
-        if analysis == True:
+        if analysis == 'multi_domain' or analysis == 'single_domain':
             return self.forward_analysis(img, img_metas, **kwargs)
+        elif analysis == 'feature':
+            # [DEV 002]: TO DO: corporated version of single domain, multi domain, and multi domain sample.
+            # train mode, test mode
+            # from analyze background
+            return self.analyze_feature(img, img_metas, **kwargs)
+        elif analysis == 'feature_class':
+            return self.analyze_feature_class(img, img_metas, **kwargs)
 
         if return_loss:
             global FEATURES # DEV[CODE=201]: Contrastive Loss

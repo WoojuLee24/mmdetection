@@ -15,7 +15,8 @@ from pycocotools.cocoeval import COCOeval
 from tools.analysis_tools.robustness_eval import get_results
 
 from mmdet import datasets
-from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, single_gpu_test_feature, single_gpu_test_feature_multi_domain
+from mmdet.apis import multi_gpu_test, set_random_seed, single_gpu_test, \
+    single_gpu_test_feature
 from mmdet.core import eval_map
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
@@ -127,7 +128,7 @@ def parse_args():
         '--analysis',
         type=str,
         nargs='+',
-        choices=['single_domain', 'multi_domain'],
+        choices=['single_domain', 'multi_domain', 'multi_domain_sample'],
         help='eval types')
     parser.add_argument(
         '--iou-thr',
@@ -353,12 +354,12 @@ def main():
                 hook.hook_multi_layer(model, features_list)
                 hook.hook_multi_layer(model.module, features_list)
 
-                if 'single_domain' in args.analysis:
-                    outputs = single_gpu_test_feature(model, data_loader, args.show,
+                outputs = single_gpu_test_feature(model, data_loader, orig_dataset, args.show,
                                               show_dir, args.show_score_thr)
-                elif 'multi_domain' in args.analysis:
-                    outputs = single_gpu_test_feature_multi_domain(model, data_loader, orig_dataset, args.show,
-                                                  show_dir, args.show_score_thr)
+                # deprecated
+                # elif 'multi_domain_sample' in args.analysis:
+                #     outputs = single_gpu_test_feature_multi_domain_sample(model, data_loader, orig_dataset, args.show,
+                #                                                           show_dir, args.show_score_thr)
 
             else:
                 model = MMDistributedDataParallel(
