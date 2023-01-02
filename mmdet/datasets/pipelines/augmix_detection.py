@@ -90,6 +90,56 @@ def bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
 
 
+def _apply_except_bbox_augmentation(img, bboxes_xy, aug_func, **kwargs):
+    '''
+    Args:
+        img         : (np.array) (img_width, img_height, channel)
+        bboxes_xy   : (tensor) has shape of (num_bboxes, 4) with [x1, y1, x2, y2]
+        aug_func    : (func) The argument is bbox_content # TODO: severity?
+    '''
+    if not isinstance(img, np.ndarray):
+        img = np.asarray(img)
+
+    # Make the union of bboxes
+    bbox_content = img.copy()
+    mask = np.zeros_like(bbox_content)
+    for i in range(len(bboxes_xy)):
+        bbox_xy = bboxes_xy[i]
+        x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+        bbox_content[y1:y2 + 1, x1:x2 + 1, :] = 0.0
+        mask[y1:y2 + 1, x1:x2 + 1, :] = 1
+
+    # Augment
+    kwargs['img_size'] = Image.fromarray(bbox_content).size
+    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs)
+    augmented_bbox_content = np.asarray(augmented_bbox_content)
+
+    # Overwrite augmented_bbox_content into img
+    img = img * mask + augmented_bbox_content
+
+    return img
+
+
+def except_bbox_rotate(pil_img, bboxes_xy, level, img_size):
+    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size)
+
+
+def except_bbox_shear_x(pil_img, bboxes_xy, level, img_size):
+    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size)
+
+
+def except_bbox_shear_y(pil_img, bboxes_xy, level, img_size):
+    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
+
+
+def except_bbox_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
+
+
+def except_bbox_translate_y(pil_img, bboxes_xy, level, img_size):
+    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+
+
 def get_aug_list(version):
     if version == '0.1':
         aug_list = [
@@ -116,6 +166,13 @@ def get_aug_list(version):
         aug_geo_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                        bboxes_only_translate_x, bboxes_only_translate_y]
         return aug_color_list, aug_geo_list
+    elif version in ['1.2']:
+        aug_color_list = [autocontrast, equalize, posterize, solarize]
+        aug_except_bbox_list = [except_bbox_rotate, except_bbox_shear_x, except_bbox_shear_y,
+                                except_bbox_translate_x, except_bbox_translate_y]
+        aug_bbox_only_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
+                              bboxes_only_translate_x, bboxes_only_translate_y]
+        return aug_color_list, aug_except_bbox_list, aug_bbox_only_list
     else:
         raise NotImplementedError
 
@@ -183,7 +240,11 @@ class AugMixDetection:
                 op_chain = np.random.choice(self.aug_list[j], depth, replace=False)  # not allow same aug if replace is False.
 
                 # Augment
-                img_aug = self.chain(img_aug, op_chain, img_size, gt_bboxes=gt_bboxes)
+                if isinstance(self.aug_severity, list):
+                    aug_severity = self.aug_severity[j]
+                else:
+                    aug_severity = self.aug_severity
+                img_aug = self.chain(img_aug, op_chain, img_size, aug_severity, gt_bboxes=gt_bboxes)
 
             # Mixing
             img_aug = np.asarray(img_aug, dtype=np.float32)
@@ -212,7 +273,7 @@ class AugMixDetection:
             op_chain = np.random.choice(self.aug_list, depth, replace=False) # not allow same aug if replace is False.
 
             # Augment
-            img_aug = self.chain(img_orig.copy(), op_chain, img_size, gt_bboxes=gt_bboxes)
+            img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
 
             # Mixing
             img_aug = np.asarray(img_aug, dtype=np.float32)
@@ -222,7 +283,7 @@ class AugMixDetection:
         img_augmix = np.array(img_augmix, dtype=np.float32)
         return img_augmix
 
-    def chain(self, img, op_chain, img_size, gt_bboxes=None):
+    def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None):
         '''
         img: np.array
         '''
@@ -234,7 +295,7 @@ class AugMixDetection:
             raise TypeError
 
         for op in op_chain:
-            img_aug = op(img_aug, level=self.aug_severity,
+            img_aug = op(img_aug, level=aug_severity,
                          img_size=img_size, bboxes_xy=gt_bboxes)
 
         return img_aug
