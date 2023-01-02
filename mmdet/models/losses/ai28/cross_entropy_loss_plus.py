@@ -431,24 +431,19 @@ def jsdv1_3(pred,
         torch.Tensor: The calculated loss
     """
 
-    # avg_factor = None
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
 
     if pred_orig.shape[-1] == 1:  # if rpn
-        # p_clean, p_aug1, p_aug2 = torch.sigmoid(pred_orig), \
-        #                           torch.sigmoid(pred_aug1),\
-        #                           torch.sigmoid(pred_aug2)
         p_clean, p_aug1, p_aug2 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
                                   torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1), \
                                   torch.cat((torch.sigmoid(pred_aug2), 1 - torch.sigmoid(pred_aug2)), dim=1),
+        neg_ind = 1 # WARN: only for cityscapes dataset
 
     else:  # else roi
         p_clean, p_aug1, p_aug2 = F.softmax(pred_orig, dim=1), \
                                   F.softmax(pred_aug1, dim=1), \
                                   F.softmax(pred_aug2, dim=1)
+        neg_ind = 8 # WARN: only for cityscapes dataset
 
     p_clean, p_aug1, p_aug2 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
                               p_aug1.reshape((1,) + p_aug1.shape).contiguous(), \
@@ -457,26 +452,29 @@ def jsdv1_3(pred,
     # Clamp mixture distribution to avoid exploding KL divergence
     p_mixture = torch.clamp((p_clean + p_aug1 + p_aug2) / 3., 1e-7, 1).log()
 
+    # log_pos_ratio
+    loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
+            F.kl_div(p_mixture, p_aug1, reduction='none') +
+            F.kl_div(p_mixture, p_aug2, reduction='none')) / 3.
+    loss = torch.sum(loss, dim=-1).squeeze(0)
+
+    label, _, _ = torch.chunk(label, 3)
+    loss_neg = torch.sum(loss[(label == neg_ind)])
+    loss_pos = torch.sum(loss[(label != neg_ind)])
+
+    pos_ratio = loss_pos / loss_neg
+
+    # [DEV] imbalance: alpha-balanced loss
     if use_cls_weight:
-        class_weight = kwargs['add_class_weight']
-        if class_weight is None:
-            class_weight = kwargs['class_weight']
+        class_weight = kwargs['class_weight'] \
+            if kwargs['add_class_weight'] is None else kwargs['add_class_weight']
 
-        loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
-                F.kl_div(p_mixture, p_aug1, reduction='none') +
-                F.kl_div(p_mixture, p_aug2, reduction='none')) / 3.
-        loss = torch.sum(loss, dim=-1).squeeze(0)
-
-        label, _, _ = torch.chunk(label, 3)
         for i in range(len(class_weight)):
             mask = (label == i)
             loss[mask] = loss[mask] * class_weight[i]
 
-        loss = torch.sum(loss)
-    else:
-        loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug2, reduction='batchmean')) / 3.
+    # Compute loss
+    loss = torch.sum(loss) / len(p_aug1)
 
     # apply weights and do the reduction
     if weight is not None:
@@ -488,7 +486,8 @@ def jsdv1_3(pred,
     p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
                       'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
                       'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
-                      'p_mixture': p_mixture}
+                      'p_mixture': p_mixture,
+                      'pos_ratio': float(pos_ratio)}
 
     return loss, p_distribution
 

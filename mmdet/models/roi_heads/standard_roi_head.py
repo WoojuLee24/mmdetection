@@ -8,6 +8,12 @@ from .base_roi_head import BaseRoIHead
 from .test_mixins import BBoxTestMixin, MaskTestMixin
 from mmdet.models.losses.ai28.contrastive_loss import analyze_representations_2input_sample, analyze_representations_2input
 
+import matplotlib.pyplot as plt
+from thirdparty.dscv.utils.detection_utils import pixel2inch, visualize_bbox_xy
+from thirdparty.dscv.utils.image_utils import denormalize, tensor_img_type_to
+import numpy as np
+import os
+
 
 @HEADS.register_module()
 class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
@@ -208,7 +214,47 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return features
 
 
+    # ANALYSIS[CODE=002]: analysis loss region
+    def _bbox_forward_analysis_loss_region(self, x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region):
+        labels, label_weights, bbox_targets, bbox_weights = bbox_targets
+        img = img_metas[0]['img']
+        img_height, img_width = img.shape[-2:]
 
+        fig, axes = plt.subplots(4, 3, figsize=(pixel2inch(img_width)/2*3, pixel2inch(img_height)/2*4))
+        for i in range(3):
+            mean, std = img_metas[i]['img_norm_cfg']['mean'], img_metas[i]['img_norm_cfg']['std']
+            _img = denormalize(img[i], mean, std)
+            _img = tensor_img_type_to(_img, np.ndarray, dtype=np.uint8)
+            axes[0, i].imshow(_img); axes[1, i].imshow(_img); axes[2, i].imshow(_img); axes[3, i].imshow(_img)
+        for row in range(3):
+            for i in range(3):
+                for j in range(64):
+                    visualize_bbox_xy(rois[row * 64 + j, 1:], fig=fig, ax=axes[row+1, i], color_idx=labels[row * 64 + j], num_colors=9)
+
+        # compute iou
+        overlaps = self.bbox_assigner.iou_calculator(gt_bboxes[0], rois[:int(len(rois)/3), 1:])
+
+        # for each anchor, which gt best overlaps with it
+        # for each anchor, the max iou of all gts
+        max_overlaps, argmax_overlaps = overlaps.max(dim=0)
+
+        def bincount(data, min_val=None, max_val=None, num_bins=10):
+            if min_val == None:
+                min_val = float(data.min())
+            if max_val == None:
+                max_val = float(data.max())
+            return torch.histc(data, bins=num_bins, min=min_val, max=max_val)
+        hist_overlaps = bincount(max_overlaps, min_val=0.0, max_val=1.0, num_bins=10)
+        title ='  '
+        for i in range(len(hist_overlaps)):
+            title += f"{int(hist_overlaps[i]):3d} "
+        fig.suptitle(title)
+        if not os.path.exists(log_loss_region):
+            os.makedirs(log_loss_region)
+        fig.savefig(f'{log_loss_region}/{img_metas[0]["ori_filename"].split("/")[-1].split(".png")[0]}_{self.num_save_img:06d}.png')
+        self.num_save_img += 1
+
+        return
 
     # ANALYSIS[CODE=001]: analysis background
     def _bbox_forward_analysis_background(self, x, rois, img_metas):
@@ -293,7 +339,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
-                            img_metas, gt_instance_inds=None):
+                            img_metas, gt_instance_inds=None, log_loss_region=None):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -308,6 +354,11 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         bbox_results.update(loss_bbox=loss_bbox)
 
+        # ANALYSIS[CODE=002]: analysis loss region
+        if log_loss_region is not None:
+            # NOTE: You can change the below setting.
+            if img_metas[0]["ori_filename"] == 'stuttgart/stuttgart_000144_000019_leftImg8bit.png':
+                self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region)
 
         # DEV[CODE=102]: Contrastive loss with GenAutoAugment
         if self.loss_feat != None:

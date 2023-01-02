@@ -563,6 +563,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                             continue
                         data[key].append(data[key][0])
 
+            # ANALYSIS[CODE=002]: analysis loss region
+            data['log_loss_region'] = self.train_cfg['log_loss_region'] if 'log_loss_region' in self.train_cfg else None
+
             losses = self(**data)
 
             # domain generalization in the fpn layer

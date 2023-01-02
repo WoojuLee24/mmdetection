@@ -40,6 +40,7 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
             self.loss_feat = build_loss(loss_feat)
 
         self.init_assigner_sampler()
+        self.num_save_img = 0 # ANALYSIS[CODE=002]: analysis loss region
 
     @property
     def with_bbox(self):
