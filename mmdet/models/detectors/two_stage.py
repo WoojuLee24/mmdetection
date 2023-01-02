@@ -146,6 +146,8 @@ class TwoStageDetector(BaseDetector):
         else:
             proposal_list = proposals
 
+        img_metas[0]['img'] = img # ANALYSIS[CODE=002]: analysis loss region
+
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
                                                  gt_bboxes_ignore, gt_masks,
