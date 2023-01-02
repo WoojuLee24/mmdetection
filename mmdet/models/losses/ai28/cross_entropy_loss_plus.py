@@ -1857,7 +1857,7 @@ class CrossEntropyLossPlus(nn.Module):
                 self.wandb_features[f'lam_additional_loss2({self.wandb_name})'].append(
                     self.lambda_weight2 * loss_additional2)
             else:
-                self.wandb_features[f'additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
+                self.wandb_features[f'additional_loss2({self.wandb_name})'] = loss_additional2
                 self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
 
             if any(self.sum_features) == False:
