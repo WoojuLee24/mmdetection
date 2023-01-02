@@ -343,7 +343,9 @@ def multi_plot_tsne(test_features_list, targets_list=None, title_list=None, rows
 
 def plot_matrix(cm,
                 dataset='cityscapes',
-                normalize=False,
+                classes=0,
+                normalize='None',
+                txt=True,
                 title='Matrix',
                 cmap=plt.cm.Blues):
     """
@@ -351,16 +353,23 @@ def plot_matrix(cm,
     Normalization can be applied by setting `normalize=True`.
     """
 
-
-    if dataset == 'cityscapes':
+    if classes != 0:
+        classes = [i for i in range(classes)]
+    elif dataset == 'cityscapes':
         classes = ['person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'background']
     elif dataset == 'coco':
         classes = []
 
     plt.figure(figsize=(len(classes), len(classes)))
-    if normalize:
+    if normalize == 'None':
+        pass
+    elif normalize == 'y':
         cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-8)
-        # print("Normalized confusion matrix")
+        print("Y Normalized confusion matrix")
+    elif normalize == 'xy':
+        cm = cm.astype('float') / (cm.sum())
+        print("XY Normalized confusion matrix")
+
     else:
         # print('Confusion matrix, without normalization')
         pass
@@ -375,17 +384,72 @@ def plot_matrix(cm,
     plt.xticks(tick_marks, classes, rotation=45)
     plt.yticks(tick_marks, classes)
 
-    fmt = '.2f' if normalize else '.2f' #'d'
-    thresh = cm.max() / 2.
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            plt.text(j, i, format(cm[i, j], fmt),
-                     horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
+    if txt:
+        fmt = '.2f' if normalize else '.2f' #'d'
+        thresh = cm.max() / 2.
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                plt.text(j, i, format(cm[i, j], fmt),
+                         horizontalalignment="center",
+                         color="white" if cm[i, j] > thresh else "black")
 
     plt.tight_layout()
     plt.ylabel('anchor class')
     plt.xlabel('Contrast class')
     # wandb.log({title: plt})
+    return plt
+    # plt.savefig('/ws/external/visualization_results/confusion_matrix.png')
+
+
+def plot_bar(feature,
+             normalize='None',
+             txt=True,
+             title='1D plot feature'
+             ):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+
+    x = [i for i in range(np.shape(feature)[0])]
+
+    plt.figure()
+
+    # if normalize == 'None':
+    #     pass
+    # elif normalize == 'y':
+    #     cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-8)
+    #     print("Y Normalized confusion matrix")
+    # elif normalize == 'xy':
+    #     cm = cm.astype('float') / (cm.sum())
+    #     print("XY Normalized confusion matrix")
+    #
+    # else:
+    #     # print('Confusion matrix, without normalization')
+    #     pass
+
+    # print(cm)
+    # print(cm.diag() / cm.sum(1))
+
+    plt.bar(x, height=feature)
+    plt.title(title)
+
+    # tick_marks = np.arange(len(classes))
+    # plt.xticks(tick_marks, classes, rotation=45)
+    # plt.yticks(tick_marks, classes)
+
+    # if txt:
+    #     fmt = '.2f' if normalize else '.2f' #'d'
+    #     thresh = cm.max() / 2.
+    #     for i in range(cm.shape[0]):
+    #         for j in range(cm.shape[1]):
+    #             plt.text(j, i, format(cm[i, j], fmt),
+    #                      horizontalalignment="center",
+    #                      color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('value')
+    plt.xlabel('feature dim')
+
     return plt
     # plt.savefig('/ws/external/visualization_results/confusion_matrix.png')
