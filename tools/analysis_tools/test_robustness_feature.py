@@ -349,10 +349,10 @@ def main():
                     if not osp.exists(show_dir):
                         os.makedirs(show_dir)
 
-                features_list = ['module.roi_head.bbox_head.shared_fcs', 'roi_head.bbox_head.shared_fcs']
-                hook = FeatureHook(features_list)
-                hook.hook_multi_layer(model, features_list)
-                hook.hook_multi_layer(model.module, features_list)
+                # features_list = ['module.roi_head.bbox_head.shared_fcs', 'roi_head.bbox_head.shared_fcs']
+                # hook = FeatureHook(features_list)
+                # hook.hook_multi_layer(model, features_list)
+                # hook.hook_multi_layer(model.module, features_list)
 
                 outputs = single_gpu_test_feature(model, data_loader, orig_dataset, args.show,
                                               show_dir, args.show_score_thr)

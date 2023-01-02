@@ -8,6 +8,7 @@ from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
     supcontrast_clean, supcontrast_clean_kpositive, supcontrast_clean_kpositivev1_1, \
+    supcontrast_clean_tr, \
     analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
 
 
@@ -968,6 +969,64 @@ def kntxent_clean(pred,
     return loss, feature_analysis
 
 
+"""
+temper ratio test
+"""
+
+def ntxent_clean_tr(pred,
+                       label,
+                       weight=None,
+                       reduction='mean',
+                       avg_factor=None,
+                       analysis=False,
+                       **kwargs):
+    """Calculate the ntxent loss on the clean samples
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    temper_ratio = kwargs['temper_ratio']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.detectors.base import FEATURES
+    # from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+
+    for key, feature in FEATURES.items():
+        k = feature[0]
+        if k.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif k.dim() == 2: # if roi
+            features_orig, _, _ = torch.chunk(k, 3)
+            label_orig, _, _ = torch.chunk(label, 3)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast_clean_tr(features_orig, label_orig, temper=temper)
+
+        if analysis:
+            feature_analysis = analyze_representations_3input(features_orig, features_aug1, features_aug2, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
+
+
 def kntxent_cleanv1_1(pred,
                        label,
                        weight=None,
@@ -1620,6 +1679,7 @@ class CrossEntropyLossPlus(nn.Module):
                  kpositive=3,
                  classes=9,
                  temper=1,
+                 temper_ratio=0.2,
                  analysis=False,
                  add_act=None,
                  wandb_name=None,
@@ -1658,6 +1718,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.kpositive = kpositive
         self.classes = classes
         self.temper = temper
+        self.temper_ratio = temper_ratio
         self.analysis = analysis
         self.add_act = add_act
         self.wandb_name = wandb_name
@@ -1732,6 +1793,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxent_clean
         elif self.additional_loss2 == 'kntxent.clean':
             self.cls_additional2 = kntxent_clean
+        elif self.additional_loss2 == 'ntxent.clean.tr':
+            self.cls_additional2 = ntxent_clean_tr
         elif self.additional_loss2 == 'kntxent.cleanv1.1':
             self.cls_additional2 = kntxent_cleanv1_1
         elif self.additional_loss2 == 'ntxentv0_01':
@@ -1840,6 +1903,7 @@ class CrossEntropyLossPlus(nn.Module):
                 reduction=reduction,
                 avg_factor=avg_factor,
                 temper=self.temper,
+                temper_ratio=self.temper_ratio,
                 add_act=self.add_act,
                 ignore_index=ignore_index,
                 class_weight=class_weight,
