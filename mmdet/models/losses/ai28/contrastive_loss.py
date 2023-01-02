@@ -311,25 +311,25 @@ def analyze_representations_2input(logits_clean, logits_aug1, labels=None, lambd
     mask_diff_class = 1 - mask_same_class  # [B, B]
     mask_diff_triuu = mask_diff_class * mask_triuu
 
-    # softmax
-    p_clean, p_aug1  = F.softmax(logits_clean / temper, dim=1), \
-                       F.softmax(logits_aug1 / temper, dim=1)
-
-    # Clamp mixture distribution to avoid exploding KL divergence
-    p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
-
-    # JSD matrix
-    jsd_matrix = (make_matrix(p_clean, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum') + \
-                  make_matrix(p_aug1, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum')) / 2
-
-    jsd_matrix_same_instance = jsd_matrix * mask_same_instance
-    jsd_distance = jsd_matrix_same_instance.sum()
-
-    jsd_matrix_diff_class = jsd_matrix * mask_diff_triuu
-    jsd_distance_diff_class = jsd_matrix_diff_class.sum()
-
-    jsd_matrix_same_class = jsd_matrix * mask_same_triuu
-    jsd_distance_same_class = jsd_matrix_same_class.sum()
+    # # softmax
+    # p_clean, p_aug1  = F.softmax(logits_clean / temper, dim=1), \
+    #                    F.softmax(logits_aug1 / temper, dim=1)
+    #
+    # # Clamp mixture distribution to avoid exploding KL divergence
+    # p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
+    #
+    # # JSD matrix
+    # jsd_matrix = (make_matrix(p_clean, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum') + \
+    #               make_matrix(p_aug1, p_mixture, criterion=nn.KLDivLoss(reduction='none'), reduction='sum')) / 2
+    #
+    # jsd_matrix_same_instance = jsd_matrix * mask_same_instance
+    # jsd_distance = jsd_matrix_same_instance.sum()
+    #
+    # jsd_matrix_diff_class = jsd_matrix * mask_diff_triuu
+    # jsd_distance_diff_class = jsd_matrix_diff_class.sum()
+    #
+    # jsd_matrix_same_class = jsd_matrix * mask_same_triuu
+    # jsd_distance_same_class = jsd_matrix_same_class.sum()
 
     # MSE matrix
     mse_matrix = make_matrix(logits_clean, logits_aug1, criterion=nn.MSELoss(reduction='none'), reduction='mean')
@@ -375,23 +375,24 @@ def analyze_representations_2input(logits_clean, logits_aug1, labels=None, lambd
             b = target_matrix[1, :, :] == j
             class_mask = a & b
 
-            class_jsd_matrix = jsd_matrix * class_mask
+            # class_jsd_matrix = jsd_matrix * class_mask
             class_mse_matrix = mse_matrix * class_mask
             class_cs_matrix = cs_matrix * class_mask
 
-            confusion_matrix_jsd[i, j] = class_jsd_matrix.sum()
+            # confusion_matrix_jsd[i, j] = class_jsd_matrix.sum()
             confusion_matrix_l2[i, j] = torch.sqrt(class_mse_matrix).sum()
             confusion_matrix_cs[i, j] = class_cs_matrix.sum()
             confusion_matrix_sample_number[i, j] = class_mask.sum()
 
 
-    features = {'jsd_distance': jsd_distance.detach().cpu().numpy(),
-                'jsd_distance_diff_class': jsd_distance_diff_class.detach().cpu().numpy(),
-                'jsd_distance_same_class': jsd_distance_same_class.detach().cpu().numpy(),
+    features = {
+                # 'jsd_distance': jsd_distance.detach().cpu().numpy(),
+                # 'jsd_distance_diff_class': jsd_distance_diff_class.detach().cpu().numpy(),
+                # 'jsd_distance_same_class': jsd_distance_same_class.detach().cpu().numpy(),
                 'mse_distance': mse_distance.detach().cpu().numpy(),
                 'mse_distance_diff_class': mse_distance_diff_class.detach().cpu().numpy(),
                 'mse_distance_same_class': mse_distance_same_class.detach().cpu().numpy(),
-                'confusion_matrix_jsd': confusion_matrix_jsd.detach().cpu().numpy(),
+                # 'confusion_matrix_jsd': confusion_matrix_jsd.detach().cpu().numpy(),
                 'confusion_matrix_l2': confusion_matrix_l2.detach().cpu().numpy(),
                 'confusion_matrix_cs': confusion_matrix_cs.detach().cpu().numpy(),
                 'matrix_sample_number': confusion_matrix_sample_number.detach().cpu().numpy(),
@@ -556,6 +557,39 @@ def supcontrast_maskv0_01(logits_anchor, logits_contrast, targets, mask_anchor, 
 
     return loss
 
+"""
+temper_ratio test
+"""
+def supcontrast_maskv0_01_tr(logits_anchor, logits_contrast, targets, mask_anchor, mask_contrast, lambda_weight=0.1, temper=0.07, temper_ratio=0.2):
+
+    base_temper = temper
+
+    logits_anchor, logits_contrast = F.normalize(logits_anchor, dim=1), F.normalize(logits_contrast, dim=1)
+
+    # anchor_dot_contrast = torch.div(torch.matmul(logits_anchor, logits_contrast.T), temper)
+
+    anchor_matrix = torch.div(torch.matmul(logits_anchor, logits_contrast.T), temper) * mask_anchor
+    anchor_matrix_np = anchor_matrix.detach().cpu().numpy()
+
+    contrast_matrix = torch.div(torch.matmul(logits_anchor, logits_contrast.T), temper*temper_ratio) * mask_contrast
+    contrast_matrix_np1 = contrast_matrix.detach().cpu().numpy()
+    contrast_matrix = contrast_matrix * (1 - mask_anchor)
+    contrast_matrix_np2 = contrast_matrix.detach().cpu().numpy()
+
+    anchor_dot_contrast = anchor_matrix + contrast_matrix
+
+    logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+    logits = anchor_dot_contrast - logits_max.detach()
+
+    exp_logits = torch.exp(logits) * mask_contrast
+    log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
+    mean_log_prob_pos = (mask_anchor * log_prob).sum(1) / (mask_anchor.sum(1) + 1e-8)
+    loss = - (temper / base_temper) * mean_log_prob_pos
+    loss = loss.mean()
+
+    return loss
+
+
 
 def supcontrast_clean(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, reduction='batchmean'):
 
@@ -584,7 +618,7 @@ def supcontrast_clean(logits_clean, labels=None, lambda_weight=0.1, temper=0.07,
 
     # mask_same_instance_diff_class_np = mask_same_instance_diff_class.detach().cpu().numpy()
 
-    loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
+    loss1 = supcontrast_maskv0_01_tr(logits_clean, logits_clean, targets,
                                   mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
 
     loss = loss1
@@ -645,6 +679,47 @@ def supcontrast_clean_kpositive(logits_clean, labels=None, k=3, classes=9, lambd
     loss = loss1
 
     return loss
+
+
+
+"""
+temper ratio test
+"""
+
+def supcontrast_clean_tr(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, temper_ratio=0.2, reduction='batchmean'):
+
+    """
+        supcontrast loss
+        input: only clean logit
+        mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
+        logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
+    """
+
+    mask = None
+    contrast_mode = 'all'
+    base_temper = temper
+    device = logits_clean.device
+    batch_size = logits_clean.size()[0]
+    targets = labels
+    targets = targets.contiguous().view(-1, 1)
+
+    mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
+    mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
+    mask_anchor_except_eye = mask_anchor - mask_eye
+    # mask_anchor_np = mask_anchor.detach().cpu().numpy()
+    mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+    mask_contrast_except_eye = mask_contrast - mask_eye
+    # mask_contrast_np = mask_contrast.detach().cpu().numpy()
+
+    # mask_same_instance_diff_class_np = mask_same_instance_diff_class.detach().cpu().numpy()
+
+    loss1 = supcontrast_maskv0_01_tr(logits_clean, logits_clean, targets,
+                                  mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper, temper_ratio)
+
+    loss = loss1
+
+    return loss
+
 
 
 def supcontrast_clean_kpositivev1_1(logits_clean, labels=None, k=3, classes=9, lambda_weight=0.1, temper=0.07, reduction='batchmean'):

@@ -257,6 +257,8 @@ def single_gpu_test_feature(model,
             feature_matrix = features_sum[key]
             plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key)
             plt.savefig(f'{show_dir}/{key}.png')
+            plt = plot_matrix(feature_matrix, dataset='cityscapes', title=key, normalize='y')
+            plt.savefig(f'{show_dir}/{key}_ynorm.png')
         elif 'distance_diff' in key:
             features_sum[key] = value / class_sum_diff
             print('{key}: ', features_sum[key])
