@@ -458,13 +458,8 @@ def jsdv1_3(pred,
             F.kl_div(p_mixture, p_aug2, reduction='none')) / 3.
     loss = torch.sum(loss, dim=-1).squeeze(0)
 
-    label, _, _ = torch.chunk(label, 3)
-    loss_neg = torch.sum(loss[(label == neg_ind)])
-    loss_pos = torch.sum(loss[(label != neg_ind)])
-
-    pos_ratio = loss_pos / loss_neg
-
     # [DEV] imbalance: alpha-balanced loss
+    label, _, _ = torch.chunk(label, 3)
     if use_cls_weight:
         class_weight = kwargs['class_weight'] \
             if kwargs['add_class_weight'] is None else kwargs['add_class_weight']
@@ -472,6 +467,11 @@ def jsdv1_3(pred,
         for i in range(len(class_weight)):
             mask = (label == i)
             loss[mask] = loss[mask] * class_weight[i]
+
+    # ANALYSIS[CODE=004]: analysis pos_ratio: the ration of positive JSD loss over negative JSD loss
+    loss_neg = torch.sum(loss[(label == neg_ind)])
+    loss_pos = torch.sum(loss[(label != neg_ind)])
+    pos_ratio = loss_pos / loss_neg
 
     # Compute loss
     loss = torch.sum(loss) / len(p_aug1)
@@ -483,11 +483,14 @@ def jsdv1_3(pred,
     loss = weight_reduce_loss(
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
 
-    p_distribution = {'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
-                      'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
-                      'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
-                      'p_mixture': p_mixture,
-                      'pos_ratio': float(pos_ratio)}
+    p_distribution = {# 'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
+                      # 'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
+                      # 'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
+                      # 'p_mixture': p_mixture,
+                      'loss_pos': loss_pos,
+                      'loss_neg': loss_neg,
+                      'pos_ratio': pos_ratio, # ANALYSIS[CODE=004]
+                      }
 
     return loss, p_distribution
 
