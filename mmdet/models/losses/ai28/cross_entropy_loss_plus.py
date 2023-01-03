@@ -1736,6 +1736,8 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = []
         self.wandb_features[f'ce_loss({self.wandb_name})'] = []
         self.wandb_features[f'additional_loss_ratio({self.wandb_name})'] = []
+        self.wandb_features[f'rel_pos({self.wandb_name})'] = []
+        self.wandb_features[f'rel_neg({self.wandb_name})'] = []
 
         self.sum_features = dict()
 
@@ -1942,5 +1944,20 @@ class CrossEntropyLossPlus(nn.Module):
         loss = loss_cls + self.lambda_weight * loss_additional + self.lambda_weight2 * loss_additional2
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
+
+        # ANALYSIS[CODE=005]: analysis relative pos and neg loss: The ration of positiv JSD loss over total loss
+        if 'loss_pos' in p_distribution:
+            rel_pos = p_distribution['loss_pos'] / float(loss)
+            rel_neg = p_distribution['loss_neg'] / float(loss)
+            if self.use_sigmoid: # RPN
+                if len(self.wandb_features[f'rel_pos({self.wandb_name})']) == 5:
+                    self.wandb_features[f'rel_pos({self.wandb_name})'].clear()
+                    self.wandb_features[f'rel_neg({self.wandb_name})'].clear()
+                self.wandb_features[f'rel_pos({self.wandb_name})'].append(rel_pos)
+                self.wandb_features[f'rel_neg({self.wandb_name})'].append(rel_neg)
+            else:
+                self.wandb_features[f'rel_pos({self.wandb_name})'] = rel_pos
+                self.wandb_features[f'rel_neg({self.wandb_name})'] = rel_neg
+
         return loss
 
