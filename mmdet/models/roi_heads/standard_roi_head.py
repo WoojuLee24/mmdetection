@@ -135,6 +135,11 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             if 'loss_feat' in bbox_results:  # DEV[CODE=102]: Contrastive loss with GenAutoAugment
                 losses.update({'loss_feat': bbox_results['loss_feat']})
 
+        # ANALYSIS[CODE=003]: analysis num_pos & num_neg
+        if hasattr(sampling_results[0], 'wandb_features'):
+            for key, value in sampling_results[0].wandb_features.items():
+                losses.update({key: value})
+
         # bbox head forward and loss
         elif self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,

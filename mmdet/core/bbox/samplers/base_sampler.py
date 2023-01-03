@@ -99,4 +99,24 @@ class BaseSampler(metaclass=ABCMeta):
 
         sampling_result = SamplingResult(pos_inds, neg_inds, bboxes, gt_bboxes,
                                          assign_result, gt_flags)
+
+        # ANALYSIS[CODE=003]: analysis num_pos & num_neg
+        max_overlaps = assign_result.max_overlaps
+        sampled_overlaps = torch.cat([max_overlaps[pos_inds], max_overlaps[neg_inds]])
+
+        overlaps_list = [-1.00, 0.25, 0.50, 0.75, 1.00]
+        sampling_result.wandb_features = dict()
+        num_pos, num_neg = 0, 0
+        for i in range(len(overlaps_list) - 1):
+            num = torch.sum(
+                (sampled_overlaps > overlaps_list[i]) * (sampled_overlaps <= overlaps_list[i + 1])
+            )
+            sampling_result.wandb_features[f'num_{overlaps_list[i + 1]:.2f}'] = torch.tensor(num, dtype=torch.float)
+            if overlaps_list[i] >= 0.50:
+                num_pos += num
+            else:
+                num_neg += num
+        sampling_result.wandb_features[f'num_pos'] = torch.tensor(num_pos, dtype=torch.float)
+        sampling_result.wandb_features[f'num_neg'] = torch.tensor(num_neg, dtype=torch.float)
+
         return sampling_result
