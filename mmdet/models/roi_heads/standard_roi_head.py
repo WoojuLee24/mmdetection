@@ -126,6 +126,12 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 sampling_results.extend(sampling_results_tmp)
 
         losses = dict()
+
+        # ANALYSIS[CODE=003]: analysis num_pos & num_neg
+        if hasattr(sampling_results[0], 'wandb_features'):
+            for key, value in sampling_results[0].wandb_features.items():
+                losses.update({key: value})
+
         # bbox head forward and loss
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,
