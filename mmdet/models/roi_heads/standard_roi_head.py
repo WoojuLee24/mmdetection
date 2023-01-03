@@ -126,8 +126,17 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 sampling_results.extend(sampling_results_tmp)
 
         losses = dict()
+
+        if self.train_cfg['dropout'] and self.with_bbox:
+            bbox_results = self._bbox_forward_train_dropout(x, sampling_results,
+                                                    gt_bboxes, gt_labels,
+                                                    img_metas, **kwargs)
+            losses.update(bbox_results['loss_bbox'])
+            if 'loss_feat' in bbox_results:  # DEV[CODE=102]: Contrastive loss with GenAutoAugment
+                losses.update({'loss_feat': bbox_results['loss_feat']})
+
         # bbox head forward and loss
-        if self.with_bbox:
+        elif self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,
                                                     gt_bboxes, gt_labels,
                                                     img_metas, **kwargs)
@@ -337,6 +346,55 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_results = dict(
             cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats, cls_feats=self.bbox_head.cls_feats)
         return bbox_results
+
+
+    def _bbox_forward_train_dropout(self, x, sampling_results, gt_bboxes, gt_labels,
+                            img_metas, gt_instance_inds=None, log_loss_region=None):
+        """Run forward function and calculate loss for box head in training."""
+        rois = bbox2roi([res.bboxes for res in sampling_results])
+        bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
+                                                  gt_labels, self.train_cfg)
+
+        global count_fg
+        bbox_target_label = bbox_targets[0]
+
+        count_total = int(bbox_target_label.size(0) / 3)
+        count_bg = int((bbox_target_label == bbox_target_label.max()).float().sum() / 3)
+        count_fg = count_total - count_bg
+
+        self.bbox_targets = bbox_targets
+
+        bbox_results = self._bbox_forward(x, rois)
+
+
+        loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
+                                        bbox_results['bbox_pred'], rois,
+                                        *bbox_targets)
+
+        bbox_results.update(loss_bbox=loss_bbox)
+
+        # ANALYSIS[CODE=002]: analysis loss region
+        if log_loss_region is not None:
+            # NOTE: You can change the below setting.
+            if img_metas[0]["ori_filename"] == 'stuttgart/stuttgart_000144_000019_leftImg8bit.png':
+                self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region)
+
+        # DEV[CODE=102]: Contrastive loss with GenAutoAugment
+        if self.loss_feat != None:
+            # Ground-truth
+            valid_gt_bboxes, valid_gt_instance_inds, valid_gt_rois = \
+                self.loss_feat.filter_and_collect(gt_bboxes, gt_instance_inds)
+
+            gt_bbox_results = []
+            for i in range(len(valid_gt_rois)):
+                gt_bbox_results.append(self._bbox_forward(x, valid_gt_rois[i]))
+
+            loss_feat = self.loss_feat(gt_bbox_results, gt_labels, valid_gt_instance_inds)
+
+            bbox_results.update(loss_feat=loss_feat)
+
+        return bbox_results
+
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
                             img_metas, gt_instance_inds=None, log_loss_region=None):

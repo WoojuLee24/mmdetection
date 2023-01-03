@@ -95,7 +95,8 @@ model = dict(
                 neg_pos_ub=-1,
                 add_gt_as_proposals=True),
             pos_weight=-1,
-            debug=False),
+            debug=False,
+            dropout=False),
         wandb=dict(
             layer_list=[]
         ),
