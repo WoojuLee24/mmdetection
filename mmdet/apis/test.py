@@ -210,7 +210,7 @@ def single_gpu_test_feature(model,
         img = orig_data['img'].data.unsqueeze(dim=0)
         data['img2'] = img
 
-        aug = True
+        aug = False
         if aug:
             mask = torch.rand_like(img[:, 0, :, :]) > 0.8
             mask = mask.float()

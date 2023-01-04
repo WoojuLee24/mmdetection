@@ -127,6 +127,11 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         losses = dict()
 
+        # ANALYSIS[CODE=003]: analysis num_pos & num_neg
+        if hasattr(sampling_results[0], 'wandb_features'):
+            for key, value in sampling_results[0].wandb_features.items():
+                losses.update({key: value})
+
         if self.train_cfg['dropout'] and self.with_bbox:
             bbox_results = self._bbox_forward_train_dropout(x, sampling_results,
                                                     gt_bboxes, gt_labels,
@@ -134,11 +139,6 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             losses.update(bbox_results['loss_bbox'])
             if 'loss_feat' in bbox_results:  # DEV[CODE=102]: Contrastive loss with GenAutoAugment
                 losses.update({'loss_feat': bbox_results['loss_feat']})
-
-        # ANALYSIS[CODE=003]: analysis num_pos & num_neg
-        if hasattr(sampling_results[0], 'wandb_features'):
-            for key, value in sampling_results[0].wandb_features.items():
-                losses.update({key: value})
 
         # bbox head forward and loss
         elif self.with_bbox:

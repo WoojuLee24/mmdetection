@@ -364,7 +364,7 @@ def plot_matrix(cm,
     if normalize == 'None':
         pass
     elif normalize == 'y':
-        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-8)
+        cm = cm.astype('float') / (cm.sum(axis=0)[:, np.newaxis] + 1e-8)
         print("Y Normalized confusion matrix")
     elif normalize == 'xy':
         cm = cm.astype('float') / (cm.sum())
