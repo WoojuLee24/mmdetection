@@ -285,32 +285,37 @@ class BBoxHead(BaseModule):
                     losses['acc'] = accuracy(cls_score, labels)
 
                     # acc_pos, acc_neg
-                    mask_pos, mask_neg = (labels != 8), (labels == 8)
+                    bg_ind = cls_score.shape[-1] - 1
+                    mask_pos, mask_neg = (labels != bg_ind), (labels == bg_ind)
                     losses['acc_pos'] = accuracy(cls_score[mask_pos, :], labels[mask_pos])
                     losses['acc_neg'] = accuracy(cls_score[mask_neg, :], labels[mask_neg])
 
                     # acc_pos, acc_neg for each
-                    if len(cls_score) != 512:
-                        cls_score_list = torch.chunk(cls_score, 3)
-                        label = torch.chunk(labels, 3)[0]
-                        loss_name = ['orig', 'aug1', 'aug2']
-                    else:
-                        cls_score_list = [cls_score]
-                        label = labels
-                        loss_name = ['orig']
-                    mask_pos, mask_neg = (label != 8), (label == 8)
-                    for i in range(len(cls_score_list)):
-                        losses[f'acc_{loss_name[i]}'] = accuracy(cls_score_list[i], label)
-                        losses[f'acc_{loss_name[i]}_pos'] = accuracy(cls_score_list[i][mask_pos, :], label[mask_pos])
-                        losses[f'acc_{loss_name[i]}_neg'] = accuracy(cls_score_list[i][mask_neg, :], label[mask_neg])
+                    num_views, _r = divmod(len(cls_score), self.num_samples)
+                    assert _r == 0
+
+                    cls_score_list = [*torch.chunk(cls_score, num_views)]
+                    label_list = [*torch.chunk(labels, num_views)]
+                    loss_name_list = ['orig']
+                    for view in range(num_views):
+                        if not view == 0:
+                            loss_name_list.append(f"aug{view+1}")
+
+                        mask_pos, mask_neg = (label_list[view] != bg_ind), (label_list[view] == bg_ind)
+                        losses[f'acc_{loss_name_list[view]}'] = accuracy(cls_score_list[view], label_list[view])
+                        losses[f'acc_{loss_name_list[view]}_pos'] = accuracy(cls_score_list[view][mask_pos, :],
+                                                                             label_list[view][mask_pos])
+                        losses[f'acc_{loss_name_list[view]}_neg'] = accuracy(cls_score_list[view][mask_neg, :],
+                                                                             label_list[view][mask_neg])
 
                     # Consistency
                     pred_cls = torch.argmax(cls_score, dim=-1)
-                    if len(pred_cls) != 512:
-                        pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred_cls, 3)
-                        consistency = ((pred_orig == pred_aug1) * (pred_orig == pred_aug2)).float()
-                        consistency = torch.sum(consistency) / len(pred_orig)
-                        losses['consistency'] = consistency
+                    pred_list = [*torch.chunk(pred_cls, num_views)]
+                    consistency = torch.ones_like(pred_list[0])
+                    for view in range(1, num_views):
+                        consistency = (consistency * (pred_list[0] == pred_list[view])).float()
+                    losses['consistency'] = torch.sum(consistency) / self.num_samples
+
 
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
