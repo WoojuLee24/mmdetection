@@ -115,7 +115,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
     augmented_bbox_content = np.asarray(augmented_bbox_content)
 
     # Overwrite augmented_bbox_content into img
-    img = img * mask + augmented_bbox_content
+    img = img * mask + augmented_bbox_content * (mask==0)
 
     return img
 
