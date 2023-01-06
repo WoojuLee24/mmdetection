@@ -153,7 +153,7 @@ Augmix with pillow
 """
 @PIPELINES.register_module()
 class AugMix:
-    def __init__(self, mean, std, aug_list='augmentations', to_rgb=True, no_jsd=False):
+    def __init__(self, mean, std, aug_list='augmentations', to_rgb=True, no_jsd=False, aug_severity=1):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
@@ -162,7 +162,7 @@ class AugMix:
         self.mixture_depth = -1
 
         self.aug_prob_coeff = 1.
-        self.aug_severity = 1
+        self.aug_severity = aug_severity
 
         self.no_jsd = no_jsd
 

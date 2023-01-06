@@ -90,7 +90,7 @@ def bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
 
 
-def _apply_except_bbox_augmentation(img, bboxes_xy, aug_func, **kwargs):
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -120,24 +120,24 @@ def _apply_except_bbox_augmentation(img, bboxes_xy, aug_func, **kwargs):
     return img
 
 
-def except_bbox_rotate(pil_img, bboxes_xy, level, img_size):
-    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size)
+def bg_only_rotate(pil_img, bboxes_xy, level, img_size):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size)
 
 
-def except_bbox_shear_x(pil_img, bboxes_xy, level, img_size):
-    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size)
+def bg_only_shear_x(pil_img, bboxes_xy, level, img_size):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size)
 
 
-def except_bbox_shear_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
+def bg_only_shear_y(pil_img, bboxes_xy, level, img_size):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
 
 
-def except_bbox_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
-    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
+def bg_only_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
 
 
-def except_bbox_translate_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_except_bbox_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+def bg_only_translate_y(pil_img, bboxes_xy, level, img_size):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
 
 
 def get_aug_list(version):
@@ -168,11 +168,18 @@ def get_aug_list(version):
         return aug_color_list, aug_geo_list
     elif version in ['1.2']:
         aug_color_list = [autocontrast, equalize, posterize, solarize]
-        aug_except_bbox_list = [except_bbox_rotate, except_bbox_shear_x, except_bbox_shear_y,
-                                except_bbox_translate_x, except_bbox_translate_y]
+        aug_bg_only_list = [bg_only_rotate, bg_only_shear_x, bg_only_shear_y,
+                                bg_only_translate_x, bg_only_translate_y]
         aug_bbox_only_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                               bboxes_only_translate_x, bboxes_only_translate_y]
-        return aug_color_list, aug_except_bbox_list, aug_bbox_only_list
+        return aug_color_list, aug_bg_only_list, aug_bbox_only_list
+    elif version in ['1.3']:
+        aug_list = [autocontrast, equalize, posterize, solarize, # color
+                    bg_only_rotate, bg_only_shear_x, bg_only_shear_y,
+                    bg_only_translate_x, bg_only_translate_y, # bg only transformation
+                    bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
+                    bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
+        return aug_list
     else:
         raise NotImplementedError
 
@@ -269,7 +276,10 @@ class AugMixDetection:
         img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
         for i in range(self.mixture_width):
             # Sample operations : [op1, op2, op3] ~ O
-            depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 4)
+            if isinstance(self.mixture_depth, tuple):
+                depth = np.random.randint(*self.mixture_depth)
+            else:
+                depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 4)
             op_chain = np.random.choice(self.aug_list, depth, replace=False) # not allow same aug if replace is False.
 
             # Augment
@@ -295,6 +305,8 @@ class AugMixDetection:
             raise TypeError
 
         for op in op_chain:
+            if isinstance(img_aug, np.ndarray):
+                img_aug = Image.fromarray(img_aug, 'RGB')
             img_aug = op(img_aug, level=aug_severity,
                          img_size=img_size, bboxes_xy=gt_bboxes)
 
