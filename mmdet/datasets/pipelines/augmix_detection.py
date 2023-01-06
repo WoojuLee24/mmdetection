@@ -209,6 +209,7 @@ class AugMixDetection:
         if self.num_views == 1:
             return self.aug_and_mix(results['img'], results['gt_bboxes'])
 
+        results['custom_field'] = []
         for i in range(2, self.num_views+1):
             if isinstance(self.aug_list, tuple):
                 img_augmix = self.multiaug_and_mix(results['img'].copy(), results['gt_bboxes'])
@@ -219,6 +220,9 @@ class AugMixDetection:
             results[f'gt_labels{i}'] = copy.deepcopy(results['gt_labels']) # TODO: allow to geometric operations containing bbox
             results['img_fields'].append(f'img{i}')
             results['bbox_fields'].append(f'gt_bboxes{i}')
+
+            results['custom_field'].append(f'gt_bboxes{i}')
+            results['custom_field'].append(f'gt_labels{i}')
 
         return results
 

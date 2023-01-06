@@ -550,18 +550,18 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                     i_list.append(f'{i}')
             data['img'] = torch.cat([data[f'img{i}'] for i in i_list], dim=0)
             # list and delete each augmented element.
-            for i in range(1, len(data['img']) + 1):
-                if i == 1:
-                    continue
+            batch_size = len(data['img_metas'])
+            total_views = len(data['img'])
+            for i in range(2, int(total_views/batch_size) + 1):
                 for key in ['img', 'gt_bboxes', 'gt_labels', 'gt_instance_inds', 'img_metas']:
                     if f'{key}{i}' in data:
                         if key != 'img':
                             data[key] += data[f'{key}{i}']
                         del data[f'{key}{i}']
                     else:
-                        if not key in data:
-                            continue
-                        data[key].append(data[key][0])
+                        if key in data:
+                            for b in range(batch_size):
+                                data[key].append(data[key][b])
 
             # ANALYSIS[CODE=002]: analysis loss region
             data['log_loss_region'] = self.train_cfg['log_loss_region'] if 'log_loss_region' in self.train_cfg else None
