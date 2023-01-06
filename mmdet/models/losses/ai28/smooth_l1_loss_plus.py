@@ -289,6 +289,29 @@ def jsdy(pred,
 
     return loss, p_distribution
 
+def l1_margin_lossv0_1(pred, target, weight, reduction='mean', avg_factor=1536, margin=0.01, **kwargs):
+    if target.numel() == 0:
+        return pred.sum() * 0
+
+    diff = torch.abs(pred - target)
+    diff_orig, diff_aug1, diff_aug2 = torch.chunk(diff, 3)
+
+    weight, _, _ = torch.chunk(weight, 3)
+
+    mask = diff_aug1 < diff_orig + margin
+    loss_aug1 = torch.zeros_like(diff_aug1)
+    loss_aug1[mask] = diff_aug1[mask]
+
+    mask = diff_aug2 < diff_orig + margin
+    loss_aug2 = torch.zeros_like(diff_aug2)
+    loss_aug2[mask] = diff_aug2[mask]
+
+    loss_aug1 = weight_reduce_loss(loss_aug1, weight, reduction, avg_factor)
+    loss_aug2 = weight_reduce_loss(loss_aug2, weight, reduction, avg_factor)
+
+    p_distribution = dict()
+
+    return loss_aug1 + loss_aug2, p_distribution
 
 @LOSSES.register_module()
 class SmoothL1LossPlus(nn.Module):
@@ -306,7 +329,8 @@ class SmoothL1LossPlus(nn.Module):
                  additional_loss='jsd',
                  lambda_weight=0.0001,
                  wandb_name=None,
-                 analysis=False
+                 analysis=False,
+                 **kwargs
                  ):
         super(SmoothL1LossPlus, self).__init__()
         self.beta = beta
@@ -315,6 +339,7 @@ class SmoothL1LossPlus(nn.Module):
         self.additional_loss = additional_loss
         self.lambda_weight = lambda_weight
         self.wandb_name = wandb_name
+        self.kwargs = kwargs
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
@@ -326,15 +351,17 @@ class SmoothL1LossPlus(nn.Module):
             self.reg_criterion = smooth_l1_loss
 
         if self.additional_loss == 'jsd':
-            self.cls_additional = jsd
+            self.reg_additional = jsd
         elif self.additional_loss == 'jsdy':
-            self.cls_additional = jsdy
+            self.reg_additional = jsdy
         elif self.additional_loss == 'l1_dg_loss':
-            self.cls_additional = l1_dg_loss
+            self.reg_additional = l1_dg_loss
         elif self.additional_loss == 'smooth_l1_dg_loss':
-            self.cls_additional = smooth_l1_dg_loss
+            self.reg_additional = smooth_l1_dg_loss
+        elif self.additional_loss == 'l1_margin_lossv0_1':
+            self.reg_additional = l1_margin_lossv0_1
         else:
-            self.cls_additional = None
+            self.reg_additional = None
 
     def forward(self,
                 pred,
@@ -369,13 +396,16 @@ class SmoothL1LossPlus(nn.Module):
             **kwargs)
 
         loss_additional = 0
-        if self.cls_additional is not None:
-            loss_additional, p_distribution = self.cls_additional(
+        if self.reg_additional is not None:
+            loss_additional, p_distribution = self.reg_additional(
                 pred,
                 target,
                 weight,
                 reduction=reduction,
-                avg_factor=avg_factor)
+                avg_factor=avg_factor,
+                **self.kwargs,
+                **kwargs,
+            )
 
             self.wandb_features[f'smoothL1_loss({self.wandb_name})'] = loss_bbox
             self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
