@@ -108,8 +108,8 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                         feats=[lvl_feat[i][None] for lvl_feat in x])
                     sampling_results.append(sampling_result)
             else:
-                sampling_results_tmp = []
-                for i in range(int(num_imgs / kwargs['num_views'])):
+                sampling_results_batch = []
+                for i in range(kwargs['batch_size']):
                     assign_result = self.bbox_assigner.assign(
                         proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
                         gt_labels[i])
@@ -119,10 +119,9 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                         gt_bboxes[i],
                         gt_labels[i],
                         feats=[lvl_feat[i][None] for lvl_feat in x])
-                    sampling_results_tmp.append(sampling_result)
-                for j in range(kwargs['num_views']):
-                    sampling_results.extend(sampling_results_tmp)
-                _ = kwargs.pop('num_views')
+                    sampling_results_batch.append(sampling_result)
+                for _ in range(kwargs['num_views']):
+                    sampling_results.extend(sampling_results_batch)
 
         losses = dict()
 
