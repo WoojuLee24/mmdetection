@@ -28,15 +28,16 @@ _base_ = [
 #############
 ### MODEL ###
 #############
+num_views = 2
 model = dict(
     backbone=dict(init_cfg=None),
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
-            additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls',
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0, num_views=num_views,
+            additional_loss='None', lambda_weight=0, wandb_name='rpn_cls',
             additional_loss2=None, lambda_weight2=0),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
+                       additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHeadXent',
@@ -51,16 +52,17 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
-                additional_loss='jsdv1_3', lambda_weight=1, wandb_name='roi_cls', log_pos_ratio=False,
-                additional_loss2='ntxent.clean.fg', lambda_weight2=0.01),
-            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
+                additional_loss='None', lambda_weight=0, wandb_name='roi_cls', log_pos_ratio=False,
+                additional_loss2='ntxent.clean.orig.fg', lambda_weight2=0.01),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
+                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
                 features_list=[
-                    'roi_head.bbox_head.cls_fcs.0', # "rpn_head.rpn_cls",
+                    'roi_head.bbox_head.cls_fcs.0',
+                    # "rpn_head.rpn_cls"
                 ],
                 vars=['log_vars']),
         )))
@@ -77,20 +79,20 @@ train_pipeline = [
     dict(
         type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    ### AugMix ###
-    dict(type='AugMixDetection', num_views=3, version='1.2',
-         aug_severity=[3, 3, 1],
-         mixture_depth=[(1, 4), (0, 2), (1, 3)], **img_norm_cfg),
+    # ### AugMix ###
+    # dict(type='AugMixDetection', num_views=3, version='1.2',
+    #      aug_severity=[3, 3, 1],
+    #      mixture_depth=[(1, 4), (0, 2), (1, 3)], **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'img2', 'img3',
-                               'gt_bboxes', 'gt_bboxes2', 'gt_bboxes3',
+    dict(type='Collect', keys=['img',
+                               'gt_bboxes',
                                'gt_labels']),
 ]
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=2,
+    samples_per_gpu=2,
+    workers_per_gpu=4,
     train=dict(
         dataset=dict(
             pipeline=train_pipeline)),)
@@ -116,11 +118,11 @@ custom_hooks = [
          layer_list=model['train_cfg']['wandb']['log']['features_list']),
 ]
 
-pipeline = 'augmix.det1.2'
-loss_type = 'plus'
-rpn_loss = 'jsdv1.3.none'
-roi_loss = 'jsdv1.3.none'
-lambda_weight = '1e-1.1'
+pipeline = 'baseline'
+loss_type = 'None'
+rpn_loss = 'none.none'
+roi_loss = 'none.none.ntxent_clean'
+lambda_weight = '0.0.1e-2'
 
 name = f"{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
@@ -132,23 +134,23 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      # dict(type='WandbLogger',
-                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                      #                         'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean__e2_lw.1e-1.1.1e-2",
-                      #                         'config': {
-                      #                             # data pipeline
-                      #                             'data pipeline': f"{pipeline}",
-                      #                             # losses
-                      #                             'loss type(rpn)': f"{rpn_loss}",
-                      #                             'loss type(roi)': f"{roi_loss}",
-                      #                             # parameters
-                      #                             'epoch': runner['max_epochs'],
-                      #                             'lambda_weight': lambda_weight,
-                      #                         }},
-                      #      interval=500,
-                      #      log_checkpoint=True,
-                      #      log_checkpoint_metadata=True,
-                      #      num_eval_images=5),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': "rpn.none.none_roi.none.none_ntxent.clean.orig.fg__e2_lw.0.0.1e-2_2img_2aug",
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{pipeline}",
+                                                  # losses
+                                                  'loss type(rpn)': f"{rpn_loss}",
+                                                  'loss type(roi)': f"{roi_loss}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                                  'lambda_weight': lambda_weight,
+                                              }},
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )
 

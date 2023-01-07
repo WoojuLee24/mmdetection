@@ -11,7 +11,7 @@ from ..utils import weight_reduce_loss
 
 @mmcv.jit(derivate=True, coderize=True)
 @weighted_loss2
-def smooth_l1_loss(pred, target, beta=1.0):
+def smooth_l1_loss(pred, target, num_views=3, beta=1.0, ):
     """Smooth L1 loss.
 
     Args:
@@ -23,8 +23,8 @@ def smooth_l1_loss(pred, target, beta=1.0):
     Returns:
         torch.Tensor: Calculated loss
     """
-    pred_orig, _, _ = torch.chunk(pred, 3)
-    target, _, _ = torch.chunk(target, 3)
+    pred_orig = torch.chunk(pred, num_views)[0]
+    target = torch.chunk(target, num_views)[0]
 
     assert beta > 0
     if target.numel() == 0:
@@ -40,7 +40,7 @@ def smooth_l1_loss(pred, target, beta=1.0):
 
 @mmcv.jit(derivate=True, coderize=True)
 @weighted_loss2
-def l1_loss(pred, target):
+def l1_loss(pred, target, num_views=3):
     """L1 loss.
 
     Args:
@@ -50,8 +50,8 @@ def l1_loss(pred, target):
     Returns:
         torch.Tensor: Calculated loss
     """
-    pred_orig, _, _ = torch.chunk(pred, 3)
-    target, _, _ = torch.chunk(target, 3)
+    pred_orig = torch.chunk(pred, num_views)[0]
+    target = torch.chunk(target, num_views)[0]
 
     if target.numel() == 0:
         return pred_orig.sum() * 0
@@ -330,7 +330,8 @@ class SmoothL1LossPlus(nn.Module):
                  lambda_weight=0.0001,
                  wandb_name=None,
                  analysis=False,
-                 **kwargs
+                 num_views=3,
+                 **kwargs,
                  ):
         super(SmoothL1LossPlus, self).__init__()
         self.beta = beta
@@ -339,6 +340,7 @@ class SmoothL1LossPlus(nn.Module):
         self.additional_loss = additional_loss
         self.lambda_weight = lambda_weight
         self.wandb_name = wandb_name
+        self.num_views = num_views
         self.kwargs = kwargs
 
         self.wandb_features = dict()
@@ -393,6 +395,7 @@ class SmoothL1LossPlus(nn.Module):
             beta=self.beta,
             reduction=reduction,
             avg_factor=avg_factor,
+            num_views=self.num_views,
             **kwargs)
 
         loss_additional = 0
@@ -432,6 +435,7 @@ class L1LossPlus(nn.Module):
                  lambda_weight=0.0001,
                  wandb_name=None,
                  analysis=False,
+                 num_views=3,
                  ):
         super(L1LossPlus, self).__init__()
         self.reduction = reduction
@@ -440,6 +444,7 @@ class L1LossPlus(nn.Module):
         self.lambda_weight = lambda_weight
         self.wandb_name = wandb_name
         self.analysis = analysis
+        self.num_views = num_views
 
         self.wandb_features = dict()
         self.wandb_features[f'additional_loss({self.wandb_name})'] = []
@@ -485,7 +490,7 @@ class L1LossPlus(nn.Module):
         reduction = (
             reduction_override if reduction_override else self.reduction)
         loss_bbox = self.loss_weight * self.reg_criterion(
-            pred, target, weight, reduction=reduction, avg_factor=avg_factor)
+            pred, target, weight, reduction=reduction, avg_factor=avg_factor, num_views=self.num_views)
 
         loss_additional = 0
         if self.cls_additional is not None:

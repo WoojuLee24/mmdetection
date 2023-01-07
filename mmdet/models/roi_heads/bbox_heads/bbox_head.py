@@ -316,7 +316,6 @@ class BBoxHead(BaseModule):
                         consistency = (consistency * (pred_list[0] == pred_list[view])).float()
                     losses['consistency'] = torch.sum(consistency) / self.num_samples
 
-
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
@@ -356,7 +355,6 @@ class BBoxHead(BaseModule):
 
         losses['reg_ratio'] = losses['loss_bbox'] / losses['loss_cls']
 
-        # return losses, self.loss_cls.wandb_features # analysis feature code
         return losses
 
 

@@ -18,7 +18,8 @@ def cross_entropy(pred,
                   reduction='mean',
                   avg_factor=None,
                   class_weight=None,
-                  ignore_index=-100):
+                  ignore_index=-100,
+                  num_views=3):
     """Calculate the CrossEntropy loss.
 
     Args:
@@ -39,8 +40,8 @@ def cross_entropy(pred,
     # The default value of ignore_index is the same as F.cross_entropy
     ignore_index = -100 if ignore_index is None else ignore_index
 
-    pred_orig, _, _ = torch.chunk(pred, 3)
-    label, _, _ = torch.chunk(label, 3)
+    pred_orig = torch.chunk(pred, num_views)[0]
+    label = torch.chunk(label, num_views)[0]
 
     loss = F.cross_entropy(
         pred_orig,
@@ -50,7 +51,7 @@ def cross_entropy(pred,
         ignore_index=ignore_index)
 
     # apply weights and do the reduction
-    weight, _, _ = torch.chunk(weight, 3)
+    weight = torch.chunk(weight, num_views)[0]
     if weight is not None:
         weight = weight.float()
     loss = weight_reduce_loss(
@@ -133,7 +134,8 @@ def binary_cross_entropy(pred,
                          reduction='mean',
                          avg_factor=None,
                          class_weight=None,
-                         ignore_index=-100):
+                         ignore_index=-100,
+                         num_views=3):
     """Calculate the binary CrossEntropy loss.
 
     Args:
@@ -158,12 +160,12 @@ def binary_cross_entropy(pred,
                                               ignore_index)
 
     # weighted element-wise losses
-    weight, _, _ = torch.chunk(weight, 3)
+    weight = torch.chunk(weight, num_views)[0]
     if weight is not None:
         weight = weight.float()
 
-    pred_orig, _, _ = torch.chunk(pred, 3)
-    label, _, _ = torch.chunk(label, 3)
+    pred_orig = torch.chunk(pred, num_views)[0]
+    label = torch.chunk(label, num_views)[0]
 
     loss = F.binary_cross_entropy_with_logits(
         pred_orig, label.float(), pos_weight=class_weight, reduction='none')
@@ -181,7 +183,8 @@ def mask_cross_entropy(pred,
                        reduction='mean',
                        avg_factor=None,
                        class_weight=None,
-                       ignore_index=None):
+                       ignore_index=None,
+                       num_views=3):
     """Calculate the CrossEntropy loss for masks.
 
     Args:
@@ -223,8 +226,8 @@ def mask_cross_entropy(pred,
     inds = torch.arange(0, num_rois, dtype=torch.long, device=pred.device)
     pred_slice = pred[inds, label].squeeze(1)
 
-    pred_orig, _, _ = torch.chunk(pred_slice, 3)
-    label, _, _ = torch.chunk(label, 3)
+    pred_orig = torch.chunk(pred_slice, num_views)[0]
+    label = torch.chunk(label, num_views)[0]
 
     loss = F.binary_cross_entropy_with_logits(
         pred_orig, target, weight=class_weight, reduction='mean')[None]
@@ -479,6 +482,91 @@ def jsdv1_3(pred,
     # apply weights and do the reduction
     if weight is not None:
         weight, _, _ = torch.chunk(weight, 3)
+        weight = weight.float()
+    loss = weight_reduce_loss(
+        loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
+
+    p_distribution = {# 'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
+                      # 'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
+                      # 'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
+                      # 'p_mixture': p_mixture,
+                      'loss_pos': loss_pos,
+                      'loss_neg': loss_neg,
+                      'pos_ratio': pos_ratio, # ANALYSIS[CODE=004]
+                      }
+
+    return loss, p_distribution
+
+
+def jsdv1_3_2aug(pred,
+            label,
+            weight=None,
+            reduction='mean',
+            avg_factor=None,
+            use_cls_weight=False,
+            **kwargs):
+    """Calculate the jsdv1.3 loss.
+    jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+    divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+    reduction parameter does not affect the loss
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    pred_orig, pred_aug1 = torch.chunk(pred, 2)
+
+    if pred_orig.shape[-1] == 1:  # if rpn
+        p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
+                                  torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1)
+        neg_ind = 1 # WARN: only for cityscapes dataset
+
+    else:  # else roi
+        p_clean, p_aug1 = F.softmax(pred_orig, dim=1), \
+                          F.softmax(pred_aug1, dim=1)
+        neg_ind = 8 # WARN: only for cityscapes dataset
+
+    p_clean, p_aug1 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
+                      p_aug1.reshape((1,) + p_aug1.shape).contiguous()
+
+    # Clamp mixture distribution to avoid exploding KL divergence
+    p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
+
+    # log_pos_ratio
+    loss = (F.kl_div(p_mixture, p_clean, reduction='none') +
+            F.kl_div(p_mixture, p_aug1, reduction='none')) / 2.
+    loss = torch.sum(loss, dim=-1).squeeze(0)
+
+    # [DEV] imbalance: alpha-balanced loss
+    label, _ = torch.chunk(label, 2)
+    if use_cls_weight:
+        class_weight = kwargs['class_weight'] \
+            if kwargs['add_class_weight'] is None else kwargs['add_class_weight']
+
+        for i in range(len(class_weight)):
+            mask = (label == i)
+            loss[mask] = loss[mask] * class_weight[i]
+
+    # ANALYSIS[CODE=004]: analysis pos_ratio: the ration of positive JSD loss over negative JSD loss
+    loss_neg = torch.sum(loss[(label == neg_ind)])
+    loss_pos = torch.sum(loss[(label != neg_ind)])
+    pos_ratio = loss_pos / loss_neg
+
+    # Compute loss
+    loss = torch.sum(loss) / len(p_aug1)
+
+    # apply weights and do the reduction
+    if weight is not None:
+        weight, _ = torch.chunk(weight, 2)
         weight = weight.float()
     loss = weight_reduce_loss(
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
@@ -1028,6 +1116,56 @@ def ntxent_clean_fg(pred,
 
     return loss, feature_analysis
 
+
+def ntxent_clean_fg_2aug(pred,
+                       label,
+                       weight=None,
+                       reduction='mean',
+                       avg_factor=None,
+                       analysis=False,
+                       **kwargs):
+    """Calculate the ntxent loss on the clean samples
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    feature_analysis = {}
+    loss = 0
+
+    # from mmdet.models.detectors.base import FEATURES
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+    from mmdet.models.detectors.base import FEATURES
+    k = FEATURES
+    # from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
+    # k = FEATURES['roi_head.bbox_head.cls_fcs.0'][0]
+
+    for key, feature in FEATURES.items():
+        k = feature[0]
+        if k.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif k.dim() == 2: # if roi
+            features_orig, _ = torch.chunk(k, 2)
+            label_orig, _ = torch.chunk(label, 2)
+            label_orig = label_orig.unsqueeze(dim=1)
+            ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper)
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
 
 def kntxent_clean(pred,
                        label,
@@ -1796,6 +1934,7 @@ class CrossEntropyLossPlus(nn.Module):
                  wandb_name=None,
                  use_cls_weight=False,
                  add_class_weight=None,
+                 num_views=3,
                  **kwargs):
         """CrossEntropyLossPlus.
 
@@ -1835,6 +1974,7 @@ class CrossEntropyLossPlus(nn.Module):
         self.wandb_name = wandb_name
         self.use_cls_weight = use_cls_weight
         self.add_class_weight = add_class_weight
+        self.num_views = num_views
 
         self.kwargs = kwargs
 
@@ -1867,6 +2007,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional = jsdv1_2
         elif self.additional_loss == 'jsdv1_3':
             self.cls_additional = jsdv1_3
+        elif self.additional_loss == 'jsdv1_3_2aug':
+            self.cls_additional = jsdv1_3_2aug
         elif self.additional_loss == 'jsdv1_5':
             self.cls_additional = jsdv1_5
         elif self.additional_loss == 'jsdv1_5_1':
@@ -1908,6 +2050,8 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxent_clean
         elif self.additional_loss2 == 'ntxent.clean.fg':
             self.cls_additional2 = ntxent_clean_fg
+        elif self.additional_loss2 == 'ntxent.clean.fg.2aug':
+            self.cls_additional2 = ntxent_clean_fg_2aug
         elif self.additional_loss2 == 'kntxent.clean':
             self.cls_additional2 = kntxent_clean
         elif self.additional_loss2 == 'ntxent.clean.tr':
@@ -1967,7 +2111,8 @@ class CrossEntropyLossPlus(nn.Module):
             class_weight=class_weight,
             reduction=reduction,
             avg_factor=kwargs['original_avg_factor'] if 'original_avg_factor' in kwargs else avg_factor,
-            ignore_index=ignore_index)
+            ignore_index=ignore_index,
+            num_views=self.num_views)
 
         loss_additional = 0
         p_distribution = dict()
