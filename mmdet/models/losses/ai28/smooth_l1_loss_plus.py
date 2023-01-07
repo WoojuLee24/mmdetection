@@ -314,14 +314,13 @@ def l1_margin_lossv0_1(pred, target, weight, reduction='mean', avg_factor=1536, 
     return loss_aug1 + loss_aug2, p_distribution
 
 
-import math
 def smooth_l1_gaussian_lossv0_1(pred, target, weight, reduction='mean', avg_factor=1536,
                                 beta=1.0, sigma=0.40, **kwargs):
     if target.numel() == 0:
         return pred.sum() * 0
 
     def gaussian_distribution(x, mean, sigma):
-        return 1 / (math.sqrt(2 * math.pi * sigma**2)) * torch.exp(-(x - mean) ** 2 / (2 * sigma**2))
+        return torch.exp(-(x - mean) ** 2 / (2 * sigma**2))
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
     target, _, _ = torch.chunk(target, 3)
