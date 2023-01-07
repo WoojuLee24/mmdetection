@@ -313,6 +313,40 @@ def l1_margin_lossv0_1(pred, target, weight, reduction='mean', avg_factor=1536, 
 
     return loss_aug1 + loss_aug2, p_distribution
 
+
+import math
+def smooth_l1_gaussian_lossv0_1(pred, target, weight, reduction='mean', avg_factor=1536,
+                                beta=1.0, sigma=0.40, **kwargs):
+    if target.numel() == 0:
+        return pred.sum() * 0
+
+    def gaussian_distribution(x, mean, sigma):
+        return 1 / (math.sqrt(2 * math.pi * sigma**2)) * torch.exp(-(x - mean) ** 2 / (2 * sigma**2))
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    target, _, _ = torch.chunk(target, 3)
+    weight_aug1 = gaussian_distribution(pred_aug1, pred_orig, sigma).cpu().detach()
+    weight_aug2 = gaussian_distribution(pred_aug2, pred_orig, sigma).cpu().detach()
+
+    def smooth_l1_loss(pred, target, beta):
+        assert pred.size() == target.size()
+        diff = torch.abs(pred - target)
+        loss = torch.where(diff < beta, 0.5 * diff * diff / beta,
+                           diff - 0.5 * beta)
+        return loss
+
+    loss_aug1 = weight_aug1 * smooth_l1_loss(pred_aug1, target, beta)
+    loss_aug2 = weight_aug2 * smooth_l1_loss(pred_aug2, target, beta)
+
+    weight, _, _ = torch.chunk(weight, 3)
+    loss_aug1 = weight_reduce_loss(loss_aug1, weight, reduction, avg_factor)
+    loss_aug2 = weight_reduce_loss(loss_aug2, weight, reduction, avg_factor)
+
+    p_distribution = dict()
+
+    return loss_aug1 + loss_aug2, p_distribution
+
+
 @LOSSES.register_module()
 class SmoothL1LossPlus(nn.Module):
     """Smooth L1 loss.
@@ -360,6 +394,8 @@ class SmoothL1LossPlus(nn.Module):
             self.reg_additional = smooth_l1_dg_loss
         elif self.additional_loss == 'l1_margin_lossv0_1':
             self.reg_additional = l1_margin_lossv0_1
+        elif self.additional_loss == 'smooth_l1_gaussian_lossv0_1':
+            self.reg_additional = smooth_l1_gaussian_lossv0_1
         else:
             self.reg_additional = None
 
