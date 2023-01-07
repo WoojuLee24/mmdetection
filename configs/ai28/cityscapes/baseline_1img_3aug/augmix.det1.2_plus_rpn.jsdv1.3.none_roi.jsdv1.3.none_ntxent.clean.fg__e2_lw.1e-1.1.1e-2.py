@@ -132,23 +132,23 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      # dict(type='WandbLogger',
-                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                      #                         'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg__e2_lw.1e-1.1.1e-2",
-                      #                         'config': {
-                      #                             # data pipeline
-                      #                             'data pipeline': f"{pipeline}",
-                      #                             # losses
-                      #                             'loss type(rpn)': f"{rpn_loss}",
-                      #                             'loss type(roi)': f"{roi_loss}",
-                      #                             # parameters
-                      #                             'epoch': runner['max_epochs'],
-                      #                             'lambda_weight': lambda_weight,
-                      #                         }},
-                      #      interval=500,
-                      #      log_checkpoint=True,
-                      #      log_checkpoint_metadata=True,
-                      #      num_eval_images=5),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg__e2_lw.1e-1.1.1e-2_1img_3aug",
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{pipeline}",
+                                                  # losses
+                                                  'loss type(rpn)': f"{rpn_loss}",
+                                                  'loss type(roi)': f"{roi_loss}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                                  'lambda_weight': lambda_weight,
+                                              }},
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )
 
