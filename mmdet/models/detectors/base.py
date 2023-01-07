@@ -532,6 +532,20 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         pdb.set_trace()
         return plt
 
+    def update_wandb_features(self, log_vars):
+        if 'wandb' in self.train_cfg:
+            if 'features_list' in self.train_cfg.wandb.log:
+                for layer_name in self.train_cfg.wandb.log.features_list:
+                    self.wandb_features[layer_name] = self.features[layer_name]
+            if 'vars' in self.train_cfg.wandb.log:
+                if 'log_vars' in self.train_cfg.wandb.log.vars:
+                    for name, value in log_vars.items():
+                        self.wandb_features[name] = np.mean(value)
+                if 'analysis_list' in self.train_cfg.wandb.log.vars:
+                    type_list = [analysis.type for analysis in self.train_cfg.analysis_list]
+                    if 'analysis_num_pos_and_neg' in type_list:
+                        analysis_cfg = self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
+                        self.wandb_features.update(analysis_cfg.outputs)
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -562,62 +576,29 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         """
         self.features.clear()
         self.wandb_features.clear()
+        self.wandb_data = data
 
-        if 'img2' in list(data.keys()) or 'img3' in list(data.keys()):
-            # settings
-            self.wandb_data = data
+        data = integrate_data(data) # concatenate the original image and augmented images.
 
-            # DEV[CODE=101]
-            # concatenate the original image and augmented images.
-            data = integrate_data(data)
+        losses = self(**data)
 
-            losses = self(**data)
+        # domain generalization in the fpn layer
+        # if train_cfg.wandb.log.features_list = [], pass
+        for key, pred in self.features.items():
+            dict_kwargs = dict()
+            if "loss" in self.neck.train_cfg:
+                neck_train_cfg_loss = self.neck.train_cfg["loss"]
+                for key, value in neck_train_cfg_loss:
+                    dict_kwargs[key] = value
+                loss_, p_dist = fpn_loss(pred[0], **dict_kwargs)
+                losses[f"fpn_loss.{key}"] = loss_
 
-            # domain generalization in the fpn layer
-            # if train_cfg.wandb.log.features_list = [], pass
-            for key, pred in self.features.items():
-                dict_kwargs = dict()
-                if "loss" in self.neck.train_cfg:
-                    neck_train_cfg_loss = self.neck.train_cfg["loss"]
-                    for key, value in neck_train_cfg_loss:
-                        dict_kwargs[key] = value
-                    loss_, p_dist = fpn_loss(pred[0], **dict_kwargs)
-                    losses[f"fpn_loss.{key}"] = loss_
-
-            loss, log_vars = self._parse_losses(losses)
-
-            # wandb
-            if 'wandb' in self.train_cfg:
-                if 'log' in self.train_cfg.wandb:
-                    if 'features_list' in self.train_cfg.wandb.log:
-                        for layer_name in self.train_cfg.wandb.log.features_list:
-                            self.wandb_features[layer_name] = self.features[layer_name]
-                    if 'vars' in self.train_cfg.wandb.log:
-                        if 'log_vars' in self.train_cfg.wandb.log.vars:
-                            for name, value in log_vars.items():
-                                self.wandb_features[name] = np.mean(value)
-
-        else:
-            # settings
-            self.wandb_data = data
-
-            losses = self(**data)
-
-            loss, log_vars = self._parse_losses(losses)
-
-            # wandb
-            if 'wandb' in self.train_cfg:
-                if 'log' in self.train_cfg.wandb:
-                    if 'features_list' in self.train_cfg.wandb.log:
-                        for layer_name in self.train_cfg.wandb.log.features_list:
-                            self.wandb_features[layer_name] = self.features[layer_name]
-                    if 'vars' in self.train_cfg.wandb.log:
-                        if 'log_vars' in self.train_cfg.wandb.log.vars:
-                            for name, value in log_vars.items():
-                                self.wandb_features[name] = np.mean(value)
+        loss, log_vars = self._parse_losses(losses)
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
+
+        self.update_wandb_features(log_vars)  # wandb
 
         return outputs
 
