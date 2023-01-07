@@ -314,7 +314,7 @@ class BBoxHead(BaseModule):
                     consistency = torch.ones_like(pred_list[0])
                     for view in range(1, num_views):
                         consistency = (consistency * (pred_list[0] == pred_list[view])).float()
-                    losses['consistency'] = torch.sum(consistency) / self.num_samples
+                    losses['consistency'] = torch.sum(consistency) / float(self.num_samples)
 
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
