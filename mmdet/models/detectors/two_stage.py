@@ -155,6 +155,10 @@ class TwoStageDetector(BaseDetector):
                 self.roi_head.bbox_sampler.analysis_list = [
                     self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
                 ]
+            if 'log_loss_region' in type_list:
+                self.roi_head.analysis_list = [
+                    self.train_cfg.analysis_list[type_list.index('log_loss_region')]
+                ]
         ### ANALYSIS CODE to here ###
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,

@@ -224,7 +224,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
 
     # ANALYSIS[CODE=002]: analysis loss region
-    def _bbox_forward_analysis_loss_region(self, x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region):
+    def _bbox_forward_analysis_loss_region(self, x, rois, bbox_targets, gt_bboxes, img_metas, save_dir):
         labels, label_weights, bbox_targets, bbox_weights = bbox_targets
         img = img_metas[0]['img']
         img_height, img_width = img.shape[-2:]
@@ -258,9 +258,9 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         for i in range(len(hist_overlaps)):
             title += f"{int(hist_overlaps[i]):3d} "
         fig.suptitle(title)
-        if not os.path.exists(log_loss_region):
-            os.makedirs(log_loss_region)
-        fig.savefig(f'{log_loss_region}/{img_metas[0]["ori_filename"].split("/")[-1].split(".png")[0]}_{self.num_save_img:06d}.png')
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        fig.savefig(f'{save_dir}/{img_metas[0]["ori_filename"].split("/")[-1].split(".png")[0]}_{self.num_save_img:06d}.png')
         self.num_save_img += 1
 
         return
@@ -373,11 +373,15 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         bbox_results.update(loss_bbox=loss_bbox)
 
-        # ANALYSIS[CODE=002]: analysis loss region
-        if log_loss_region is not None:
-            # NOTE: You can change the below setting.
-            if img_metas[0]["ori_filename"] == 'stuttgart/stuttgart_000144_000019_leftImg8bit.png':
-                self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region)
+        ### ANALYSIS CODE from here ###
+        if hasattr(self, 'analysis_list'):
+            type_list = [analysis['type'] for analysis in self.analysis_list]
+            if 'log_loss_region' in type_list:
+                analysis_cfg = self.analysis_list[type_list.index('log_loss_region')]
+                if img_metas[0]["ori_filename"] in analysis_cfg.filename_list:
+                    self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas,
+                                                            analysis_cfg.save_dir)
+        ### ANALYSIS CODE to here ###
 
         # DEV[CODE=102]: Contrastive loss with GenAutoAugment
         if self.loss_feat != None:
@@ -397,7 +401,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
-                            img_metas, gt_instance_inds=None, log_loss_region=None):
+                            img_metas, gt_instance_inds=None, **kwargs):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -413,11 +417,15 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         bbox_results.update(loss_bbox=loss_bbox)
 
-        # ANALYSIS[CODE=002]: analysis loss region
-        if log_loss_region is not None:
-            # NOTE: You can change the below setting.
-            if img_metas[0]["ori_filename"] == 'stuttgart/stuttgart_000144_000019_leftImg8bit.png':
-                self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas, log_loss_region)
+        ### ANALYSIS CODE from here ###
+        if hasattr(self, 'analysis_list'):
+            type_list = [analysis['type'] for analysis in self.analysis_list]
+            if 'log_loss_region' in type_list:
+                analysis_cfg = self.analysis_list[type_list.index('log_loss_region')]
+                if img_metas[0]["ori_filename"] in analysis_cfg.filename_list:
+                    self._bbox_forward_analysis_loss_region(x, rois, bbox_targets, gt_bboxes, img_metas,
+                                                            analysis_cfg.save_dir)
+        ### ANALYSIS CODE to here ###
 
         # DEV[CODE=102]: Contrastive loss with GenAutoAugment
         if self.loss_feat != None:
