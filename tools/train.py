@@ -73,6 +73,7 @@ def parse_args():
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--debug_mode', action='store_true')
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -182,6 +183,16 @@ def main():
             CLASSES=datasets[0].CLASSES)
     # add an attribute for visualization convenience
     model.CLASSES = datasets[0].CLASSES
+
+    # For convenience.
+    if args.debug_mode:
+        for i in range(len(cfg.log_config.hooks)):
+            if cfg.log_config.hooks[i].type == 'WandbLogger':
+                del cfg.log_config.hooks[i]
+        if cfg.load_from:
+            cfg.load_from = None
+        cfg.data.workers_per_gpu = 0
+
     train_detector(
         model,
         datasets,

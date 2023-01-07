@@ -317,10 +317,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             assert len(img_metas) == 1
             return self.onnx_export(img[0], img_metas[0])
 
-        if 'analysis_background' in kwargs: # ANALYSIS[CODE=001]
-            if kwargs['analysis_background']:
-                return self.analysis_background(img, img_metas, **kwargs)
-
+        ### ANALYSIS CODE from here ###
         if analysis == 'multi_domain' or analysis == 'single_domain':
             return self.forward_analysis(img, img_metas, **kwargs)
         elif analysis == 'feature':
@@ -330,6 +327,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             return self.analyze_feature(img, img_metas, **kwargs)
         elif analysis == 'feature_class':
             return self.analyze_feature_class(img, img_metas, **kwargs)
+        elif analysis == 'analysis_background':
+            return self.analysis_background(img, img_metas, **kwargs)
+        ### ANALYSIS CODE to here ###
 
         if return_loss:
             global FEATURES # DEV[CODE=201]: Contrastive Loss
