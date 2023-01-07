@@ -649,7 +649,7 @@ def supcontrast_clean_fg(logits_clean, labels=None, lambda_weight=0.1, temper=0.
     # fg_mask = (targets != targets.max()).float()
     # logits_clean = logits_clean * fg_mask
     inds, _ = (targets != targets.max()).nonzero(as_tuple=True)
-    if inds.size(0) != 0:
+    if inds.size(0) > 10:
         logits_clean = logits_clean[inds, :]    # fg
         targets = targets[inds, :]  # fg
 
