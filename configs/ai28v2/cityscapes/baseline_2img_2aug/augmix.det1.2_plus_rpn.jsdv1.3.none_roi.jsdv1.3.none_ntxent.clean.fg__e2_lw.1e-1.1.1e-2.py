@@ -79,7 +79,7 @@ train_pipeline = [
         type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMixDetection', num_views=2, version='1.2',
+    dict(type='AugMixDetection', num_views=num_views, version='1.2',
          aug_severity=[3, 3, 1],
          mixture_depth=[(1, 4), (0, 2), (1, 3)], **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),

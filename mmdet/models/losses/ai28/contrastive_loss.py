@@ -634,6 +634,7 @@ def supcontrast_clean_fg(logits_clean, labels=None, lambda_weight=0.1, temper=0.
 
     """
         supcontrast loss
+        create mask anchor and masks contrast
         input: only clean logit
         mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
         logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
@@ -646,15 +647,11 @@ def supcontrast_clean_fg(logits_clean, labels=None, lambda_weight=0.1, temper=0.
     targets = labels
     targets = targets.contiguous().view(-1, 1)
 
-    # fg_mask = (targets != targets.max()).float()
-    # logits_clean = logits_clean * fg_mask
     inds, _ = (targets != targets.max()).nonzero(as_tuple=True)
     if inds.size(0) > 10:
         logits_clean = logits_clean[inds, :]    # fg
         targets = targets[inds, :]  # fg
-
         batch_size = logits_clean.size()[0]
-
 
         mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
         mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
@@ -664,11 +661,8 @@ def supcontrast_clean_fg(logits_clean, labels=None, lambda_weight=0.1, temper=0.
         mask_contrast_except_eye = mask_contrast - mask_eye
         # mask_contrast_np = mask_contrast.detach().cpu().numpy()
 
-        # mask_same_instance_diff_class_np = mask_same_instance_diff_class.detach().cpu().numpy()
-
         loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
                                       mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
-
         loss = loss1
     else:
         loss = 0
