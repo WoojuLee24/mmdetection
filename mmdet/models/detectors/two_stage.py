@@ -149,13 +149,12 @@ class TwoStageDetector(BaseDetector):
         ### ANALYSIS CODE from here ###
         if 'analysis_list' in self.train_cfg:
             type_list = [analysis['type'] for analysis in self.train_cfg.analysis_list]
-            if 'analysis_loss_region' in type_list:
-                img_metas[0]['img'] = img # ANALYSIS[CODE=002]: analysis loss region
             if 'analysis_num_pos_and_neg' in type_list:
                 self.roi_head.bbox_sampler.analysis_list = [
                     self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
                 ]
             if 'log_loss_region' in type_list:
+                img_metas[0]['img'] = img
                 self.roi_head.analysis_list = [
                     self.train_cfg.analysis_list[type_list.index('log_loss_region')]
                 ]
