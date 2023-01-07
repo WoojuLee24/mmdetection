@@ -28,7 +28,7 @@ _base_ = [
 #############
 ### MODEL ###
 #############
-num_views = 2
+num_views = 1
 model = dict(
     backbone=dict(init_cfg=None),
     rpn_head=dict(

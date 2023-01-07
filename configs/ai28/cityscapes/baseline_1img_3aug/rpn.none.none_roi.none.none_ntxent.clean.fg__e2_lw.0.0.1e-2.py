@@ -28,15 +28,16 @@ _base_ = [
 #############
 ### MODEL ###
 #############
+num_views = 1
 model = dict(
     backbone=dict(init_cfg=None),
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0,
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0, num_views=num_views,
             additional_loss='None', lambda_weight=0, wandb_name='rpn_cls',
             additional_loss2=None, lambda_weight2=0),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
+                       additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHeadXent',
@@ -51,11 +52,11 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0,
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
                 additional_loss='None', lambda_weight=0, wandb_name='roi_cls', log_pos_ratio=False,
                 additional_loss2='ntxent.clean.orig.fg', lambda_weight2=0.01),
-            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
+                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
@@ -133,23 +134,23 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      dict(type='WandbLogger',
-                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': "rpn.none.none_roi.none.none_ntxent.clean.fg__e2_lw.0.0.1e-2_1img_3aug",
-                                              'config': {
-                                                  # data pipeline
-                                                  'data pipeline': f"{pipeline}",
-                                                  # losses
-                                                  'loss type(rpn)': f"{rpn_loss}",
-                                                  'loss type(roi)': f"{roi_loss}",
-                                                  # parameters
-                                                  'epoch': runner['max_epochs'],
-                                                  'lambda_weight': lambda_weight,
-                                              }},
-                           interval=500,
-                           log_checkpoint=True,
-                           log_checkpoint_metadata=True,
-                           num_eval_images=5),
+                      # dict(type='WandbLogger',
+                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                      #                         'name': "rpn.none.none_roi.none.none_ntxent.clean.fg__e2_lw.0.0.1e-2_1img_3aug",
+                      #                         'config': {
+                      #                             # data pipeline
+                      #                             'data pipeline': f"{pipeline}",
+                      #                             # losses
+                      #                             'loss type(rpn)': f"{rpn_loss}",
+                      #                             'loss type(roi)': f"{roi_loss}",
+                      #                             # parameters
+                      #                             'epoch': runner['max_epochs'],
+                      #                             'lambda_weight': lambda_weight,
+                      #                         }},
+                      #      interval=500,
+                      #      log_checkpoint=True,
+                      #      log_checkpoint_metadata=True,
+                      #      num_eval_images=5),
                   ]
                   )
 
