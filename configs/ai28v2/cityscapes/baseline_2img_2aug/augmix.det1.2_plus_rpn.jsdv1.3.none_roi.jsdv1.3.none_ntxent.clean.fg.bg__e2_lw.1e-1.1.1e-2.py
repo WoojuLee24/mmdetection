@@ -54,7 +54,7 @@ model = dict(
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
                 additional_loss='jsdv1_3_2aug', lambda_weight=1, wandb_name='roi_cls', log_pos_ratio=False,
-                additional_loss2='ntxent.clean.fg', lambda_weight2=0.01),
+                additional_loss2='ntxent.clean.fg.bg', lambda_weight2=0.01),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
@@ -135,7 +135,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg__e2_lw.1e-1.1.1e-2_2img_2aug",
+                                              'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg.bg__e2_lw.1e-1.1.1e-2_2img_2aug",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{pipeline}",

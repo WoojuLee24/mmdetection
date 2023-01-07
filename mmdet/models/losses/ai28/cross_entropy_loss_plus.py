@@ -6,9 +6,7 @@ import torch.nn.functional as F
 from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
-from .contrastive_loss import supcontrast, supcontrastv0_01, supcontrastv0_02, \
-    supcontrast_clean, supcontrast_clean_kpositive, supcontrast_clean_kpositivev1_1, \
-    supcontrast_clean_tr, supcontrast_clean_fg, \
+from .contrastive_loss import supcontrast_clean_fg, supcontrast_clean_fg_bg, \
     analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
 
 
@@ -450,6 +448,7 @@ def ntxent_clean_fg(pred,
                     avg_factor=None,
                     analysis=False,
                     num_views=3,
+                    name='ntxent.clean.fg',
                     **kwargs):
     """Calculate the ntxent loss on the clean samples
     Divide feature samples by torch.chunk
@@ -487,7 +486,67 @@ def ntxent_clean_fg(pred,
             features_orig = torch.chunk(k, num_views)[0]
             label_orig = torch.chunk(label, num_views)[0]
             label_orig = label_orig.unsqueeze(dim=1)
-            ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper)
+            if name == 'ntxent.clean.fg':
+                ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper, min_samples=10)
+            elif name == 'ntxent.clean.fg.bg':
+                ntxent_loss = supcontrast_clean_fg_bg(features_orig, label_orig, temper=temper, min_samples=10)
+            # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
+
+        loss += ntxent_loss
+
+    return loss, feature_analysis
+
+
+def ntxent_all(pred,
+               label,
+               weight=None,
+               reduction='mean',
+               avg_factor=None,
+               analysis=False,
+               num_views=3,
+               name='ntxent.clean.fg',
+               **kwargs):
+
+    """Calculate the ntxent loss on the clean samples
+    Divide feature samples by torch.chunk
+
+    Args:
+        pred (torch.Tensor): The prediction with shape (N, C), C is the number
+            of classes.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+
+    Returns:
+        torch.Tensor: The calculated loss
+    """
+
+    # avg_factor = None
+    temper = kwargs['temper']
+    add_act = kwargs['add_act']
+    # temper_ratio = kwargs['temper_ratio']
+    # k = kwargs['kpositive']
+    # classes = kwargs['classes']
+    feature_analysis = {}
+    loss = 0
+
+    from mmdet.models.detectors.base import FEATURES
+
+    for key, feature in FEATURES.items():
+        k = feature[0]
+        if k.dim() == 4: # if rpn
+            ntxent_loss = 0
+            pass
+        elif k.dim() == 2: # if roi
+            features_orig = torch.chunk(k, num_views)[0]
+            label_orig = torch.chunk(label, num_views)[0]
+            label_orig = label_orig.unsqueeze(dim=1)
+            if name == 'ntxent.clean.fg':
+                ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper, min_samples=10)
+            elif name == 'ntxent.clean.fg.bg':
+                ntxent_loss = supcontrast_clean_fg_bg(features_orig, label_orig, temper=temper, min_samples=10)
             # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
 
         loss += ntxent_loss
@@ -640,6 +699,8 @@ class CrossEntropyLossPlus(nn.Module):
         # additional loss2: (nt-xent)
         if self.additional_loss2 == 'ntxent.clean.fg':
             self.cls_additional2 = ntxent_clean_fg
+        elif self.additional_loss2 == 'ntxent.clean.fg.bg':
+            self.cls_additional2 = ntxent_clean_fg
         elif self.additional_loss2 == 'analyze_shared_fcs_1input':
             self.cls_additional2 = analyze_shared_fcs_1input
         elif self.additional_loss2 == 'analyze_shared_fcs_2input':
@@ -752,6 +813,7 @@ class CrossEntropyLossPlus(nn.Module):
                 kpositive=self.kpositive,
                 classes=self.classes,
                 num_views=self.num_views,
+                name=self.additional_loss2,
             )
 
             # wandb for rpn
