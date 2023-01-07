@@ -324,8 +324,8 @@ def smooth_l1_gaussian_lossv0_1(pred, target, weight, reduction='mean', avg_fact
 
     pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
     target, _, _ = torch.chunk(target, 3)
-    weight_aug1 = gaussian_distribution(pred_aug1, pred_orig, sigma).cpu().detach()
-    weight_aug2 = gaussian_distribution(pred_aug2, pred_orig, sigma).cpu().detach()
+    weight_aug1 = gaussian_distribution(pred_aug1, pred_orig, sigma).detach()
+    weight_aug2 = gaussian_distribution(pred_aug2, pred_orig, sigma).detach()
 
     def smooth_l1_loss(pred, target, beta):
         assert pred.size() == target.size()
