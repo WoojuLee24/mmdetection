@@ -134,7 +134,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg__e2_lw.1e-1.1.1e-2",
+                                              'name': "augmix.det1.2_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_ntxent.clean.fg__e2_lw.1e-1.1.1e-2_1img_3aug",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{pipeline}",

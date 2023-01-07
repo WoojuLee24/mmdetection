@@ -123,7 +123,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': "faster_rcnn_r50_fpn_1x_cityscapes",
+                                              'name': "faster_rcnn_r50_fpn_1x_cityscapes_1img_3aug",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{pipeline}",

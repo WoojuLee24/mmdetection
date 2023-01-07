@@ -96,7 +96,8 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             sampling_results = []
             # edited by dnwn24
             # assert divmod(num_imgs, 3)[1] == 0
-            if divmod(num_imgs, 3)[1] !=0 :
+
+            if not 'num_views' in kwargs:
                 for i in range(num_imgs):
                     assign_result = self.bbox_assigner.assign(
                         proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
@@ -110,7 +111,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                     sampling_results.append(sampling_result)
             else:
                 sampling_results_tmp = []
-                for i in range(int(num_imgs/3)):
+                for i in range(int(num_imgs / kwargs['num_views'])):
                     assign_result = self.bbox_assigner.assign(
                         proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
                         gt_labels[i])
@@ -121,9 +122,9 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                         gt_labels[i],
                         feats=[lvl_feat[i][None] for lvl_feat in x])
                     sampling_results_tmp.append(sampling_result)
-                sampling_results.extend(sampling_results_tmp)
-                sampling_results.extend(sampling_results_tmp)
-                sampling_results.extend(sampling_results_tmp)
+                for j in range(kwargs['num_views']):
+                    sampling_results.extend(sampling_results_tmp)
+                _ = kwargs.pop('num_views')
 
         losses = dict()
 

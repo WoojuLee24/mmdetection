@@ -552,6 +552,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             # list and delete each augmented element.
             batch_size = len(data['img_metas'])
             total_views = len(data['img'])
+            num_views = int(total_views / batch_size)
             for i in range(2, int(total_views/batch_size) + 1):
                 for key in ['img', 'gt_bboxes', 'gt_labels', 'gt_instance_inds', 'img_metas']:
                     if f'{key}{i}' in data:
@@ -565,6 +566,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
             # ANALYSIS[CODE=002]: analysis loss region
             data['log_loss_region'] = self.train_cfg['log_loss_region'] if 'log_loss_region' in self.train_cfg else None
+            data['num_views'] = num_views
 
             losses = self(**data)
 
