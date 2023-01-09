@@ -504,7 +504,7 @@ def ntxent_all(pred,
                avg_factor=None,
                analysis=False,
                num_views=3,
-               name='ntxent.clean.fg',
+               name='ntxent.all.fg',
                **kwargs):
 
     """Calculate the ntxent loss on the clean samples
@@ -540,13 +540,12 @@ def ntxent_all(pred,
             ntxent_loss = 0
             pass
         elif k.dim() == 2: # if roi
-            features_orig = torch.chunk(k, num_views)[0]
-            label_orig = torch.chunk(label, num_views)[0]
-            label_orig = label_orig.unsqueeze(dim=1)
-            if name == 'ntxent.clean.fg':
-                ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper, min_samples=10)
-            elif name == 'ntxent.clean.fg.bg':
-                ntxent_loss = supcontrast_clean_fg_bg(features_orig, label_orig, temper=temper, min_samples=10)
+            feature = k
+            label = label.unsqueeze(dim=1)
+            if name == 'ntxent.all.fg':
+                ntxent_loss = supcontrast_clean_fg(feature, label, temper=temper, min_samples=10)
+            elif name == 'ntxent.all.fg.bg':
+                ntxent_loss = supcontrast_clean_fg_bg(feature, label, temper=temper, min_samples=10)
             # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
 
         loss += ntxent_loss
@@ -701,6 +700,10 @@ class CrossEntropyLossPlus(nn.Module):
             self.cls_additional2 = ntxent_clean_fg
         elif self.additional_loss2 == 'ntxent.clean.fg.bg':
             self.cls_additional2 = ntxent_clean_fg
+        elif self.additional_loss2 == 'ntxent.all.fg':
+            self.cls_additional2 = ntxent_all
+        elif self.additional_loss2 == 'ntxent.all.fg.bg':
+            self.cls_additional2 = ntxent_all
         elif self.additional_loss2 == 'analyze_shared_fcs_1input':
             self.cls_additional2 = analyze_shared_fcs_1input
         elif self.additional_loss2 == 'analyze_shared_fcs_2input':

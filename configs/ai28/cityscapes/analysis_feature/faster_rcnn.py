@@ -28,21 +28,22 @@ _base_ = [
 #############
 ### MODEL ###
 #############
+num_views = 1
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
-            , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
-                       , additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox', analysis=True)),
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0 ,num_views=num_views,
+            additional_loss='None', lambda_weight=0.1, wandb_name='rpn_cls'),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
+                       additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox', analysis=False)),
     roi_head=dict(
         bbox_head=dict(
             loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
-                , additional_loss='jsdv1_3', lambda_weight=100, wandb_name='roi_cls',
-                additional_loss2='analyze_shared_fcs_2input', lambda_weight2=0, analysis=True,),
-            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
-                           , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox', analysis=True))),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
+                additional_loss='None', lambda_weight=100, wandb_name='roi_cls',
+                additional_loss2='None', lambda_weight2=0, analysis=False,),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
+                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox', analysis=False))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
@@ -86,33 +87,6 @@ test_pipeline = [
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', ]),
 ]
 
-# test_pipeline = [
-#     dict(type='LoadImageFromFile'),
-#     dict(type='LoadAnnotations', with_bbox=True),
-#     dict(
-#         type='MultiScaleFlipAug',
-#         img_scale=(2048, 1024),
-#         flip=False,
-#         transforms=[
-#             dict(type='Resize', keep_ratio=True),
-#             dict(type='RandomFlip'),
-#             dict(type='Normalize', **img_norm_cfg),
-#             dict(type='Pad', size_divisor=32),
-#             dict(type='ImageToTensor', keys=['img']),
-#             dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
-#         ])
-# ]
-
-# data = dict(
-#     samples_per_gpu=1,
-#     workers_per_gpu=1,
-#     train=dict(
-#         dataset=dict(
-#             pipeline=train_pipeline)),
-#     val=dict(
-#         pipeline=test_pipeline,
-#     ),
-# )
 
 data = dict(
     samples_per_gpu=1,
