@@ -191,6 +191,18 @@ class TwoStageDetector(BaseDetector):
                 # roi_cls
                 for key, value in self.roi_head.bbox_head.loss_bbox.outputs.items():
                     analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__roi_bbox)"] = float(sum(value) / roi_losses['loss_bbox'])
+            if 'additional_loss_ratio' in type_list:
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('additional_loss_ratio')]
+                if not hasattr(analysis_cfg, 'outputs'):
+                    analysis_cfg.outputs = dict()
+                if 'rpn_cls' in analysis_cfg.log_list:
+                    _outputs = self.rpn_head.loss_cls.outputs
+                    analysis_cfg.outputs[f"additional_loss_ratio({self.rpn_head.loss_cls.wandb_name})"] = \
+                        float(self.rpn_head.loss_cls.lambda_weight * sum(_outputs['loss_additional']) / sum(_outputs['loss_cls']))
+                if 'roi_cls' in analysis_cfg.log_list:
+                    _outputs = self.roi_head.bbox_head.loss_cls.outputs
+                    analysis_cfg.outputs[f"additional_loss_ratio({self.roi_head.bbox_head.loss_cls.wandb_name})"] = \
+                        float(self.rpn_head.loss_cls.lambda_weight * sum(_outputs['loss_additional']) / sum(_outputs['loss_cls']))
         ### ANALYSIS CODE to here ###
 
         return losses
