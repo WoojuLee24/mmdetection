@@ -845,6 +845,15 @@ class CrossEntropyLossPlus(nn.Module):
         # self.wandb_features[f'loss({self.wandb_name})'] = loss
         # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
 
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_cls', 'loss_additional', 'loss_additional2']:
+                self.outputs[key] = []
+        self.outputs['loss_cls'].append(float(loss_cls))
+        self.outputs['loss_additional'].append(float(self.lambda_weight * loss_additional))
+        self.outputs['loss_additional2'].append(float(self.lambda_weight2 * loss_additional2))
+
         # ANALYSIS[CODE=005]: analysis relative pos and neg loss: The ration of positiv JSD loss over total loss
         if 'loss_pos' in p_distribution:
             rel_pos = p_distribution['loss_pos'] / float(loss)

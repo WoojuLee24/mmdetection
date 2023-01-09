@@ -452,6 +452,15 @@ class SmoothL1LossPlus(nn.Module):
 
         loss = loss_bbox + self.lambda_weight * loss_additional
         self.wandb_features[f'loss({self.wandb_name})'] = loss
+
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_bbox', 'loss_additional']:
+                self.outputs[key] = []
+        self.outputs['loss_bbox'].append(float(loss_bbox))
+        self.outputs['loss_additional'].append(float(self.lambda_weight * loss_additional))
+
         return loss
 
 
@@ -549,4 +558,13 @@ class L1LossPlus(nn.Module):
 
         loss = loss_bbox + self.lambda_weight * loss_additional
         self.wandb_features[f'loss({self.wandb_name})'] = loss
+
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_bbox', 'loss_additional']:
+                self.outputs[key] = []
+        self.outputs['loss_bbox'].append(float(loss_bbox))
+        self.outputs['loss_additional'].append(float(self.lambda_weight * loss_additional))
+
         return loss
