@@ -613,7 +613,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
         self.update_wandb_features_log_vars(log_vars)  # wandb
-        self.update_wandb_features_analysis_cfg(self.train_cfg.analysis_list)  # wandb
+        if hasattr(self.train_cfg, 'analysis_list'):
+            self.update_wandb_features_analysis_cfg(self.train_cfg.analysis_list)  # wandb
 
         return outputs
 
