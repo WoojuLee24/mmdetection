@@ -11,6 +11,50 @@ from mmdet.models.losses import accuracy
 from mmdet.models.utils import build_linear_layer
 
 
+def update_analysis_cfg_for_bbox_head_loss(analysis_cfg, cls_score, labels):
+    outputs = dict()
+
+    # acc_pos, acc_neg
+    bg_ind = cls_score.shape[-1] - 1
+    mask_pos, mask_neg = (labels != bg_ind), (labels == bg_ind)
+    if 'acc_pos' in analysis_cfg.log_list:
+        outputs['acc_pos'] = float(accuracy(cls_score[mask_pos, :], labels[mask_pos]))
+    if 'acc_neg' in analysis_cfg.log_list:
+        outputs['acc_neg'] = float(accuracy(cls_score[mask_neg, :], labels[mask_neg]))
+
+    # acc_pos, acc_neg for each
+    num_views, _r = divmod(len(cls_score), analysis_cfg.num_samples)
+    assert _r == 0
+
+    cls_score_list = [*torch.chunk(cls_score, num_views)]
+    label_list = [*torch.chunk(labels, num_views)]
+    loss_name_list = ['orig']
+    for view in range(num_views):
+        if not view == 0:
+            loss_name_list.append(f"aug{view + 1}")
+
+        mask_pos, mask_neg = (label_list[view] != bg_ind), (label_list[view] == bg_ind)
+        if f'acc_{loss_name_list[view]}' in analysis_cfg.log_list:
+            outputs[f'acc_{loss_name_list[view]}'] = float(accuracy(cls_score_list[view], label_list[view]))
+        if f'acc_{loss_name_list[view]}_pos' in analysis_cfg.log_list:
+            outputs[f'acc_{loss_name_list[view]}_pos'] = float(accuracy(cls_score_list[view][mask_pos, :], label_list[view][mask_pos]))
+        if f'acc_{loss_name_list[view]}_neg' in analysis_cfg.log_list:
+            outputs[f'acc_{loss_name_list[view]}_neg'] = float(accuracy(cls_score_list[view][mask_neg, :], label_list[view][mask_neg]))
+
+    # Consistency
+    pred_cls = torch.argmax(cls_score, dim=-1)
+    pred_list = [*torch.chunk(pred_cls, num_views)]
+    consistency = torch.ones_like(pred_list[0])
+    for view in range(1, num_views):
+        consistency = (consistency * (pred_list[0] == pred_list[view])).float()
+    if 'consistency' in analysis_cfg.log_list:
+        outputs['consistency'] = float(torch.sum(consistency) / float(analysis_cfg.num_samples))
+
+    if not hasattr(analysis_cfg, 'outputs'):
+        analysis_cfg.outputs = dict()
+    analysis_cfg.outputs.update(outputs)
+
+
 @HEADS.register_module()
 class BBoxHead(BaseModule):
     """Simplest RoI head, with only two fc layers for classification and
@@ -284,37 +328,13 @@ class BBoxHead(BaseModule):
                 else:
                     losses['acc'] = accuracy(cls_score, labels)
 
-                    # acc_pos, acc_neg
-                    bg_ind = cls_score.shape[-1] - 1
-                    mask_pos, mask_neg = (labels != bg_ind), (labels == bg_ind)
-                    losses['acc_pos'] = accuracy(cls_score[mask_pos, :], labels[mask_pos])
-                    losses['acc_neg'] = accuracy(cls_score[mask_neg, :], labels[mask_neg])
-
-                    # acc_pos, acc_neg for each
-                    num_views, _r = divmod(len(cls_score), self.num_samples)
-                    assert _r == 0
-
-                    cls_score_list = [*torch.chunk(cls_score, num_views)]
-                    label_list = [*torch.chunk(labels, num_views)]
-                    loss_name_list = ['orig']
-                    for view in range(num_views):
-                        if not view == 0:
-                            loss_name_list.append(f"aug{view+1}")
-
-                        mask_pos, mask_neg = (label_list[view] != bg_ind), (label_list[view] == bg_ind)
-                        losses[f'acc_{loss_name_list[view]}'] = accuracy(cls_score_list[view], label_list[view])
-                        losses[f'acc_{loss_name_list[view]}_pos'] = accuracy(cls_score_list[view][mask_pos, :],
-                                                                             label_list[view][mask_pos])
-                        losses[f'acc_{loss_name_list[view]}_neg'] = accuracy(cls_score_list[view][mask_neg, :],
-                                                                             label_list[view][mask_neg])
-
-                    # Consistency
-                    pred_cls = torch.argmax(cls_score, dim=-1)
-                    pred_list = [*torch.chunk(pred_cls, num_views)]
-                    consistency = torch.ones_like(pred_list[0])
-                    for view in range(1, num_views):
-                        consistency = (consistency * (pred_list[0] == pred_list[view])).float()
-                    losses['consistency'] = torch.sum(consistency) / float(self.num_samples)
+                    ### ANALYSIS CODE from here ###
+                    if hasattr(self, 'analysis_list'):
+                        type_list = [analysis['type'] for analysis in self.analysis_list]
+                        if 'bbox_head_loss' in type_list:
+                            analysis_cfg = self.analysis_list[type_list.index('bbox_head_loss')]
+                            update_analysis_cfg_for_bbox_head_loss(analysis_cfg, cls_score, labels)
+                    ### ANALYSIS CODE to here ###
 
         if bbox_pred is not None:
             bg_class_ind = self.num_classes

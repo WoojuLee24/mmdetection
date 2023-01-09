@@ -150,14 +150,22 @@ class TwoStageDetector(BaseDetector):
         if 'analysis_list' in self.train_cfg:
             type_list = [analysis['type'] for analysis in self.train_cfg.analysis_list]
             if 'analysis_num_pos_and_neg' in type_list:
-                self.roi_head.bbox_sampler.analysis_list = [
-                    self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
-                ]
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
+                if not hasattr(self.roi_head.bbox_sampler, 'analysis_list'):
+                    self.roi_head.bbox_sampler.analysis_list = []
+                self.roi_head.bbox_sampler.analysis_list.append(analysis_cfg)
             if 'log_loss_region' in type_list:
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('log_loss_region')]
                 img_metas[0]['img'] = img
-                self.roi_head.analysis_list = [
-                    self.train_cfg.analysis_list[type_list.index('log_loss_region')]
-                ]
+                if not hasattr(self.roi_head, 'analysis_list'):
+                    self.roi_head.analysis_list = []
+                self.roi_head.analysis_list.append(analysis_cfg)
+            if 'bbox_head_loss' in type_list:
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('bbox_head_loss')]
+                analysis_cfg.num_samples = self.roi_head.train_cfg.sampler.num
+                if not hasattr(self.roi_head.bbox_head, 'analysis_list'):
+                    self.roi_head.bbox_head.analysis_list = []
+                self.roi_head.bbox_head.analysis_list.append(analysis_cfg)
         ### ANALYSIS CODE to here ###
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
