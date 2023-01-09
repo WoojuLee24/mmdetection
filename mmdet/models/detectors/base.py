@@ -532,7 +532,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         pdb.set_trace()
         return plt
 
-    def update_wandb_features(self, log_vars):
+    def update_wandb_features_log_vars(self, log_vars):
         if 'wandb' in self.train_cfg:
             if 'features_list' in self.train_cfg.wandb.log:
                 for layer_name in self.train_cfg.wandb.log.features_list:
@@ -541,16 +541,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 if 'log_vars' in self.train_cfg.wandb.log.vars:
                     for name, value in log_vars.items():
                         self.wandb_features[name] = np.mean(value)
-                if 'analysis_list' in self.train_cfg.wandb.log.vars:
-                    type_list = [analysis.type for analysis in self.train_cfg.analysis_list]
-                    if 'analysis_num_pos_and_neg' in type_list:
-                        analysis_cfg = self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
-                        self.wandb_features.update(analysis_cfg.outputs)
-                if 'loss_weight' in self.train_cfg.wandb.log.vars:
-                    type_list = [analysis.type for analysis in self.train_cfg.analysis_list]
-                    if 'loss_weight' in type_list:
-                        analysis_cfg = self.train_cfg.analysis_list[type_list.index('loss_weight')]
-                        self.wandb_features.update(analysis_cfg.outputs)
+
+    def update_wandb_features_analysis_cfg(self, analysis_list):
+        if 'wandb' in self.train_cfg:
+            for analysis in analysis_list:
+                if hasattr(analysis, 'outputs'):
+                    self.wandb_features.update(analysis.outputs)
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -616,7 +612,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
 
-        self.update_wandb_features(log_vars)  # wandb
+        self.update_wandb_features_log_vars(log_vars)  # wandb
+        self.update_wandb_features_analysis_cfg(self.train_cfg.analysis_list)  # wandb
 
         return outputs
 
