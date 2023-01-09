@@ -166,6 +166,25 @@ class TwoStageDetector(BaseDetector):
                                                  **kwargs)
         losses.update(roi_losses)
 
+        ### ANALYSIS CODE from here ###
+        if 'analysis_list' in self.train_cfg:
+            type_list = [analysis['type'] for analysis in self.train_cfg.analysis_list]
+            if 'loss_weight' in type_list:
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('loss_weight')]
+                # rpn_cls
+                for key, value in self.rpn_head.loss_cls.outputs.items():
+                    analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__rpn_cls)"] = float(sum(value) / sum(rpn_losses['loss_rpn_cls']))
+                # rpn_reg
+                for key, value in self.rpn_head.loss_bbox.outputs.items():
+                    analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__rpn_bbox)"] = float(sum(value) / sum(rpn_losses['loss_rpn_bbox']))
+                # roi_cls
+                for key, value in self.roi_head.bbox_head.loss_cls.outputs.items():
+                    analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__roi_cls)"] = float(sum(value) / roi_losses['loss_cls'])
+                # roi_cls
+                for key, value in self.roi_head.bbox_head.loss_bbox.outputs.items():
+                    analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__roi_bbox)"] = float(sum(value) / roi_losses['loss_bbox'])
+        ### ANALYSIS CODE to here ###
+
         return losses
 
 

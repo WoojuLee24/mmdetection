@@ -546,6 +546,11 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                     if 'analysis_num_pos_and_neg' in type_list:
                         analysis_cfg = self.train_cfg.analysis_list[type_list.index('analysis_num_pos_and_neg')]
                         self.wandb_features.update(analysis_cfg.outputs)
+                if 'loss_weight' in self.train_cfg.wandb.log.vars:
+                    type_list = [analysis.type for analysis in self.train_cfg.analysis_list]
+                    if 'loss_weight' in type_list:
+                        analysis_cfg = self.train_cfg.analysis_list[type_list.index('loss_weight')]
+                        self.wandb_features.update(analysis_cfg.outputs)
 
     def train_step(self, data, optimizer):
         """The iteration step during training.
@@ -594,6 +599,19 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                 losses[f"fpn_loss.{key}"] = loss_
 
         loss, log_vars = self._parse_losses(losses)
+
+        ### ANALYSIS CODE from here ###
+        if hasattr(self.train_cfg, 'analysis_list'):
+            type_list = [analysis.type for analysis in self.train_cfg.analysis_list]
+            if 'loss_weight' in type_list:
+                analysis_cfg = self.train_cfg.analysis_list[type_list.index('loss_weight')]
+
+                output = dict()
+                for _key, _value in log_vars.items():
+                    if _key in ['loss_rpn_cls', 'loss_rpn_bbox', 'loss_cls', 'loss_bbox']:
+                        output[f"loss_weight({_key.replace('loss_', '')}__per__loss)"] = log_vars[_key] / log_vars['loss']
+                analysis_cfg.outputs.update(output)
+        ### ANALYSIS CODE to here ###
 
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
