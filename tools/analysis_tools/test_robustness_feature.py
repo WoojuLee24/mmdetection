@@ -354,8 +354,7 @@ def main():
                 # hook.hook_multi_layer(model, features_list)
                 # hook.hook_multi_layer(model.module, features_list)
 
-                outputs = single_gpu_test_feature(model, data_loader, orig_dataset, args.show,
-                                              show_dir, args.show_score_thr)
+                outputs = single_gpu_test_feature(model, data_loader, orig_dataset, args.show, show_dir, args.show_score_thr)
                 # deprecated
                 # elif 'multi_domain_sample' in args.analysis:
                 #     outputs = single_gpu_test_feature_multi_domain_sample(model, data_loader, orig_dataset, args.show,

@@ -205,9 +205,9 @@ def single_gpu_test_feature(model,
 
     for i, data in enumerate(data_loader):
         orig_data = orig_dataset[i]
-        # img = orig_data['img'].data
-        # img = img.unsqueeze(dim=0)
-        img = orig_data['img'].data.unsqueeze(dim=0)
+        img = orig_data['img'].data
+        img = img.unsqueeze(dim=0)
+        # img = [orig_data['img'][0].unsqueeze(dim=0)]
         data['img2'] = img
 
         aug = False
