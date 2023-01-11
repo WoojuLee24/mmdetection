@@ -7,6 +7,7 @@ from ...builder import LOSSES
 from ..utils import weight_reduce_loss
 import mmdet.models.detectors.base as base
 from .contrastive_loss import supcontrast_clean_fg, supcontrast_clean_fg_bg, \
+    supcontrast_clean_fg_bg_tr, \
     analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
 
 
@@ -469,7 +470,7 @@ def ntxent_clean_fg(pred,
     # avg_factor = None
     temper = kwargs['temper']
     add_act = kwargs['add_act']
-    # temper_ratio = kwargs['temper_ratio']
+    temper_ratio = kwargs['temper_ratio']
     # k = kwargs['kpositive']
     # classes = kwargs['classes']
     feature_analysis = {}
@@ -490,6 +491,8 @@ def ntxent_clean_fg(pred,
                 ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper, min_samples=10)
             elif name == 'ntxent.clean.fg.bg':
                 ntxent_loss = supcontrast_clean_fg_bg(features_orig, label_orig, temper=temper, min_samples=10)
+            elif name == 'ntxent.clean.fg.bg.tr':
+                ntxent_loss = supcontrast_clean_fg_bg_tr(features_orig, label_orig, temper=temper, temper_ratio=temper_ratio, min_samples=10)
             # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
 
         loss += ntxent_loss
@@ -618,7 +621,7 @@ class CrossEntropyLossPlus(nn.Module):
                  kpositive=3,
                  classes=9,
                  temper=1,
-                 temper_ratio=0.2,
+                 temper_ratio=1.0,
                  analysis=False,
                  add_act=None,
                  wandb_name=None,
@@ -698,6 +701,8 @@ class CrossEntropyLossPlus(nn.Module):
         if self.additional_loss2 == 'ntxent.clean.fg':
             self.cls_additional2 = ntxent_clean_fg
         elif self.additional_loss2 == 'ntxent.clean.fg.bg':
+            self.cls_additional2 = ntxent_clean_fg
+        elif self.additional_loss2 == 'ntxent.clean.fg.bg.tr':
             self.cls_additional2 = ntxent_clean_fg
         elif self.additional_loss2 == 'ntxent.all.fg':
             self.cls_additional2 = ntxent_all
