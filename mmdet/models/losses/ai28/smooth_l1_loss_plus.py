@@ -345,6 +345,33 @@ def smooth_l1_gaussian_lossv0_1(pred, target, weight, reduction='mean', avg_fact
 
     return loss_aug1 + loss_aug2, p_distribution
 
+def sl1_loss(pred, target, weight, reduction='mean', avg_factor=1536, beta=1.0, **kwargs):
+
+    pred_orig, pred_aug1, pred_aug2 = torch.chunk(pred, 3)
+    target = torch.chunk(target, 3)[0]
+
+    assert beta > 0
+    if target.numel() == 0:
+        return pred_orig.sum() * 0
+
+    def smooth_l1_loss(pred, target, beta):
+        assert pred.size() == target.size()
+        diff = torch.abs(pred - target)
+        loss = torch.where(diff < beta, 0.5 * diff * diff / beta,
+                           diff - 0.5 * beta)
+        return loss
+
+    loss_aug1 = smooth_l1_loss(pred_aug1, target, beta)
+    loss_aug2 = smooth_l1_loss(pred_aug2, target, beta)
+
+    weight, _, _ = torch.chunk(weight, 3)
+    loss_aug1 = weight_reduce_loss(loss_aug1, weight, reduction, avg_factor)
+    loss_aug2 = weight_reduce_loss(loss_aug2, weight, reduction, avg_factor)
+
+    p_distribution = dict()
+
+    return loss_aug1 + loss_aug2, p_distribution
+
 
 @LOSSES.register_module()
 class SmoothL1LossPlus(nn.Module):
@@ -397,6 +424,8 @@ class SmoothL1LossPlus(nn.Module):
             self.reg_additional = l1_margin_lossv0_1
         elif self.additional_loss == 'smooth_l1_gaussian_lossv0_1':
             self.reg_additional = smooth_l1_gaussian_lossv0_1
+        elif self.additional_loss == 'sl1_loss':
+            self.reg_additional = sl1_loss
         else:
             self.reg_additional = None
 
