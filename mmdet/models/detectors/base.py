@@ -534,13 +534,14 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
     def update_wandb_features_log_vars(self, log_vars):
         if 'wandb' in self.train_cfg:
-            if 'features_list' in self.train_cfg.wandb.log:
-                for layer_name in self.train_cfg.wandb.log.features_list:
-                    self.wandb_features[layer_name] = self.features[layer_name]
-            if 'vars' in self.train_cfg.wandb.log:
-                if 'log_vars' in self.train_cfg.wandb.log.vars:
-                    for name, value in log_vars.items():
-                        self.wandb_features[name] = np.mean(value)
+            if 'log' in self.train_cfg.wandb:
+                if 'features_list' in self.train_cfg.wandb.log:
+                    for layer_name in self.train_cfg.wandb.log.features_list:
+                        self.wandb_features[layer_name] = self.features[layer_name]
+                if 'vars' in self.train_cfg.wandb.log:
+                    if 'log_vars' in self.train_cfg.wandb.log.vars:
+                        for name, value in log_vars.items():
+                            self.wandb_features[name] = np.mean(value)
 
     def update_wandb_features_analysis_cfg(self, analysis_list):
         if 'wandb' in self.train_cfg:

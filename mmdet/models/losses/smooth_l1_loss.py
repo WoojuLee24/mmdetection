@@ -101,6 +101,14 @@ class SmoothL1Loss(nn.Module):
             reduction=reduction,
             avg_factor=avg_factor,
             **kwargs)
+
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_bbox']:
+                self.outputs[key] = []
+        self.outputs['loss_bbox'].append(float(loss_bbox))
+
         return loss_bbox
 
 
@@ -143,4 +151,12 @@ class L1Loss(nn.Module):
             reduction_override if reduction_override else self.reduction)
         loss_bbox = self.loss_weight * l1_loss(
             pred, target, weight, reduction=reduction, avg_factor=avg_factor)
+
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_bbox']:
+                self.outputs[key] = []
+        self.outputs['loss_bbox'].append(float(loss_bbox))
+
         return loss_bbox

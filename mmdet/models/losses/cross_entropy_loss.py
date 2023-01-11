@@ -248,4 +248,12 @@ class CrossEntropyLoss(nn.Module):
             avg_factor=avg_factor,
             ignore_index=ignore_index,
             **kwargs)
+
+        # For analysis_cfg: loss_weight
+        if not hasattr(self, 'outputs'):
+            self.outputs = dict()
+            for key in ['loss_cls']:
+                self.outputs[key] = []
+        self.outputs['loss_cls'].append(float(loss_cls))
+
         return loss_cls
