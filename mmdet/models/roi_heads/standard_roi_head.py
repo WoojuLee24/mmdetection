@@ -125,14 +125,14 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         losses = dict()
 
-        if self.train_cfg['dropout'] and self.with_bbox:
+        dropout = self.train_cfg['dropout'] if 'dropout' in self.train_cfg else False
+        if dropout and self.with_bbox:
             bbox_results = self._bbox_forward_train_dropout(x, sampling_results,
                                                     gt_bboxes, gt_labels,
                                                     img_metas, **kwargs)
             losses.update(bbox_results['loss_bbox'])
             if 'loss_feat' in bbox_results:  # DEV[CODE=102]: Contrastive loss with GenAutoAugment
                 losses.update({'loss_feat': bbox_results['loss_feat']})
-
 
         # bbox head forward and loss
         elif self.with_bbox:
