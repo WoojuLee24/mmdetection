@@ -182,15 +182,19 @@ class TwoStageDetector(BaseDetector):
                 # rpn_cls
                 for key, value in self.rpn_head.loss_cls.outputs.items():
                     analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__rpn_cls)"] = float(sum(value) / sum(rpn_losses['loss_rpn_cls']))
+                    self.rpn_head.loss_cls.outputs[key].clear()
                 # rpn_reg
                 for key, value in self.rpn_head.loss_bbox.outputs.items():
                     analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__rpn_bbox)"] = float(sum(value) / sum(rpn_losses['loss_rpn_bbox']))
+                    self.rpn_head.loss_bbox.outputs[key].clear()
                 # roi_cls
                 for key, value in self.roi_head.bbox_head.loss_cls.outputs.items():
                     analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__roi_cls)"] = float(sum(value) / roi_losses['loss_cls'])
+                    self.roi_head.bbox_head.loss_cls.outputs[key].clear()
                 # roi_cls
                 for key, value in self.roi_head.bbox_head.loss_bbox.outputs.items():
                     analysis_cfg.outputs[f"loss_weight({key.replace('loss_', '')}__per__roi_bbox)"] = float(sum(value) / roi_losses['loss_bbox'])
+                    self.roi_head.bbox_head.loss_bbox.outputs[key].clear()
             if 'additional_loss_ratio' in type_list:
                 analysis_cfg = self.train_cfg.analysis_list[type_list.index('additional_loss_ratio')]
                 if not hasattr(analysis_cfg, 'outputs'):
