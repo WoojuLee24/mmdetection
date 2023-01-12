@@ -58,6 +58,9 @@ model = dict(
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'))),
     train_cfg=dict(
+        analysis_list=[
+            dict(type='loss_weight', outputs=dict())
+        ],
         wandb=dict(
             log=dict(
                 features_list=[
