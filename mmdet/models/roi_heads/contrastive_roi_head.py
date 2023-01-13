@@ -145,7 +145,8 @@ class ContrastiveRoIHead(StandardRoIHead):
                                         bbox_results['bbox_pred'],
                                         bbox_results['cont_feats'],
                                         rois,
-                                        *bbox_targets)
+                                        *bbox_targets,
+                                        **kwargs)
 
         bbox_results.update(loss_bbox=loss_bbox)
 

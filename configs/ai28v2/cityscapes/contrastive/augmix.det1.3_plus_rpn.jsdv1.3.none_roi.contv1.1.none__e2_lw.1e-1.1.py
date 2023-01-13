@@ -40,14 +40,13 @@ model = dict(
         bbox_head=dict(
             type='Shared2FCContrastiveHead',
             with_cont=True,
-            cont_predictor_cfg=dict(type='Linear'),
-            out_dim_cont=256,
+            cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
                 , additional_loss='None', lambda_weight=0, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
                            , additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
-            loss_cont=dict(type='ContrastiveLossPlus', version='1.1', loss_weight=0.01)
+            loss_cont=dict(type='ContrastiveLossPlus', version='1.1', loss_weight=0.01, normalized_input=True, num_views=3,)
         ),
     ),
     train_cfg=dict(

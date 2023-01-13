@@ -55,6 +55,7 @@ class ContrastiveHead(BBoxHead):
         self.cont_predictor_cfg = cont_predictor_cfg
         self.out_dim_cont = out_dim_cont
         self.loss_cont = build_loss(loss_cont)
+        self.loss_cont.num_classes = self.num_classes
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred', 'cont_feats'))
     def loss(self,
@@ -66,7 +67,8 @@ class ContrastiveHead(BBoxHead):
              label_weights,
              bbox_targets,
              bbox_weights,
-             reduction_override=None):
+             reduction_override=None,
+             **kwargs):
         losses = dict()
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
