@@ -33,7 +33,7 @@ class ContrastiveHead(BBoxHead):
                  reg_decoded_bbox=False,
                  reg_predictor_cfg=dict(type='Linear'),
                  cls_predictor_cfg=dict(type='Linear'),
-                 cont_predictor_cfg=dict(type='Linear'),
+                 cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
                  out_dim_cont=1024,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
@@ -238,11 +238,8 @@ class ConvFCContrastiveHead(ContrastiveHead):
                 in_features=self.reg_last_dim,
                 out_features=out_dim_reg)
         if self.with_cont:
-            self.fc_cont = build_linear_layer(
-                self.cont_predictor_cfg,
-                in_features=self.cls_last_dim, # TODO
-                out_features=self.out_dim_cont)
-
+            self.fc_cont = self._add_linear_relu(in_channels=self.cls_last_dim, # TODO
+                                                 **self.cont_predictor_cfg)
         if init_cfg is None:
             # when init_cfg is None,
             # It has been set to
@@ -261,6 +258,18 @@ class ConvFCContrastiveHead(ContrastiveHead):
                         dict(name='reg_fcs')
                     ])
             ]
+
+    def _add_linear_relu(self, num_linear,
+                         in_channels, feat_channels,
+                         return_relu=False):
+        layer_list = []
+        num_relu = num_linear if return_relu else num_linear - 1
+        for i in range(num_linear):
+            in_channels = in_channels if i == 0 else feat_channels
+            layer_list.append(nn.Linear(in_channels, feat_channels))
+            if i < num_relu - 1:
+                layer_list.append(nn.ReLU(inplace=True))
+        return nn.Sequential(*layer_list)
 
     def _add_conv_fc_branch(self,
                             num_branch_convs,
