@@ -528,7 +528,7 @@ def ntxent_all(pred,
 
     # avg_factor = None
     temper = kwargs['temper']
-    add_act = kwargs['add_act']
+    # add_act = kwargs['add_act']
     # temper_ratio = kwargs['temper_ratio']
     # k = kwargs['kpositive']
     # classes = kwargs['classes']

@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...builder import LOSSES
+from mmdet.models.losses.ai28.contrastive_loss import supcontrast_clean_fg_bg
 
 
 @LOSSES.register_module()
@@ -17,6 +18,7 @@ class ContrastiveLossPlus(nn.Module):
                  num_classes=None,
                  dim=0,
                  num_views=1,
+                 max_views=-1,
                  normalized_input=True,
                  **kwargs):
         """ContrastiveLossPlus."""
@@ -28,16 +30,16 @@ class ContrastiveLossPlus(nn.Module):
         self.memory = memory
         self.num_views = num_views
         self.max_samples = 1024 # to do
-        self.max_views = 1  # to do
+        self.max_views = max_views  # -1: no sampling, 1: default
         self.normalized_input = normalized_input
         self.kwargs = kwargs
 
         if self.memory > 0:
             assert type(num_classes) == int
             assert dim > 0
-            queue = torch.randn(num_classes, memory, dim)
+            queue = torch.randn(num_classes-1, memory, dim) # exclude background classes
             self.queue = F.normalize(queue, p=2, dim=2)
-            self.queue_ptr = torch.zeros(num_classes, dtype=torch.long)
+            self.queue_ptr = torch.zeros(num_classes-1, dtype=torch.long)
 
         if self.version in ['1.1']: # supcontrast_clean_fg
             anchor_target_view, anchor_target_class = 'orig', 'fg'
@@ -45,9 +47,19 @@ class ContrastiveLossPlus(nn.Module):
             target_mask_pos = 'same_class_different_instance'
             target_mask_neg = 'different_instance'
         elif self.version in ['1.2']: # supcontrast_all_fg_bg
-            anchor_target_view, anchor_target_class = 'all', 'all'
+            anchor_target_view, anchor_target_class = 'all', 'fg'
             contrast_target_view, contrast_target_class = 'all', 'all'
             target_mask_pos = 'same_fg_class_different_instance' # TODO
+            target_mask_neg = 'different_instance'
+        elif self.version in ['0.1']:
+            print('temporary code. supcontrast.clean.fg.bg function is used')
+            # v0.1: all (orig + aug1) + queue => (2048 + mem * 8) x (2048 + mem * 8)
+            # queue: only fg mean feature
+            # loss: ntxent.all.fg.bg
+            # pos: fg, neg: fg and bg
+            anchor_target_view, anchor_target_class = 'all', 'fg'
+            contrast_target_view, contrast_target_class = 'all', 'all'
+            target_mask_pos = 'same_fg_class_different_instance'  # TODO
             target_mask_neg = 'different_instance'
         else:
             raise NotImplementedError(f'does not support version=={version}')
@@ -132,6 +144,7 @@ class ContrastiveLossPlus(nn.Module):
         else:
             raise TypeError
         _cont_feats = _cont_feats.reshape(-1, dim_feat)
+        _labels = _labels.reshape(-1, 1)
 
         if target_class == 'all':
             inds = ((_labels >= 0) & (_labels <= self.num_classes)).squeeze()
@@ -167,6 +180,16 @@ class ContrastiveLossPlus(nn.Module):
             cont_feats, labels, label_weights, self.anchor_target_view, self.anchor_target_class)
         contrast, labels_contrast, label_weights_contrast = self.get_cont_target(
             cont_feats, labels, label_weights, self.contrast_target_view, self.contrast_target_class)
+
+        if self.memory > 0:
+            # queue
+            q_feats, q_labels = self._sample_negative(self.queue)
+            q_feats = q_feats.contiguous()
+            q_labels = q_labels.contiguous()
+            anchor = torch.cat([anchor, q_feats], dim=0)
+            labels_anchor = torch.cat([labels_anchor, q_labels], dim=0)
+            contrast = torch.cat([contrast, q_feats], dim=0)
+            labels_contrast = torch.cat([labels_contrast, q_labels], dim=0)
 
         # Generate mask
         mask_size = (len(anchor), len(contrast))
@@ -220,9 +243,19 @@ class ContrastiveLossPlus(nn.Module):
         feats_, labels_ = self._hard_anchor_sampling(cont_feats, labels, pred_cls)
         label_weights = None # TODO: is label_weights necessary?
 
-        # contrastive loss
-        # loss = self._contrastive(feats_, labels_, queue=self.queue)
-        loss = self.loss(feats_, labels_, label_weights, reduction=reduction) # TODO: need to validate
+        # v0.1: all + queue (orig + aug1 + queue, fg.bg), queue: only fg
+        feats_ = feats_.squeeze(dim=1)
+        if self.memory > 0:
+            q_feats, q_labels = self._sample_negative(self.queue)   # exclude background class (background mean is useless)
+            q_feats = q_feats.contiguous().detach()
+            q_labels = q_labels.contiguous().view(-1,)
+            feats_ = torch.cat([feats_, q_feats], dim=0)
+            labels_ = torch.cat([labels_, q_labels], dim=0)
+
+        # contrastive loss v0.1 all.fg.bg
+        loss = supcontrast_clean_fg_bg(feats_, labels_, temper=0.07, min_samples=10)
+
+        # loss = self.loss(feats_, labels_, label_weights, reduction=reduction) # TODO: need to validate
 
         # Enqueue and dequeue
         if self.memory > 0: # TODO: Exception handling
@@ -230,21 +263,40 @@ class ContrastiveLossPlus(nn.Module):
 
         return self.loss_weight * loss
 
-    def _hard_anchor_sampling(self, X, y_hat,
-                              y):  # X: feats, # [2, 32768, 256] y_hat: labels, # [2, 32768] y: pred # [2, 32768]
-        # batch_size, feat_dim = X.shape[0], X.shape[-1]  # batch_size=2
-        batch_size, feat_dim = len(X), X[0].shape[-1]  # batch_size=2
+
+    def _get_feature(self, feats, queue, labels):
+        class_num, cache_size, feat_size = queue.shape
+
+        X_ = torch.zeros((class_num * cache_size, feat_size)).float().cuda()    # [19, 10000, 256] -> [190000, 256]
+        y_ = torch.zeros((class_num * cache_size, 1)).float().cuda() # [190000, 1]
+        sample_ptr = 0
+        for ii in range(class_num):
+            # if ii == 0: continue # all classes will be included
+            this_q = queue[ii, :cache_size, :]
+
+            X_[sample_ptr:sample_ptr + cache_size, ...] = this_q
+            y_[sample_ptr:sample_ptr + cache_size, ...] = ii
+            sample_ptr += cache_size
+
+        return X_, y_
+
+    def _hard_anchor_sampling(self, feats, labels, preds):
+        batch_size, feat_dim = feats.size(0), feats.size(-1)  # batch_size=2
 
         classes = []
         total_classes = 0
+
+        if self.max_views == -1:
+            # no sampling option
+            feats = feats.contiguous().view(-1, 1, feat_dim)
+            labels = labels.contiguous().view(-1)
+            return feats, labels
+
         for ii in range(batch_size):
-            this_y = y_hat[ii]
-            this_classes = torch.unique(this_y)
+            this_labels = labels[ii]
+            this_classes = torch.unique(this_labels)
             # filtering class
-            # this_classes = [x for x in this_classes if
-            #                 x != self.ignore_label]  # self.ignor_label = -1, filtering this_classes
-            # this_classes = [x for x in this_classes if (this_y == x).nonzero().shape[
-            #     0] > self.max_views]
+            this_classes = [x for x in this_classes if x >= 0]
 
             classes.append(this_classes)
             total_classes += len(this_classes)  # total_classes: chosen classes
@@ -255,18 +307,18 @@ class ContrastiveLossPlus(nn.Module):
         n_view = self.max_samples // total_classes  # self.max_samples=1024
         n_view = min(n_view, self.max_views)  # self.max_views < n_view < self.max_samples // total_classes -> usually n_view = 1
 
-        X_ = torch.zeros((total_classes, n_view, feat_dim), dtype=torch.float).cuda()
-        y_ = torch.zeros(total_classes, dtype=torch.float).cuda()
+        feats_ = torch.zeros((total_classes, n_view, feat_dim), dtype=torch.float).cuda()
+        labels_ = torch.zeros(total_classes, dtype=torch.float).cuda()
 
-        X_ptr = 0
+        feats_ptr = 0
         for ii in range(batch_size):
-            this_y_hat = y_hat[ii]
-            this_y = y[ii]
+            this_labels = labels[ii]
+            this_preds = preds[ii]
             this_classes = classes[ii]
 
             for cls_id in this_classes:
-                hard_indices = ((this_y_hat == cls_id) & (this_y != cls_id)).nonzero()
-                easy_indices = ((this_y_hat == cls_id) & (this_y == cls_id)).nonzero()
+                hard_indices = ((this_labels == cls_id) & (this_preds != cls_id)).nonzero()
+                easy_indices = ((this_labels == cls_id) & (this_preds == cls_id)).nonzero()
 
                 num_hard = hard_indices.shape[0]
                 num_easy = easy_indices.shape[0]
@@ -290,21 +342,21 @@ class ContrastiveLossPlus(nn.Module):
                 easy_indices = easy_indices[perm[:num_easy_keep]]
                 indices = torch.cat((hard_indices, easy_indices), dim=0)
 
-                X_[X_ptr, :, :] = X[ii, indices, :].squeeze(1)  # X_: [11, 1, 256] [total_classes, n_view, feat_dim)]
-                y_[X_ptr] = cls_id  # y_: [11, ] [total_classes,)]
-                X_ptr += 1
+                feats_[feats_ptr, :, :] = feats[ii, indices, :].squeeze(1)  # feats: [total_classes, n_view, feat_dim)]
+                labels_[feats_ptr] = cls_id  # y_: [11, ] [total_classes,)]
+                feats_ptr += 1
 
-        return X_, y_
+        return feats_, labels_
 
 
     def _sample_negative(self, Q):
         class_num, cache_size, feat_size = Q.shape
 
-        X_ = torch.zeros((class_num * cache_size, feat_size)).float().cuda()    # [19, 10000, 256] -> [190000, 256]
-        y_ = torch.zeros((class_num * cache_size, 1)).float().cuda() # [190000, 1]
+        X_ = torch.zeros((class_num * cache_size, feat_size)).float().cuda()
+        y_ = torch.zeros((class_num * cache_size, 1)).float().cuda()
         sample_ptr = 0
         for ii in range(class_num):
-            # if ii == 0: continue # all classes will be included
+            # if ii == class_num-1: continue # exclude background
             this_q = Q[ii, :cache_size, :]
 
             X_[sample_ptr:sample_ptr + cache_size, ...] = this_q
@@ -380,7 +432,7 @@ class ContrastiveLossPlus(nn.Module):
             this_feat = keys[bs].contiguous().view(feat_dim, -1)
             this_label = labels[bs].contiguous().view(-1)
             this_label_ids = torch.unique(this_label)
-            # this_label_ids = [x for x in this_label_ids if x < this_label_ids.max()]    # exclude background
+            this_label_ids = [x for x in this_label_ids if x < self.num_classes]    # exclude background. self.num_classes=8
 
             for lb in this_label_ids:
                 idxs = (this_label == lb).nonzero()

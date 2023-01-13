@@ -48,8 +48,8 @@ model = dict(
                 additional_loss='jsdv1_3_2aug', lambda_weight=20, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
-            loss_cont=dict(type='ContrastiveLossPlus', version='1.1', loss_weight=0.01, num_views=num_views,
-                           memory=100, num_classes=9, dim=256)
+            loss_cont=dict(type='ContrastiveLossPlus', version='0.1', loss_weight=0.005, num_views=num_views,
+                           memory=0, num_classes=9, dim=256)
         ),
     ),
     train_cfg=dict(
@@ -118,7 +118,7 @@ pipeline = 'augmix.det1.3'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
 roi_loss = 'contv1.1.none'
-lambda_weight = '1e-1.1e-2'
+lambda_weight = '1e-1.20.5e-3'
 
 name = f"{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
@@ -131,7 +131,7 @@ log_config = dict(interval=100,
                       dict(type='TextLoggerHook'),
                       dict(type='WandbLogger',
                            wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                                              'name': name,
+                                              'name': "augmix.det1.3_plus_rpn.jsdv1.3.none_roi.jsdv1.3.none_contv0.1__e2_lw.1e-1.20.5e-3",
                                               'config': {
                                                   # data pipeline
                                                   'data pipeline': f"{pipeline}",
