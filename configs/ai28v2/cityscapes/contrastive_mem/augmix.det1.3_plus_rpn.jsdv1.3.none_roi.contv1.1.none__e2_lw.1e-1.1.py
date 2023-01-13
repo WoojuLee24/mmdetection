@@ -41,7 +41,7 @@ model = dict(
         bbox_head=dict(
             type='Shared2FCContrastiveHead',
             with_cont=True,
-            cont_predictor_cfg=dict(type='Linear'),
+            cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
             out_dim_cont=256,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,

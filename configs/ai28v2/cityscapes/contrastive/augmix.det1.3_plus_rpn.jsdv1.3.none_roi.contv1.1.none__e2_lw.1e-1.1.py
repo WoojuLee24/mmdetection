@@ -41,6 +41,7 @@ model = dict(
             type='Shared2FCContrastiveHead',
             with_cont=True,
             cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
+            out_dim_cont=256,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
                 , additional_loss='None', lambda_weight=0, wandb_name='roi_cls', log_pos_ratio=True),
