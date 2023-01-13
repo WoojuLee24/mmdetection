@@ -81,11 +81,22 @@ class ContrastiveLossPlus(nn.Module):
     def __init__(self,
                  version,
                  loss_weight=1,
+                 temperature=0.07,
+                 memory=0,
+                 num_classes=None,
+                 dim=0,
+                 num_views=1,
                  **kwargs):
         """ContrastiveLossPlus."""
         super(ContrastiveLossPlus, self).__init__()
         self.version = version
         self.loss_weight = loss_weight
+        self.temperature = temperature
+        self.base_temperature = 1 # required?
+        self.memory = memory
+        self.num_views = num_views
+        self.max_samples = 1024 # to do
+        self.max_views = 1  # to do
         self.kwargs = kwargs
 
         if self.version in ['1.1']:
@@ -94,8 +105,15 @@ class ContrastiveLossPlus(nn.Module):
         else:
             raise NotImplementedError(f'does not support version=={version}')
 
+        if self.memory > 0:
+            assert type(num_classes) == int
+            assert dim > 0
+            queue = torch.randn(num_classes, memory, dim)
+            self.queue = F.normalize(queue, p=2, dim=2)
+            self.queue_ptr = torch.zeros(num_classes, dtype=torch.long)
+
     def forward(self,
-                cont_feats, labels, label_weights,
+                cont_feats, pred_cls, labels, label_weights,
                 **kwargs):
         """Forward function.
 
@@ -106,13 +124,188 @@ class ContrastiveLossPlus(nn.Module):
         if len(cont_feats) == 0:
             return torch.zeros(1)
 
+        # hard anchor sampling
+        # just split with fixed dim 512
+        total_views = cont_feats.size(0) // 512
+        cont_feats = cont_feats.contiguous().view(total_views, 512, -1)
+        labels = labels.contiguous().view(total_views, -1)
+        pred_cls = pred_cls.contiguous().view(total_views, -1)
+        feats_, labels_ = self._hard_anchor_sampling(cont_feats, labels, pred_cls)
+
+        # contrastive loss
+        # loss_feat = self.loss_criterion(cont_feats, labels, label_weights, **kwargs) # TODO
+        loss = self._contrastive(feats_, labels_, queue=self.queue)
+
+        # Enqueue and dequeue
+        self.queue, self.queue_ptr = self._dequeue_and_enqueue(cont_feats.detach(), labels, self.queue, self.queue_ptr)
         mask = None # TODO
 
+        return self.loss_weight * loss
 
-        # loss_feat = self.loss_criterion(cont_feats, labels, label_weights,
-        #                                 # TODO
-        #                                 **kwargs)
-        loss_feat = torch.zeros(1)
+    def _hard_anchor_sampling(self, X, y_hat,
+                              y):  # X: feats, # [2, 32768, 256] y_hat: labels, # [2, 32768] y: pred # [2, 32768]
+        # batch_size, feat_dim = X.shape[0], X.shape[-1]  # batch_size=2
+        batch_size, feat_dim = len(X), X[0].shape[-1]  # batch_size=2
 
-        return self.loss_weight * loss_feat
+        classes = []
+        total_classes = 0
+        for ii in range(batch_size):
+            this_y = y_hat[ii]
+            this_classes = torch.unique(this_y)
+            # filtering class
+            # this_classes = [x for x in this_classes if
+            #                 x != self.ignore_label]  # self.ignor_label = -1, filtering this_classes
+            # this_classes = [x for x in this_classes if (this_y == x).nonzero().shape[
+            #     0] > self.max_views]
+
+            classes.append(this_classes)
+            total_classes += len(this_classes)  # total_classes: chosen classes
+
+        if total_classes == 0:
+            return None, None
+
+        n_view = self.max_samples // total_classes  # self.max_samples=1024
+        n_view = min(n_view, self.max_views)  # self.max_views < n_view < self.max_samples // total_classes -> usually n_view = 1
+
+        X_ = torch.zeros((total_classes, n_view, feat_dim), dtype=torch.float).cuda()
+        y_ = torch.zeros(total_classes, dtype=torch.float).cuda()
+
+        X_ptr = 0
+        for ii in range(batch_size):
+            this_y_hat = y_hat[ii]
+            this_y = y[ii]
+            this_classes = classes[ii]
+
+            for cls_id in this_classes:
+                hard_indices = ((this_y_hat == cls_id) & (this_y != cls_id)).nonzero()
+                easy_indices = ((this_y_hat == cls_id) & (this_y == cls_id)).nonzero()
+
+                num_hard = hard_indices.shape[0]
+                num_easy = easy_indices.shape[0]
+
+                if num_hard >= n_view / 2 and num_easy >= n_view / 2:
+                    num_hard_keep = n_view // 2
+                    num_easy_keep = n_view - num_hard_keep
+                elif num_hard >= n_view / 2:
+                    num_easy_keep = num_easy
+                    num_hard_keep = n_view - num_easy_keep
+                elif num_easy >= n_view / 2:
+                    num_hard_keep = num_hard
+                    num_easy_keep = n_view - num_hard_keep
+                else:
+                    print('this shoud be never touched! {} {} {}'.format(num_hard, num_easy, n_view))
+                    raise Exception
+
+                perm = torch.randperm(num_hard)
+                hard_indices = hard_indices[perm[:num_hard_keep]]
+                perm = torch.randperm(num_easy)
+                easy_indices = easy_indices[perm[:num_easy_keep]]
+                indices = torch.cat((hard_indices, easy_indices), dim=0)
+
+                X_[X_ptr, :, :] = X[ii, indices, :].squeeze(1)  # X_: [11, 1, 256] [total_classes, n_view, feat_dim)]
+                y_[X_ptr] = cls_id  # y_: [11, ] [total_classes,)]
+                X_ptr += 1
+
+        return X_, y_
+
+
+    def _sample_negative(self, Q):
+        class_num, cache_size, feat_size = Q.shape
+
+        X_ = torch.zeros((class_num * cache_size, feat_size)).float().cuda()    # [19, 10000, 256] -> [190000, 256]
+        y_ = torch.zeros((class_num * cache_size, 1)).float().cuda() # [190000, 1]
+        sample_ptr = 0
+        for ii in range(class_num):
+            # if ii == 0: continue # all classes will be included
+            this_q = Q[ii, :cache_size, :]
+
+            X_[sample_ptr:sample_ptr + cache_size, ...] = this_q
+            y_[sample_ptr:sample_ptr + cache_size, ...] = ii
+            sample_ptr += cache_size
+
+        return X_, y_
+
+
+    def _contrastive(self, X_anchor, y_anchor, queue=None):
+        anchor_num, n_view = X_anchor.shape[0], X_anchor.shape[1]
+
+        y_anchor = y_anchor.contiguous().view(-1, 1)    # [11] -> [11, 1]
+        anchor_count = n_view   # [1]
+        anchor_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)    # [11, 256] -> [11, 256]
+
+        if queue is not None:
+            X_contrast, y_contrast = self._sample_negative(queue)   # exclude zero class    # X_contrast: [190000, 256], y_contrast: [190000, 1]
+            y_contrast = y_contrast.contiguous().view(-1, 1)
+            contrast_count = 1
+            contrast_feature = X_contrast
+        else:
+            y_contrast = y_anchor
+            contrast_count = n_view
+            contrast_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
+
+        mask = torch.eq(y_anchor, y_contrast.T).float().cuda()  # [11, 190000]
+        mask_np = mask.detach().cpu().numpy()
+        anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T),   # [11, 256], [190000, 256] -> [11, 190000]
+                                        self.temperature)
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        mask = mask.repeat(anchor_count, contrast_count)
+        neg_mask = 1 - mask # diff class
+        mask_neg_np = neg_mask.detach().cpu().numpy()
+
+        logits_mask = torch.ones_like(mask).scatter_(1,
+                                                     torch.arange(anchor_num * anchor_count).view(-1, 1).cuda(),
+                                                     0) # exclude self-case only
+
+        mask = mask * logits_mask   # same class, exclude self-case only
+        mask_np2 = mask.detach().cpu().numpy()
+
+        neg_logits = torch.exp(logits) * neg_mask
+        neg_logits = neg_logits.sum(1, keepdim=True)
+
+        exp_logits = torch.exp(logits)
+
+        log_prob = logits - torch.log(exp_logits + neg_logits)
+
+        mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = loss.mean()
+
+        return loss
+
+
+    def _dequeue_and_enqueue(self, keys, labels,
+                             queue, queue_ptr):
+        """
+        keys: [2, 256, 128, 256]
+        labels:
+        segment_queue: [19, 5000, 256] : I guess [label, memory_size, feat_dims]
+        segment_queue_ptr: [19]
+        """
+        keys = keys.permute((0, 2, 1))
+        batch_size = keys.shape[0]
+        feat_dim = keys.shape[1]
+
+        for bs in range(batch_size):
+            this_feat = keys[bs].contiguous().view(feat_dim, -1)
+            this_label = labels[bs].contiguous().view(-1)
+            this_label_ids = torch.unique(this_label)
+            # this_label_ids = [x for x in this_label_ids if x < this_label_ids.max()]    # exclude background
+
+            for lb in this_label_ids:
+                idxs = (this_label == lb).nonzero()
+                # enqueue and dequeue
+                feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1) # [256, 32768] -> .. -> [256]
+                ptr = int(queue_ptr[lb])
+                queue[lb, ptr, :] = nn.functional.normalize(feat.view(-1), p=2, dim=0)
+                queue_ptr[lb] = (queue_ptr[lb] + 1) % self.memory
+
+        return queue, queue_ptr
+
+
+
+
+
 

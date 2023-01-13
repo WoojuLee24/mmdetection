@@ -98,6 +98,11 @@ model = dict(
             debug=False,
             dropout=False),
         wandb=dict(
+            log=dict(
+                features_list=[
+                    # 'roi_head.bbox_head.cls_fcs.0', # "rpn_head.rpn_cls",
+                ],
+                vars=['log_vars']),
             layer_list=[]
         ),
     ),

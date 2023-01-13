@@ -125,10 +125,12 @@ class ContrastiveHead(BBoxHead):
             else:
                 losses['loss_bbox'] = bbox_pred[pos_inds].sum()
 
+        pred_cls = cls_score.max(dim=1)[1]
         if cont_feats is not None:
             if cont_feats.numel() > 0:
                 loss_cont = self.loss_cont(
                     cont_feats,
+                    pred_cls,
                     labels,
                     label_weights,
                 )
