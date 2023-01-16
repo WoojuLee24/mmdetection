@@ -199,7 +199,8 @@ class AugMix:
 
         if self.no_jsd:
             img = results['img'].copy()
-            return self.aug(img)
+            results['img'] = self.aug(img)
+            return results
         elif self.aug_list == 'copy':
             img = results['img'].copy()
             results['img2'] = img.copy()
