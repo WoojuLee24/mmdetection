@@ -49,7 +49,7 @@ train_pipeline = [
         type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMix', no_jsd=True, aug_list='augmentations', **img_norm_cfg),
+    dict(type='AugMix', no_jsd=True, aug_list='augmentations', aug_severity=3, **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
