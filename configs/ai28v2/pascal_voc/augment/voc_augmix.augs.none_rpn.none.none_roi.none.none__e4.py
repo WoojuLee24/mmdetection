@@ -64,7 +64,7 @@ custom_hooks = [
 ]
 
 dataset = 'voc'
-pipeline = 'augmix'
+pipeline = 'augmix.augs'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
