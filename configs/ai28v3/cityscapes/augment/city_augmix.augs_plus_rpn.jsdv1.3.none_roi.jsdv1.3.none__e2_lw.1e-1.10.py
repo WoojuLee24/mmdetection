@@ -8,6 +8,12 @@ _base_ = [
 #############
 model = dict(
     backbone=dict(init_cfg=None),
+    rpn_head=dict(
+        loss_cls=dict(
+            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0
+            , additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
+        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0
+                       , additional_loss="None", lambda_weight=0, wandb_name='rpn_bbox')),
     roi_head=dict(
         bbox_head=dict(
             type='Shared2FCBBoxHead',
@@ -21,8 +27,10 @@ model = dict(
                 target_stds=[0.1, 0.1, 0.2, 0.2]),
             reg_class_agnostic=False,
             loss_cls=dict(
-                type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-            loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0
+                , additional_loss='jsdv1_3', lambda_weight=10, wandb_name='roi_cls'),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0
+                           , additional_loss="None", lambda_weight=0, wandb_name='roi_bbox'))),
     train_cfg=dict(
         wandb=dict(
             log=dict(
@@ -32,15 +40,32 @@ model = dict(
         analysis_list=[
             dict(type='loss_weight', outputs=dict()),
             dict(type='bbox_head_loss',
-                 log_list=['acc_pos', 'acc_neg', 'acc_orig', 'consistency']),
+                 log_list=['acc_pos', 'acc_neg', 'acc_orig', 'acc_aug2', 'acc_aug3', 'consistency']),
         ]
     )
 )
 ###############
 ### DATASET ###
 ###############
+custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix'], allow_failed_imports=False)
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
+    dict(
+        type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.5),
+    ### AugMix ###
+    dict(type='AugMix', no_jsd=False, aug_list='augmentations', **img_norm_cfg),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size_divisor=32),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'img2', 'img3', 'gt_bboxes', 'gt_labels'])]
 data = dict(
-    samples_per_gpu=1, workers_per_gpu=2,)
+    samples_per_gpu=1, workers_per_gpu=2,
+    train=dict(dataset=dict(pipeline=train_pipeline)),
+)
 
 ################
 ### RUN TIME ###
@@ -58,8 +83,7 @@ lr_config = dict(
     # [1] yields higher performance than [0]
     step=[1])
 runner = dict(
-    type='EpochBasedRunner', max_epochs=2)
-
+    type='EpochBasedRunner', max_epochs=2)  # actual epoch = 8 * 8 = 64
 
 ###########
 ### LOG ###
@@ -69,11 +93,11 @@ custom_hooks = [
          layer_list=model['train_cfg']['wandb']['log']['features_list']),
 ]
 
-pipeline = 'none'
-loss_type = 'none'
-rpn_loss = 'none.none'
-roi_loss = 'none.none'
-lambda_weight = ''
+pipeline = 'augmix.augs'
+loss_type = 'plus'
+rpn_loss = 'jsdv1.3.none'
+roi_loss = 'jsdv1.3.none'
+lambda_weight = '1e-1.10'
 
 name = f"{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
