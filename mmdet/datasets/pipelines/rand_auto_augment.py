@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 
 import random
-from mmdet.datasets.pipelines.drop.gen_auto_augment import *
+from mmdet.datasets.pipelines.gen_auto_augment import *
 
 _MAX_LEVEL = 10
 
