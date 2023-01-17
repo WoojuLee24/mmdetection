@@ -82,12 +82,22 @@ def bboxes_only_shear_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
 
 
+def bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size):
+    func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
+    return func(pil_img, bboxes_xy, level, img_size)
+
+
 def bboxes_only_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
     return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
 
 
 def bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+
+
+def bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size):
+    func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
+    return func(pil_img, bboxes_xy, level, img_size)
 
 
 def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
@@ -132,12 +142,22 @@ def bg_only_shear_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
 
 
+def bg_only_shear_xy(pil_img, bboxes_xy, level, img_size):
+    func = bg_only_shear_x if np.random.rand() < 0.5 else bg_only_shear_y
+    return func(pil_img, bboxes_xy, level, img_size)
+
+
 def bg_only_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
     return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
 
 
 def bg_only_translate_y(pil_img, bboxes_xy, level, img_size):
     return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+
+
+def bg_only_translate_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
+    func = bg_only_translate_x if np.random.rand() < 0.5 else bg_only_translate_y
+    return func(pil_img, bboxes_xy, level, img_size, **kwargs)
 
 
 def get_aug_list(version):
@@ -179,6 +199,11 @@ def get_aug_list(version):
                     bg_only_translate_x, bg_only_translate_y, # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
+        return aug_list
+    elif version in ['1.4']:
+        aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
+                    bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
     else:
         raise NotImplementedError
