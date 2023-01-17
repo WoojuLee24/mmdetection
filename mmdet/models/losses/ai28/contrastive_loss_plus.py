@@ -253,7 +253,7 @@ class ContrastiveLossPlus(nn.Module):
             labels_ = torch.cat([labels_, q_labels], dim=0)
 
         # contrastive loss v0.1 all.fg.bg
-        loss = supcontrast_clean_fg_bg(feats_, labels_, temper=0.07, min_samples=10)
+        loss = supcontrast_clean_fg_bg(feats_, labels_, temper=self.temperature, min_samples=10)
 
         # loss = self.loss(feats_, labels_, label_weights, reduction=reduction) # TODO: need to validate
 
