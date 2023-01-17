@@ -7,8 +7,8 @@ import numpy as np
 import copy
 import torch
 
-from ..builder import PIPELINES
-from .compose import Compose
+from mmdet.datasets.builder import PIPELINES
+from mmdet.datasets.pipelines.compose import Compose
 
 _MAX_LEVEL = 10
 

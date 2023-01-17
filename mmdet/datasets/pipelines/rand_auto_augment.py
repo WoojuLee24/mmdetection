@@ -1,15 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import copy
 
-import cv2
-import mmcv
-import numpy as np
-
-from ..builder import PIPELINES
-from .compose import Compose
-import inspect
 import random
-from .gen_auto_augment import *
+from mmdet.datasets.pipelines.gen_auto_augment import *
 
 _MAX_LEVEL = 10
 

@@ -24,8 +24,8 @@ def update_analysis_cfg_for_bbox_head_loss(analysis_cfg, cls_score, labels):
 
     # acc_pos, acc_neg for each
     num_views, _r = divmod(len(cls_score), analysis_cfg.num_samples)
-    assert _r == 0
-
+    if _r != 0:
+        num_views = 1
     cls_score_list = [*torch.chunk(cls_score, num_views)]
     label_list = [*torch.chunk(labels, num_views)]
     loss_name_list = ['orig']
