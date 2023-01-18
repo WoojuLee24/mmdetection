@@ -46,7 +46,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, **kwargs):
     augmented_bbox_content = np.asarray(augmented_bbox_content)
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
-    pad_width = [[y1, img_height - 1 - y2], [x1, img_width - 1 - x2], [0, 0]]
+    pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
     augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=0)
 
     mask = np.zeros_like(bbox_content)
@@ -232,7 +232,8 @@ class AugMixDetection:
 
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
-            return self.aug_and_mix(results['img'], results['gt_bboxes'])
+            results['img'] = np.asarray(self.aug_and_mix(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
+            return results
 
         results['custom_field'] = []
         for i in range(2, self.num_views+1):
