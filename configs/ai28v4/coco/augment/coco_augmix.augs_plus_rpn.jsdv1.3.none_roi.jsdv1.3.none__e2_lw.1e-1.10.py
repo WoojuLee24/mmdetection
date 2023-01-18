@@ -54,7 +54,7 @@ train_pipeline = [
 ]
 data = dict(
     samples_per_gpu=2, workers_per_gpu=4,
-    train=dict(dataset=dict(pipeline=train_pipeline)),
+    train=dict(pipeline=train_pipeline),
 )
 
 ################
