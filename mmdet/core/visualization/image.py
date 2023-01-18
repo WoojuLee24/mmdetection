@@ -7,6 +7,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
 
 from ..utils import mask2ndarray
+from matplotlib import patches
 
 EPS = 1e-2
 
@@ -307,3 +308,30 @@ def imshow_gt_det_bboxes(img,
         wait_time=wait_time,
         out_file=out_file)
     return img
+
+
+def imshow_gt_bboxes(data, outfile="/ws/data/log/cityscapes/debug/sdgod.png"):
+    assert 'img' in data.keys()
+    assert 'gt_bboxes' in data.keys()
+    assert 'gt_labels' in data.keys()
+
+    img = data['img'][0]
+    img = img.detach().cpu().numpy()
+    img = np.transpose(img, (1, 2, 0))
+    gt_bboxes = data['gt_bboxes'][0]
+    gt_labels = data['gt_labels'][0]
+
+    fig = plt.figure()
+    ax = fig.add_axes([0, 0, 1, 1])
+    plt.imshow(img)
+    for i, bbox in enumerate(gt_bboxes):
+        xmin, ymin, xmax, ymax = bbox.detach().cpu().numpy()
+        w = xmax - xmin
+        h = ymax - ymin
+        box = patches.Rectangle((xmin, ymin), w, h, edgecolor='red', facecolor='none')
+        ax.add_patch(box)
+    plt.axis('off')
+
+    fig.savefig(outfile)
+
+    print(f"saved image with detections to {outfile}")
