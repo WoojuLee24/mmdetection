@@ -20,6 +20,7 @@ from .transforms import (Albu, CutOut, Expand, MinIoURandomCrop, MixUp, Mosaic,
 from .pixmix import PixMix
 from .augmix_detection import AugMixDetection
 from .color import Color
+from .auto_aug_det import AutoAugDet
 
 __all__ = [
     'Compose', 'to_tensor', 'ToTensor', 'ImageToTensor', 'ToDataContainer',
@@ -33,5 +34,5 @@ __all__ = [
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
     'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix',
     # 'GenAutoAugment', 'RandAutoAugment',
-    'AutoAugment', 'AugMixDetection', 'Color',
+    'AutoAugment', 'AugMixDetection', 'Color', 'AutoAugDet',
 ]
