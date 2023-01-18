@@ -21,6 +21,8 @@ class ContrastiveHead(BBoxHead):
                  with_cls=True,
                  with_reg=True,
                  with_cont=True,
+                 aug='None',
+                 aug_severity=0.01,
                  roi_feat_size=7,
                  in_channels=256,
                  num_classes=80,
@@ -52,6 +54,8 @@ class ContrastiveHead(BBoxHead):
                                               cls_predictor_cfg, loss_cls,
                                               loss_bbox, init_cfg)
         self.with_cont = with_cont
+        self.aug = aug
+        self.aug_severity = aug_severity
         self.cont_predictor_cfg = cont_predictor_cfg
         self.out_dim_cont = out_dim_cont
         self.loss_cont = build_loss(loss_cont)
@@ -332,6 +336,10 @@ class ConvFCContrastiveHead(ContrastiveHead):
         x_cls = x
         x_reg = x
         x_cont = x
+
+        if self.aug == 'unoise':
+            a = torch.rand_like(x_cont) * self.aug_severity
+            x_cont = x_cont + torch.rand_like(x_cont)
 
         for conv in self.cls_convs:
             x_cls = conv(x_cls)
