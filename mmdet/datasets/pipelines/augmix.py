@@ -153,7 +153,8 @@ Augmix with pillow
 """
 @PIPELINES.register_module()
 class AugMix:
-    def __init__(self, mean, std, aug_list='augmentations', to_rgb=True, no_jsd=False, aug_severity=1):
+    def __init__(self, mean, std, aug_list='augmentations', to_rgb=True, no_jsd=False, aug_severity=1,
+                 num_views=3):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
@@ -165,6 +166,7 @@ class AugMix:
         self.aug_severity = aug_severity
 
         self.no_jsd = no_jsd
+        self.num_views = num_views
 
         augmentations = [
             autocontrast, equalize, posterize, rotate, solarize, shear_x, shear_y,
@@ -209,10 +211,10 @@ class AugMix:
             return results
         else:
             img = results['img'].copy()
-            results['img2'] = self.aug(img)
-            results['img3'] = self.aug(img)
-            results['img_fields'] = ['img', 'img2', 'img3']
-
+            results['img_fields'] = ['img']
+            for i in range(2, self.num_views+1, 1): # 2, 3, ..., num_views
+                results[f'img{i}'] = self.aug(img)
+                results['img_fields'].append(f'img{i}')
             return results
 
     def __repr__(self):
