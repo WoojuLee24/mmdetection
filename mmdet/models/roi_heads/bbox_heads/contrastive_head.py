@@ -34,7 +34,7 @@ class ContrastiveHead(BBoxHead):
                  reg_predictor_cfg=dict(type='Linear'),
                  cls_predictor_cfg=dict(type='Linear'),
                  cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
-                 out_dim_cont=1024,
+                 out_dim_cont=1024, # will be deprecated
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
