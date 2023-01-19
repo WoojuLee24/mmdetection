@@ -71,6 +71,7 @@ class ContrastiveHead(BBoxHead):
              label_weights,
              bbox_targets,
              bbox_weights,
+             bbox_absolute_targets=None,
              reduction_override=None,
              **kwargs):
         losses = dict()
@@ -132,6 +133,18 @@ class ContrastiveHead(BBoxHead):
                 losses['loss_bbox'] = bbox_pred[pos_inds].sum()
 
         pred_cls = cls_score.max(dim=1)[1]
+
+        from mmdet.core import bbox_overlaps
+        bbox_absolute_pred = self.bbox_coder.decode(rois[:, 1:], bbox_pred)
+        pos_bbox_absolute_pred = bbox_absolute_pred.view(
+                        bbox_absolute_pred.size(0), -1,
+                        4)[pos_inds.type(torch.bool),
+                           labels[pos_inds.type(torch.bool)]]
+        pos_bbox_absolute_targets = bbox_absolute_targets[pos_inds.type(torch.bool)]
+        ious = bbox_overlaps(pos_bbox_absolute_pred, pos_bbox_absolute_targets, is_aligned=True).clamp(min=1e-6)
+
+        # if ious[ious < 0.7].float().sum() > 0:
+        #     print('iou lower than 0.7 found !')
         if cont_feats is not None:
             if cont_feats.numel() > 0:
                 loss_cont = self.loss_cont(
@@ -139,6 +152,7 @@ class ContrastiveHead(BBoxHead):
                     pred_cls,
                     labels,
                     label_weights,
+                    ious,
                 )
                 losses['loss_cont'] = loss_cont
 
