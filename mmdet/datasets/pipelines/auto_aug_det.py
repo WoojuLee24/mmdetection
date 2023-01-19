@@ -6,9 +6,27 @@ from .compose import Compose
 from .auto_aug_det_utils import *
 
 
+def _get_policy(policies):
+    if policies == 'v0':
+        return [
+            [dict(type='TranslateX', prob=0.6, level=4),
+             dict(type='EqualizeTransform', prob=0.8)],  # sub-policy 1
+            [dict(type='BBoxOnlyTranslateY', prob=0.2, level=2),
+             dict(type='Cutout2', prob=0.8, level=8)],  # sub-policy 2
+            [dict(type='ShearY', prob=1.0, level=2),
+             dict(type='BBoxOnlyTranslateY', prob=0.6, level=6)],  # sub-policy 3
+            [dict(type='Rotate', prob=0.6, level=10),
+             dict(type='ColorTransform', prob=1.0, level=6)],  # sub-policy 4
+            [dict(type='EqualizeTransform', prob=0.0),
+             dict(type='EqualizeTransform', prob=0.0)]  # sub-policy 5
+        ]
+    return None
+
 @PIPELINES.register_module()
 class AutoAugDet:
     def __init__(self, policies, num_gen=2, no_jsd=False):
+        if isinstance(policies, str):
+            policies = _get_policy(policies)
         assert isinstance(policies, list) and len(policies) > 0, \
             'Policies must be a non-empty list.'
         for policy in policies:

@@ -325,8 +325,12 @@ class WandbLogger(WandbLoggerHook):
             for wandb_feature, value in runner.model.module.roi_head.bbox_head.loss_bbox.wandb_features.items():
                 self.wandb.log({split + wandb_feature: value})
             loss_module = runner.model.module.roi_head.bbox_head.loss_bbox
-            if isinstance(loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'], list):
-                loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'].clear()
+            if f'smoothL1_loss({loss_module.wandb_name})' in loss_module.wandb_features:
+                if isinstance(loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'], list):
+                    loss_module.wandb_features[f'smoothL1_loss({loss_module.wandb_name})'].clear()
+            if f'L1_loss({loss_module.wandb_name})' in loss_module.wandb_features:
+                if isinstance(loss_module.wandb_features[f'L1_loss({loss_module.wandb_name})'], list):
+                    loss_module.wandb_features[f'L1_loss({loss_module.wandb_name})'].clear()
             if isinstance(loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'], list):
                 loss_module.wandb_features[f'additional_loss({loss_module.wandb_name})'].clear()
 
