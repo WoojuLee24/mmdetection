@@ -98,8 +98,6 @@ def save_data(data_loader, out_dir=None):
             directory_name = '/'.join(fn_[:-1])
             if not os.path.exists(f"{out_dir}/{directory_name}"):
                 os.makedirs(f"{out_dir}/{directory_name}")
-        else:
-            raise ValueError
         save_path = f'{out_dir}/{fn_}'
 
         img = imgs[0]
