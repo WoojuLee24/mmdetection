@@ -80,6 +80,13 @@ def parse_args():
 
 
 def save_data(data_loader, out_dir=None):
+    if 'cityscapes' in data_loader.dataset.img_prefix:
+        dataset_type = 'cityscapes'
+    elif 'coco' in data_loader.dataset.img_prefix:
+        dataset_type = 'coco'
+    else:
+        raise TypeError
+
     for i, data in enumerate(data_loader):
         img_tensor = data['img'][0] # .data[0]
         img_metas = data['img_metas'][0].data[0]
@@ -87,10 +94,13 @@ def save_data(data_loader, out_dir=None):
 
         ori_filename = img_metas[0]['ori_filename']
         fn_ = ori_filename.split("/")
-        directory_name, filename = fn_[0], fn_[1]
-        if not os.path.exists(f"{out_dir}/{directory_name}"):
-            os.makedirs(f"{out_dir}/{directory_name}")
-        save_path = f'{out_dir}/{directory_name}/{filename}'
+        if len(fn_) > 1:
+            directory_name = '/'.join(fn_[:-1])
+            if not os.path.exists(f"{out_dir}/{directory_name}"):
+                os.makedirs(f"{out_dir}/{directory_name}")
+        else:
+            raise ValueError
+        save_path = f'{out_dir}/{fn_}'
 
         img = imgs[0]
         img = mmcv.bgr2rgb(img)
