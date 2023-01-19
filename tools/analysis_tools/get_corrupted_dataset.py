@@ -104,7 +104,7 @@ def save_data(data_loader, out_dir=None):
         img = mmcv.bgr2rgb(img)
         img = np.ascontiguousarray(img)
         img_save = Image.fromarray(img)
-        img_save.save(save_path)
+        img_save.save(save_path.replace('.jpg', '.png'))
 
     return 0
 
