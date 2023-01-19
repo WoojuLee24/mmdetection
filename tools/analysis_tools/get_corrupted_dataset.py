@@ -3,22 +3,18 @@ import argparse
 import copy
 import os
 import os.path as osp
+import os.path
 
 import mmcv
+from mmcv.image import tensor2imgs
 import torch
 from mmcv import DictAction
-from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
-from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
-                         wrap_fp16_model)
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from tools.analysis_tools.robustness_eval import get_results
+from mmcv.runner import (get_dist_info, init_dist)
 
-from mmdet import datasets
-from mmdet.apis import multi_gpu_test, set_random_seed, save_data
-from mmdet.core import eval_map
+from mmdet.apis import set_random_seed
 from mmdet.datasets import build_dataloader, build_dataset
-from mmdet.models import build_detector
+import numpy as np
+from PIL import Image
 
 
 ''''
@@ -29,13 +25,15 @@ How 2 run?
             Therefore, unnecessary parameters or codes are included.
             Please set the required parameters by referring to save_data() function.
             You can just enter any value for the remaining parameters.
+    WARN:   batch_size is only supported for one.
+    E.g., `/ws/external/configs/ai28v3/cityscapes/faster_rcnn_r50_fpn_1x_cityscapes.py --show-dir /ws/data/cityscapes-c`
 '''
 
 def parse_args():
     parser = argparse.ArgumentParser(description='MMDet test detector')
     parser.add_argument('config', help='test config file path')
-    parser.add_argument('checkpoint', help='checkpoint file')
-    parser.add_argument('--out', help='output result file')
+    parser.add_argument(
+        '--show-dir', help='directory where painted images will be saved')
     parser.add_argument(
         '--corruptions',
         type=str,
@@ -57,52 +55,14 @@ def parse_args():
         default=[0, 1, 2, 3, 4, 5],
         help='corruption severity levels')
     parser.add_argument(
-        '--eval',
-        type=str,
-        nargs='+',
-        choices=['proposal', 'proposal_fast', 'bbox', 'segm', 'keypoints'],
-        help='eval types')
-    parser.add_argument(
-        '--iou-thr',
-        type=float,
-        default=0.5,
-        help='IoU threshold for pascal voc evaluation')
-    parser.add_argument(
-        '--summaries',
-        type=bool,
-        default=False,
-        help='Print summaries for every corruption and severity')
-    parser.add_argument(
         '--workers', type=int, default=32, help='workers per gpu')
-    parser.add_argument('--show', action='store_true', help='show results')
-    parser.add_argument(
-        '--show-dir', help='directory where painted images will be saved')
-    parser.add_argument(
-        '--show-score-thr',
-        type=float,
-        default=0.3,
-        help='score threshold (default: 0.3)')
-    parser.add_argument('--tmpdir', help='tmp dir for writing some results')
-    parser.add_argument('--seed', type=int, default=None, help='random seed')
+    parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument(
-        '--final-prints',
-        type=str,
-        nargs='+',
-        choices=['P', 'mPC', 'rPC'],
-        default='mPC',
-        help='corruption benchmark metric to print at the end')
-    parser.add_argument(
-        '--final-prints-aggregate',
-        type=str,
-        choices=['all', 'benchmark'],
-        default='benchmark',
-        help='aggregate all results or only those for benchmark corruptions')
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -113,28 +73,40 @@ def parse_args():
         'It also allows nested list/tuple values, e.g. key="[(a,b),(c,d)]" '
         'Note that the quotation marks are necessary and that no white space '
         'is allowed.')
-    parser.add_argument(
-        '--load-dataset',
-        type=str,
-        choices=['original', 'corrupted'],
-        default='original',
-        help='Add Corrupt'
-    )
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
     return args
 
 
+def save_data(data_loader, out_dir=None):
+    for i, data in enumerate(data_loader):
+        img_tensor = data['img'][0] # .data[0]
+        img_metas = data['img_metas'][0].data[0]
+        imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
+
+        ori_filename = img_metas[0]['ori_filename']
+        fn_ = ori_filename.split("/")
+        directory_name, filename = fn_[0], fn_[1]
+        if not os.path.exists(f"{out_dir}/{directory_name}"):
+            os.makedirs(f"{out_dir}/{directory_name}")
+        save_path = f'{out_dir}/{directory_name}/{filename}'
+
+        img = imgs[0]
+        img = mmcv.bgr2rgb(img)
+        img = np.ascontiguousarray(img)
+        img_save = Image.fromarray(img)
+        img_save.save(save_path)
+
+    return 0
+
+
 def main():
     args = parse_args()
 
-    assert args.out or args.show or args.show_dir, \
+    assert args.show_dir, \
         ('Please specify at least one operation (save or show the results) '
-         'with the argument "--out", "--show" or "show-dir"')
-
-    if args.out is not None and not args.out.endswith(('.pkl', '.pickle')):
-        raise ValueError('The output file must be a pkl file.')
+         'with the argument "show-dir"')
 
     cfg = mmcv.Config.fromfile(args.config)
     if args.cfg_options is not None:
@@ -204,18 +176,14 @@ def main():
             test_data_cfg = copy.deepcopy(cfg.data.test)
             # assign corruption and severity
 
-            if args.load_dataset == 'original':
-                if corruption_severity > 0:
-                    corruption_trans = dict(
-                        type='Corrupt',
-                        corruption=corruption,
-                        severity=corruption_severity)
-                    # TODO: hard coded "1", we assume that the first step is
-                    # loading images, which needs to be fixed in the future
-                    test_data_cfg['pipeline'].insert(1, corruption_trans)
-            else:
-                raise NotImplementedError(
-                    "The types of load_dataset can be 'original' or 'corrupted'.")
+            if corruption_severity > 0:
+                corruption_trans = dict(
+                    type='Corrupt',
+                    corruption=corruption,
+                    severity=corruption_severity)
+                # TODO: hard coded "1", we assume that the first step is
+                # loading images, which needs to be fixed in the future
+                test_data_cfg['pipeline'].insert(1, corruption_trans)
 
             # print info
             print(f'\nTesting {corruption} at severity {corruption_severity}')
@@ -233,13 +201,13 @@ def main():
 
             if not distributed:
                 show_dir = args.show_dir
-                if show_dir is not None:
-                    show_dir = osp.join(show_dir, corruption)
-                    show_dir = osp.join(show_dir, str(corruption_severity))
-                    if not osp.exists(show_dir):
-                        os.makedirs(show_dir)
-                outputs = save_data(data_loader, win_name='', out_dir=show_dir,
-                                    show_score_thr=args.show_score_thr)
+
+                show_dir = osp.join(show_dir, corruption)
+                show_dir = osp.join(show_dir, str(corruption_severity))
+                if not osp.exists(show_dir):
+                    os.makedirs(show_dir)
+
+                save_data(data_loader, out_dir=show_dir)
             else:
                 raise TypeError("It does not support distribution mode")
 
