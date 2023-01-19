@@ -98,13 +98,14 @@ def save_data(data_loader, out_dir=None):
             directory_name = '/'.join(fn_[:-1])
             if not os.path.exists(f"{out_dir}/{directory_name}"):
                 os.makedirs(f"{out_dir}/{directory_name}")
-        save_path = f'{out_dir}/{fn_}'
+        save_path = f'{out_dir}/{ori_filename}'
 
         img = imgs[0]
         img = mmcv.bgr2rgb(img)
         img = np.ascontiguousarray(img)
         img_save = Image.fromarray(img)
-        img_save.save(save_path.replace('.jpg', '.png'))
+        print(save_path)
+        img_save.save(save_path)
 
     return 0
 
