@@ -193,7 +193,7 @@ def get_aug_list(version):
         aug_bbox_only_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                               bboxes_only_translate_x, bboxes_only_translate_y]
         return aug_color_list, aug_bg_only_list, aug_bbox_only_list
-    elif version in ['1.3']:
+    elif version in ['1.3', '1.3.1']:
         aug_list = [autocontrast, equalize, posterize, solarize, # color
                     bg_only_rotate, bg_only_shear_x, bg_only_shear_y,
                     bg_only_translate_x, bg_only_translate_y, # bg only transformation
@@ -209,8 +209,10 @@ def get_aug_list(version):
         raise NotImplementedError
 
 
-GEO_OP_LIST = [bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,
-               bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
+GEO_OP_LIST = [bg_only_rotate, bg_only_shear_xy, bg_only_shear_x, bg_only_shear_y,
+               bg_only_translate_xy, bg_only_translate_x, bg_only_translate_y,
+               bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_shear_x, bboxes_only_shear_y,
+               bboxes_only_translate_xy, bboxes_only_translate_x, bboxes_only_translate_y]
 
 @PIPELINES.register_module()
 class AugMixDetection:
