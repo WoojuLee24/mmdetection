@@ -193,14 +193,14 @@ def get_aug_list(version):
         aug_bbox_only_list = [bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                               bboxes_only_translate_x, bboxes_only_translate_y]
         return aug_color_list, aug_bg_only_list, aug_bbox_only_list
-    elif version in ['1.3']:
+    elif version in ['1.3', '1.3.1']:
         aug_list = [autocontrast, equalize, posterize, solarize, # color
                     bg_only_rotate, bg_only_shear_x, bg_only_shear_y,
                     bg_only_translate_x, bg_only_translate_y, # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
-    elif version in ['1.4']:
+    elif version in ['1.4', '1.4.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
@@ -209,6 +209,11 @@ def get_aug_list(version):
         raise NotImplementedError
 
 
+GEO_OP_LIST = [bg_only_rotate, bg_only_shear_xy, bg_only_shear_x, bg_only_shear_y,
+               bg_only_translate_xy, bg_only_translate_x, bg_only_translate_y,
+               bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_shear_x, bboxes_only_shear_y,
+               bboxes_only_translate_xy, bboxes_only_translate_x, bboxes_only_translate_y]
+
 @PIPELINES.register_module()
 class AugMixDetection:
     def __init__(self, mean, std,
@@ -216,6 +221,7 @@ class AugMixDetection:
                  version='0.1',
                  aug_severity=6,
                  mixture_depth=-1,
+                 geo_severity=None,
                  to_rgb=True,):
         super(AugMixDetection, self).__init__()
         self.mixture_width = 3
@@ -229,6 +235,8 @@ class AugMixDetection:
         self.aug_severity = aug_severity
         self.mixture_depth = mixture_depth
         self.to_rgb = to_rgb
+
+        self.geo_severity = geo_severity
 
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
@@ -337,6 +345,8 @@ class AugMixDetection:
         for op in op_chain:
             if isinstance(img_aug, np.ndarray):
                 img_aug = Image.fromarray(img_aug, 'RGB')
+            if op in GEO_OP_LIST:
+                aug_severity = self.geo_severity
             img_aug = op(img_aug, level=aug_severity,
                          img_size=img_size, bboxes_xy=gt_bboxes)
 
