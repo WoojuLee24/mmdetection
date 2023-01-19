@@ -38,7 +38,7 @@ train_pipeline = [
     dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMix', no_jsd=True, aug_list='wogeo', aug_severity=3, **img_norm_cfg),
+    dict(type='AugMix', no_jsd=True, aug_list='augmentations', aug_severity=3, **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
@@ -73,7 +73,7 @@ custom_hooks = [
 
 train_version = 'v4'
 dataset = 'coco'
-pipeline = 'augmix.wogeo'
+pipeline = 'augmix.augs'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
