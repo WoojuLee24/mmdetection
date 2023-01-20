@@ -59,6 +59,7 @@ class DeltaXYWHBBoxCoder(BaseBBoxCoder):
 
         assert bboxes.size(0) == gt_bboxes.size(0)
         assert bboxes.size(-1) == gt_bboxes.size(-1) == 4
+
         encoded_bboxes = bbox2delta(bboxes, gt_bboxes, self.means, self.stds)
         return encoded_bboxes
 
@@ -147,6 +148,17 @@ def bbox2delta(proposals, gt, means=(0., 0., 0., 0.), stds=(1., 1., 1., 1.)):
     gw = gt[..., 2] - gt[..., 0]
     gh = gt[..., 3] - gt[..., 1]
 
+    # if ph == 0 -> dy: NaN, dh: NaN, gh == 0
+    nan_xinds = (pw == 0)
+    nan_yinds = (ph == 0)
+
+    pw[nan_xinds] = 1e-6
+    ph[nan_yinds] = 1e-6
+    gw[nan_xinds] = 1e-6
+    gh[nan_yinds] = 1e-6
+    gx[nan_xinds] = px[nan_xinds]
+    gy[nan_xinds] = py[nan_yinds]
+
     dx = (gx - px) / pw
     dy = (gy - py) / ph
     dw = torch.log(gw / pw)
@@ -156,6 +168,14 @@ def bbox2delta(proposals, gt, means=(0., 0., 0., 0.), stds=(1., 1., 1., 1.)):
     means = deltas.new_tensor(means).unsqueeze(0)
     stds = deltas.new_tensor(stds).unsqueeze(0)
     deltas = deltas.sub_(means).div_(stds)
+
+    # # for debug
+    # if torch.isnan(dy).float().sum() or torch.isnan(dh).float().sum() \
+    #         or torch.isnan(dx).float().sum() or torch.isnan(dw).float().sum():
+    #     import pdb
+    #     pdb.set_trace()
+    #     print('dy: ', dy)
+    #     print('dh: ', dh)
 
     return deltas
 
