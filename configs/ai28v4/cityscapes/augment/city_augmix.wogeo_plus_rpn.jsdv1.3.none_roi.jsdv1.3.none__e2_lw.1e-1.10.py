@@ -74,6 +74,8 @@ data = dict(
 ################
 ### RUN TIME ###
 ################
+optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer_config = dict(grad_clip=None)
 runner = dict(
     type='EpochBasedRunner', max_epochs=2)  # actual epoch = 8 * 8 = 64
 lr_config = dict(
