@@ -137,7 +137,7 @@ class ContrastiveRoIHead(StandardRoIHead):
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
 
-        bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
+        bbox_targets = self.bbox_head.get_targets_with_absolute(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg) # labels, label_weights, bbox_targets, bbox_weights
 
         self.bbox_targets = bbox_targets

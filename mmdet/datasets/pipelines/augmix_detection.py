@@ -345,8 +345,9 @@ class AugMixDetection:
         for op in op_chain:
             if isinstance(img_aug, np.ndarray):
                 img_aug = Image.fromarray(img_aug, 'RGB')
-            if op in GEO_OP_LIST:
-                aug_severity = self.geo_severity
+            if self.geo_severity is not None:
+                if op in GEO_OP_LIST:
+                    aug_severity = self.geo_severity
             img_aug = op(img_aug, level=aug_severity,
                          img_size=img_size, bboxes_xy=gt_bboxes)
 
