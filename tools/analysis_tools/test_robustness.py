@@ -280,6 +280,11 @@ def main():
                     test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
                 elif '/cityscapes-c/' in test_data_cfg['img_prefix']:
                     test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+                elif '/coco/' in test_data_cfg['img_prefix']:
+                    test_data_cfg['img_prefix'] = test_data_cfg['img_prefix'].replace('coco', 'coco-c')
+                    test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
+                elif '/coco-c/' in test_data_cfg['img_prefix']:
+                    test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
                 else:
                     raise NotImplementedError(
                         "set load_dataset as 'corrupted' but use original dataset.")
