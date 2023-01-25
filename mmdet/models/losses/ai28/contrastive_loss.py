@@ -697,19 +697,19 @@ def supcontrast_clean_fg_bg(logits_clean, labels=None, lambda_weight=0.1, temper
         batch_size = logits_clean.size()[0]
 
         mask_fg = torch.matmul(fg, fg.T)
-        mask_fg_np = mask_fg.detach().cpu().numpy()
+        # mask_fg_np = mask_fg.detach().cpu().numpy()
         mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
         mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
         mask_anchor_except_eye = mask_anchor - mask_eye
-        mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
+        # mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
 
         mask_anchor_fg = mask_anchor_except_eye * mask_fg
         mask_anchor_fg = mask_anchor_fg.detach()
-        mask_anchor_fg_np = mask_anchor_fg.detach().cpu().numpy()
+        # mask_anchor_fg_np = mask_anchor_fg.detach().cpu().numpy()
         mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
-        mask_contrast_except_eye = mask_contrast - mask_eye
+        # mask_contrast_except_eye = mask_contrast - mask_eye
         mask_contrast_except_eye = mask_anchor_except_eye.detach()
-        mask_contrast_exept_eye_np = mask_contrast_except_eye.detach().cpu().numpy()
+        # mask_contrast_exept_eye_np = mask_contrast_except_eye.detach().cpu().numpy()
 
         loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
                                       mask_anchor_fg, mask_contrast_except_eye, lambda_weight, temper)
@@ -750,12 +750,14 @@ def supcontrastv0_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         assert inds.size(0) == fg_iou.size(0)
         ious[inds, 0] = fg_iou
         mask_iou = torch.matmul(ious, ious.T)
-        mask_iou_np = mask_iou.cpu().detach().numpy()
+        # mask_iou_np = mask_iou.cpu().detach().numpy()
         if iou_act == 'x':
             mask_iou = torch.where(mask_iou > iou_th, mask_iou, torch.tensor(0, device=device, dtype=torch.float32))
         else:
-            mask_iou = torch.where(mask_iou > iou_th, 1., 0.)
-        mask_iou_np2 = mask_iou.cpu().detach().numpy()
+            mask_iou = torch.where(mask_iou > iou_th,
+                                   torch.tensor(1, device=device, dtype=torch.float32),
+                                   torch.tensor(0, device=device, dtype=torch.float32))
+        # mask_iou_np2 = mask_iou.cpu().detach().numpy()
 
         mask_fg = torch.matmul(fg, fg.T)
         # mask_fg_np = mask_fg.detach().cpu().numpy()
@@ -763,7 +765,7 @@ def supcontrastv0_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
         mask_anchor_except_eye = mask_anchor - mask_eye
         mask_anchor_except_eye = mask_anchor_except_eye * mask_iou
-        mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
+        # mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
 
         mask_anchor_fg = mask_anchor_except_eye * mask_fg
         mask_anchor_fg = mask_anchor_fg.detach()
