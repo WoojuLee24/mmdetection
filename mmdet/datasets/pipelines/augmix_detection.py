@@ -25,7 +25,7 @@ from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, 
 
 # BBoxOnlyAugmentation
 # REF: https://github.com/poodarchu/learn_aug_for_object_detection.numpy/
-def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillcolor=None, **kwargs):
+def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, **kwargs):
     '''
     Args:
         img     : (np.array) (img_width, img_height, channel)
@@ -38,12 +38,24 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillcolor=None, **kwar
     # Get bbox_content from image
     img_height, img_width = img.shape[0], img.shape[1]
     x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
-    bbox_content = img[y1:y2+1, x1:x2+1, :]
+    if fillmode is None:
+        bbox_content = img[y1:y2+1, x1:x2+1, :]
+        mask = img[y1:y2+1, x1:x2+1, :]
+        center = None
+    elif fillmode == 'img':
+        bbox_content = img
+        mask = img[y1:y2 + 1, x1:x2 + 1, :]
+        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
+        kwargs['img_size_for_level'] = Image.fromarray(mask).size
+    else:
+        raise TypeError
 
     # Augment
     kwargs['img_size'] = Image.fromarray(bbox_content).size
-    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor)
+    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor, center=center)
     augmented_bbox_content = np.asarray(augmented_bbox_content)
+    if fillmode == 'img':
+        augmented_bbox_content = augmented_bbox_content[y1:y2+1, x1:x2+1, :]
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
     pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
@@ -52,7 +64,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillcolor=None, **kwar
     else:
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fillcolor[0])
 
-    mask = np.zeros_like(bbox_content)
+    mask = np.zeros_like(mask)
     mask = np.pad(mask, pad_width, 'constant', constant_values=1)
 
     # Overwrite augmented_bbox_content into img
@@ -135,6 +147,7 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
         random_bboxes_xy = random_bboxes_xy[:total_bboxes, :]
 
     return random_bboxes_xy
+
 
 def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
@@ -261,7 +274,7 @@ def get_aug_list(version):
                     bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
-    elif version in ['1.4', '1.4.1', '1.4.2']:
+    elif version in ['1.4', '1.4.1', '1.4.2', '1.4.3']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation

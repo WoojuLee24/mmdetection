@@ -74,11 +74,11 @@ def posterize(pil_img, level, **kwargs):
   return ImageOps.posterize(pil_img, 4 - level)
 
 
-def rotate(pil_img, level, img_size, fillcolor, **kwargs):
+def rotate(pil_img, level, img_size, fillcolor, center=None, **kwargs):
   degrees = int_parameter(sample_level(level), 30)
   if np.random.uniform() > 0.5:
     degrees = -degrees
-  return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor)
+  return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center)
 
 
 def solarize(pil_img, level, **kwargs):
@@ -104,8 +104,10 @@ def shear_y(pil_img, level, img_size, fillcolor=None, **kwargs):
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_x(pil_img, level, img_size, fillcolor=None, **kwargs):
-  level = int_parameter(sample_level(level), img_size[0] / 3)
+def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
+  maxval = img_size[0] if img_size_for_level is None else img_size_for_level[0]
+  level = int_parameter(sample_level(level), maxval / 3)
+
   if np.random.random() > 0.5:
     level = -level
   return pil_img.transform(img_size,
@@ -113,8 +115,9 @@ def translate_x(pil_img, level, img_size, fillcolor=None, **kwargs):
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_y(pil_img, level, img_size, fillcolor=None, **kwargs):
-  level = int_parameter(sample_level(level), img_size[1] / 3)
+def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
+  maxval = img_size[1] if img_size_for_level is None else img_size_for_level[1]
+  level = int_parameter(sample_level(level), maxval / 3)
   if np.random.random() > 0.5:
     level = -level
   return pil_img.transform(img_size,
