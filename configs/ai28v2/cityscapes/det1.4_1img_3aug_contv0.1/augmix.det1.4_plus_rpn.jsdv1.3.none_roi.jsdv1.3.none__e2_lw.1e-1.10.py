@@ -28,7 +28,7 @@ _base_ = [
 #############
 ### MODEL ###
 #############
-num_views = 1
+num_views = 3
 model = dict(
     rpn_head=dict(
         loss_cls=dict(

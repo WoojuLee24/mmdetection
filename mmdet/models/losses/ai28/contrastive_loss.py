@@ -665,7 +665,7 @@ def supcontrast_clean_fg(logits_clean, labels=None, lambda_weight=0.1, temper=0.
                                       mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
@@ -715,7 +715,7 @@ def supcontrast_clean_fg_bg(logits_clean, labels=None, lambda_weight=0.1, temper
                                       mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
@@ -765,7 +765,7 @@ def supcontrast_clean_fg_bg(logits_clean, labels=None, lambda_weight=0.1, temper
                                       mask_anchor_fg, mask_contrast_except_eye, lambda_weight, temper)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
@@ -831,7 +831,7 @@ def supcontrastv0_2_0(logits_clean, labels=None, lambda_weight=0.1, temper=0.07,
                                       mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
@@ -895,7 +895,7 @@ def supcontrastv0_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
                                       mask_anchor_fg, mask_contrast_except_eye, lambda_weight, temper)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
@@ -944,7 +944,7 @@ def supcontrast_clean_fg_bg_tr(logits_clean, labels=None, lambda_weight=0.1, tem
                                          lambda_weight, temper, temper_ratio)
         loss = loss1
     else:
-        loss = 0
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
 
     return loss
 
