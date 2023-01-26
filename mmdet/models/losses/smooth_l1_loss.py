@@ -109,6 +109,13 @@ class SmoothL1Loss(nn.Module):
                 self.outputs[key] = []
         self.outputs['loss_bbox'].append(float(loss_bbox))
 
+        # # For debug
+        # if torch.isnan(loss_bbox):
+        #     import pdb
+        #     pdb.set_trace()
+        #     print("labels shape: ", target.size())
+        #     print("labels: ", target)
+
         return loss_bbox
 
 
@@ -158,5 +165,12 @@ class L1Loss(nn.Module):
             for key in ['loss_bbox']:
                 self.outputs[key] = []
         self.outputs['loss_bbox'].append(float(loss_bbox))
+
+        # # For debug
+        # if torch.isnan(loss_bbox):
+        #     import pdb
+        #     pdb.set_trace()
+        #     print("labels shape: ", target.size())
+        #     print("labels: ", target)
 
         return loss_bbox

@@ -255,5 +255,11 @@ class CrossEntropyLoss(nn.Module):
             for key in ['loss_cls']:
                 self.outputs[key] = []
         self.outputs['loss_cls'].append(float(loss_cls))
+        # # For debug
+        # if torch.isnan(loss_cls):
+        #     import pdb
+        #     pdb.set_trace()
+        #     print("labels shape: ", label.size())
+        #     print("labels: ", label)
 
         return loss_cls
