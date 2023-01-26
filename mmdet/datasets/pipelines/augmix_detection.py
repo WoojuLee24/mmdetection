@@ -132,7 +132,7 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
         random_bboxes_xy[total_bboxes, :] = random_bbox[0]
         total_bboxes += 1
     if total_bboxes != num_bboxes:
-        random_bboxes_xy = random_bboxes_xy[total_bboxes, :]
+        random_bboxes_xy = random_bboxes_xy[:total_bboxes, :]
 
     return random_bboxes_xy
 
