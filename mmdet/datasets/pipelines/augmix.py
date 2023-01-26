@@ -74,11 +74,11 @@ def posterize(pil_img, level, **kwargs):
   return ImageOps.posterize(pil_img, 4 - level)
 
 
-def rotate(pil_img, level, img_size, **kwargs):
+def rotate(pil_img, level, img_size, fillcolor, **kwargs):
   degrees = int_parameter(sample_level(level), 30)
   if np.random.uniform() > 0.5:
     degrees = -degrees
-  return pil_img.rotate(degrees, resample=Image.BILINEAR, **kwargs)
+  return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
 def solarize(pil_img, level, **kwargs):
@@ -86,40 +86,40 @@ def solarize(pil_img, level, **kwargs):
   return ImageOps.solarize(pil_img, 256 - level)
 
 
-def shear_x(pil_img, level, img_size, **kwargs):
+def shear_x(pil_img, level, img_size, fillcolor=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, level, 0, 0, 1, 0),
-                           resample=Image.BILINEAR, **kwargs)
+                           resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def shear_y(pil_img, level, img_size, **kwargs):
+def shear_y(pil_img, level, img_size, fillcolor=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, 0, level, 1, 0),
-                           resample=Image.BILINEAR, **kwargs)
+                           resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_x(pil_img, level, img_size, **kwargs):
+def translate_x(pil_img, level, img_size, fillcolor=None, **kwargs):
   level = int_parameter(sample_level(level), img_size[0] / 3)
   if np.random.random() > 0.5:
     level = -level
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, level, 0, 1, 0),
-                           resample=Image.BILINEAR, **kwargs)
+                           resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_y(pil_img, level, img_size, **kwargs):
+def translate_y(pil_img, level, img_size, fillcolor=None, **kwargs):
   level = int_parameter(sample_level(level), img_size[1] / 3)
   if np.random.random() > 0.5:
     level = -level
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, 0, 0, 1, level),
-                           resample=Image.BILINEAR, **kwargs)
+                           resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
 # operation that overlaps with ImageNet-C's test set
