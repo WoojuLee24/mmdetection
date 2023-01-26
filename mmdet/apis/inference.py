@@ -144,6 +144,11 @@ def inference_detector(model, imgs):
 
     # forward the model
     with torch.no_grad():
+        if hasattr(model, 'grad_cam'):
+            if model.grad_cam:
+                result, x_backbone, x_fpn = model(return_loss=False, rescale=True, **data)
+                print('grad_cam is True')
+                return result, x_backbone, x_fpn
         results = model(return_loss=False, rescale=True, **data)
 
     if not is_batch:

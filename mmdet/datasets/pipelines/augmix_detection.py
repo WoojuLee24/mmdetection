@@ -25,7 +25,7 @@ from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, 
 
 # BBoxOnlyAugmentation
 # REF: https://github.com/poodarchu/learn_aug_for_object_detection.numpy/
-def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, **kwargs):
+def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillcolor=None, **kwargs):
     '''
     Args:
         img     : (np.array) (img_width, img_height, channel)
@@ -42,18 +42,21 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, **kwargs):
 
     # Augment
     kwargs['img_size'] = Image.fromarray(bbox_content).size
-    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs)
+    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor)
     augmented_bbox_content = np.asarray(augmented_bbox_content)
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
     pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
-    augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=0)
+    if fillcolor is None:
+        augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=0)
+    else:
+        augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fillcolor[0])
 
     mask = np.zeros_like(bbox_content)
     mask = np.pad(mask, pad_width, 'constant', constant_values=1)
 
     # Overwrite augmented_bbox_content into img
-    img = img * mask + augmented_bbox_content
+    img = img * mask + augmented_bbox_content * (mask==0)
 
     return img
 
@@ -70,37 +73,88 @@ def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
     return Image.fromarray(img)
 
 
-def bboxes_only_rotate(pil_img, bboxes_xy, level, img_size):
-    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size)
+def bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
 
 
-def bboxes_only_shear_x(pil_img, bboxes_xy, level, img_size):
-    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size)
+def bboxes_only_shear_x(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size, **kwargs)
 
 
-def bboxes_only_shear_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
+def bboxes_only_shear_y(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size, **kwargs)
 
 
-def bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size):
+def bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
-    return func(pil_img, bboxes_xy, level, img_size)
+    return func(pil_img, bboxes_xy, level, img_size, **kwargs)
 
 
 def bboxes_only_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
-    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
+    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size, **kwargs)
 
 
-def bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+def bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bboxes_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size, **kwargs)
 
 
-def bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size):
+def bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
-    return func(pil_img, bboxes_xy, level, img_size)
+    return func(pil_img, bboxes_xy, level, img_size, **kwargs)
 
 
-def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
+# Random bboxes only augmentation
+from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
+def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
+                              max_iters=100, eps=1e-6):
+    # REF: mmdetection/mmdet/datasets/pipelines/transforms.py Cutout
+    scales = (0.01, 0.2); ratios = (0.3, 1/0.3)
+    if isinstance(num_bboxes, tuple) or isinstance(num_bboxes, list):
+        num_bboxes = np.random.randint(num_bboxes[0], num_bboxes[1] + 1)
+    (img_width, img_height) = img_size
+
+    random_bboxes_xy = np.zeros((num_bboxes, 4))
+    total_bboxes = 0
+    for i in range(max_iters):
+        if total_bboxes >= num_bboxes:
+            break
+
+        # Generate a random bbox.
+        x1, y1 = np.random.randint(0, img_width), np.random.randint(0, img_height)
+        scale = np.random.uniform(*scales) * img_height * img_width
+        ratio = np.random.uniform(*ratios)
+        bbox_w, bbox_h = int(np.sqrt(scale / ratio)), int(np.sqrt(scale * ratio))
+        random_bbox = np.array([[x1, y1, min(x1 + bbox_w, img_width), min(y1 + bbox_h, img_height)]])
+        if bboxes_xy is not None:
+            ious = bbox_overlaps(random_bbox, bboxes_xy)
+            if np.sum(ious) > eps:
+                continue
+        random_bboxes_xy[total_bboxes, :] = random_bbox[0]
+        total_bboxes += 1
+    if total_bboxes != num_bboxes:
+        random_bboxes_xy = random_bboxes_xy[total_bboxes, :]
+
+    return random_bboxes_xy
+
+def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
+
+
+def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+    func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
+
+
+def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+    func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
+
+
+# Background only augmentation
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillcolor=None, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -116,12 +170,19 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
     for i in range(len(bboxes_xy)):
         bbox_xy = bboxes_xy[i]
         x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
-        bbox_content[y1:y2 + 1, x1:x2 + 1, :] = 0.0
+        if fillcolor is None:
+            bbox_content[y1:y2 + 1, x1:x2 + 1, :] = 0.0
+        elif isinstance(fillcolor, tuple):
+            assert len(fillcolor) == bbox_content.shape[-1]
+            for ch in range(len(fillcolor)):
+                bbox_content[y1:y2 + 1, x1:x2 + 1, ch].fill(fillcolor[ch])
+        else:
+            bbox_content[y1:y2 + 1, x1:x2 + 1, :].fill(fillcolor)
         mask[y1:y2 + 1, x1:x2 + 1, :] = 1
 
     # Augment
     kwargs['img_size'] = Image.fromarray(bbox_content).size
-    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs)
+    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor)
     augmented_bbox_content = np.asarray(augmented_bbox_content)
 
     # Overwrite augmented_bbox_content into img
@@ -130,29 +191,29 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
     return img
 
 
-def bg_only_rotate(pil_img, bboxes_xy, level, img_size):
-    return _apply_bg_only_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size)
+def bg_only_rotate(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
 
 
-def bg_only_shear_x(pil_img, bboxes_xy, level, img_size):
-    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size)
+def bg_only_shear_x(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_x, level=level, img_size=img_size, **kwargs)
 
 
-def bg_only_shear_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size)
+def bg_only_shear_y(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, shear_y, level=level, img_size=img_size, **kwargs)
 
 
-def bg_only_shear_xy(pil_img, bboxes_xy, level, img_size):
+def bg_only_shear_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
     func = bg_only_shear_x if np.random.rand() < 0.5 else bg_only_shear_y
-    return func(pil_img, bboxes_xy, level, img_size)
+    return func(pil_img, bboxes_xy, level, img_size, **kwargs)
 
 
 def bg_only_translate_x(pil_img, bboxes_xy, level, img_size, **kwargs):
-    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size)
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_x, level=level, img_size=img_size, **kwargs)
 
 
-def bg_only_translate_y(pil_img, bboxes_xy, level, img_size):
-    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size)
+def bg_only_translate_y(pil_img, bboxes_xy, level, img_size, **kwargs):
+    return _apply_bg_only_augmentation(pil_img, bboxes_xy, translate_y, level=level, img_size=img_size, **kwargs)
 
 
 def bg_only_translate_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
@@ -200,11 +261,17 @@ def get_aug_list(version):
                     bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
-    elif version in ['1.4', '1.4.1']:
+    elif version in ['1.4', '1.4.1', '1.4.2']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
+    elif version in ['1.5']:
+        aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # bg only transformation
+                    bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy] # bbox only transformation
+        return aug_list
+
     else:
         raise NotImplementedError
 
@@ -222,7 +289,8 @@ class AugMixDetection:
                  aug_severity=6,
                  mixture_depth=-1,
                  geo_severity=None,
-                 to_rgb=True,):
+                 to_rgb=True,
+                 **kwargs):
         super(AugMixDetection, self).__init__()
         self.mixture_width = 3
         self.aug_prob_coeff = 1.
@@ -237,6 +305,7 @@ class AugMixDetection:
         self.to_rgb = to_rgb
 
         self.geo_severity = geo_severity
+        self.kwargs = kwargs
 
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
@@ -349,7 +418,7 @@ class AugMixDetection:
                 if op in GEO_OP_LIST:
                     aug_severity = self.geo_severity
             img_aug = op(img_aug, level=aug_severity,
-                         img_size=img_size, bboxes_xy=gt_bboxes)
+                         img_size=img_size, bboxes_xy=gt_bboxes, **self.kwargs)
 
         return img_aug
 
