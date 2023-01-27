@@ -3,6 +3,7 @@ import argparse
 import copy
 import os
 import os.path as osp
+import numpy as np
 
 import mmcv
 import torch
@@ -377,8 +378,14 @@ def main():
                                     + f'.{name}'
                                     result_files = dataset.results2json(
                                         outputs_, result_file)
-                        eval_results = coco_eval_with_return(
-                            result_files, eval_types, dataset.coco)
+                        if len(np.concatenate([np.concatenate(output) for output in outputs])) == 0:
+                            eval_results = dict(bbox=dict(
+                                AP=0.0, AP50=0.0, AP75=0.0, APs=0.0, APm=0.0, APl=0.0,
+                                AR1=0.0, AR10=0.0, AR100=0.0, ARs=0.0, ARm=0.0, ARl=0.0))
+                            print('NOTE: It does not include any output. 0.0 will be eval_results.')
+                        else:
+                            eval_results = coco_eval_with_return(
+                                result_files, eval_types, dataset.coco)
                         aggregated_results[corruption][
                             corruption_severity] = eval_results
                     else:
