@@ -1,7 +1,8 @@
 import copy
 
 import numpy as np
-from numpy import random
+# from numpy import random
+import random
 
 from ..builder import PIPELINES
 
@@ -166,6 +167,30 @@ def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bbo
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
+# Random bboxes + ground-truth bboxes only augmentation
+def random_gt_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy)*sample_gt_ratio)))
+    random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
+    return _apply_bboxes_only_augmentation(pil_img, random_gt_bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
+
+
+def random_gt_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
+    func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy) * sample_gt_ratio)))
+    random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
+    return func(pil_img, random_gt_bboxes_xy, level, img_size, **kwargs)
+
+
+def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
+    func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy) * sample_gt_ratio)))
+    random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
+    return func(pil_img, random_gt_bboxes_xy, level, img_size, **kwargs)
+
+
 # Background only augmentation
 def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillcolor=None, **kwargs):
     '''
@@ -284,7 +309,10 @@ def get_aug_list(version):
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy] # bbox only transformation
         return aug_list
-
+    elif version in ['1.6']:
+        aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy]
+        return aug_list
     else:
         raise NotImplementedError
 
@@ -294,6 +322,7 @@ GEO_OP_LIST = [bg_only_rotate, bg_only_shear_xy, bg_only_shear_x, bg_only_shear_
                bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_shear_x, bboxes_only_shear_y, # bboxes only transformation
                bboxes_only_translate_xy, bboxes_only_translate_x, bboxes_only_translate_y,
                random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
+               random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy # random bboxes and gt bboxes only transfromation
                ]
 
 @PIPELINES.register_module()
