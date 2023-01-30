@@ -170,7 +170,8 @@ def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bbo
 # Random bboxes + ground-truth bboxes only augmentation
 def random_gt_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
-    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy)*sample_gt_ratio)))
+    num_gt_samples = int(len(bboxes_xy)*sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
     return _apply_bboxes_only_augmentation(pil_img, random_gt_bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
 
@@ -178,7 +179,8 @@ def random_gt_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, sampl
 def random_gt_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
-    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy) * sample_gt_ratio)))
+    num_gt_samples = int(len(bboxes_xy) * sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
     return func(pil_img, random_gt_bboxes_xy, level, img_size, **kwargs)
 
@@ -186,7 +188,8 @@ def random_gt_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sam
 def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
-    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), int(len(bboxes_xy) * sample_gt_ratio)))
+    num_gt_samples = int(len(bboxes_xy) * sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
+    gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
     return func(pil_img, random_gt_bboxes_xy, level, img_size, **kwargs)
 
