@@ -316,6 +316,11 @@ def get_aug_list(version):
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy]
         return aug_list
+    elif version in ['1.7']:
+        aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy, # random bboxes and gt bboxes only transformation
+                    bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy]  # bg only transformation
+        return aug_list
     else:
         raise NotImplementedError
 
