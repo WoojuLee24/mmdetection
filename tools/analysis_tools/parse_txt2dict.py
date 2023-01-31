@@ -74,9 +74,10 @@ def get_minimal_dictionary(dictionary):
         ''' corruptions '''
         mean_score = 0
         for i in [1, 2, 3, 4, 5]:
-            mean_score = mean_score + float(
-                dictionary[key_corruption_type]['severity' + str(i)]['average_precision'][
-                    'IoU=0.50:0.95|area=all|maxDets=100'])
+            score = float(dictionary[key_corruption_type]['severity' + str(i)]['average_precision'][
+                              'IoU=0.50:0.95|area=all|maxDets=100']) if 'average_precision' in dictionary[key_corruption_type]['severity' + str(i)]\
+                else float(0.0)
+            mean_score = mean_score + score
         minimal_dictionary[key_corruption_type] = float(mean_score / 5)
 
     for key in minimal_dictionary.keys():

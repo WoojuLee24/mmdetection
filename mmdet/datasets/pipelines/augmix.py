@@ -86,21 +86,23 @@ def solarize(pil_img, level, **kwargs):
   return ImageOps.solarize(pil_img, 256 - level)
 
 
-def shear_x(pil_img, level, img_size, fillcolor=None, **kwargs):
+def shear_x(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
+  tx = 0 if center is None else -level * center[1]
   return pil_img.transform(img_size,
-                           Image.AFFINE, (1, level, 0, 0, 1, 0),
+                           Image.AFFINE, (1, level, tx, 0, 1, 0),
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def shear_y(pil_img, level, img_size, fillcolor=None, **kwargs):
+def shear_y(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
+  ty = 0 if center is None else -level*center[0]
   return pil_img.transform(img_size,
-                           Image.AFFINE, (1, 0, 0, level, 1, 0),
+                           Image.AFFINE, (1, 0, 0, level, 1, ty),
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
