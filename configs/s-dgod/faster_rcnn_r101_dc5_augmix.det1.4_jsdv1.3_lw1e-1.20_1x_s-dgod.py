@@ -20,7 +20,7 @@ model = dict(
             num_classes=7,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
+                additional_loss='jsdv1_3_2aug', lambda_weight=20, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
         ),
@@ -89,7 +89,7 @@ pipeline = 'augmix.det1.4'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
 roi_loss = 'jsdv1.3.none'
-lambda_weight = '1e-1.10'
+lambda_weight = '1e-1.1'
 
 name = "faster_rcnn_r101_fpn_augmix.det1.4_jsdv1.3_lw1e-1.10_1x_s-dgod"
 
