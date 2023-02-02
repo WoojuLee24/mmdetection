@@ -50,7 +50,8 @@ train_pipeline = [
     ### AugMix ###
     dict(type='AugMixDetection', num_views=1, version='1.5.2',
          aug_severity=3, geo_severity=1, mixture_depth=-1, **img_norm_cfg,
-         num_bboxes=(3, 10), fillmode='img'),
+         num_bboxes=(3, 10), fillmode='img',
+         scales=(0.0001, 0.01), ratios=(0.3, 1/0.3)),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
