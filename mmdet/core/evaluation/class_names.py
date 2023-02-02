@@ -89,6 +89,10 @@ def cityscapes_classes():
         'bicycle'
     ]
 
+def sdgod_classes():
+    return [
+        'bus', 'bike', 'car', 'motor', 'person', 'rider', 'truck'
+    ]
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
@@ -96,7 +100,8 @@ dataset_aliases = {
     'imagenet_vid': ['vid', 'imagenet_vid', 'ilsvrc_vid'],
     'coco': ['coco', 'mscoco', 'ms_coco'],
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WIDERFace'],
-    'cityscapes': ['cityscapes']
+    'cityscapes': ['cityscapes'],
+    'sdgod': ['sdgod'],
 }
 
 

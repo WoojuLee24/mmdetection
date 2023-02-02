@@ -20,7 +20,7 @@ model = dict(
             num_classes=7,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
+                additional_loss='jsdv1_3_2aug', lambda_weight=1, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
         ),
