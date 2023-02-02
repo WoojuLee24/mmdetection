@@ -307,8 +307,8 @@ def get_aug_list(version):
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3',
-                     '1.8']:
+    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6',
+                     '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy] # bbox only transformation
