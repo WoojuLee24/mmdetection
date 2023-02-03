@@ -119,9 +119,9 @@ def bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
 # Random bboxes only augmentation
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
-                              max_iters=100, eps=1e-6):
+                              scales=(0.01, 0.2), ratios=(0.3, 1/0.3),
+                              max_iters=100, eps=1e-6, **kwargs):
     # REF: mmdetection/mmdet/datasets/pipelines/transforms.py Cutout
-    scales = (0.01, 0.2); ratios = (0.3, 1/0.3)
     if isinstance(num_bboxes, tuple) or isinstance(num_bboxes, list):
         num_bboxes = np.random.randint(num_bboxes[0], num_bboxes[1] + 1)
     (img_width, img_height) = img_size
@@ -151,25 +151,25 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
 
 
 def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
 
 
 def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
 def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
 # Random bboxes + ground-truth bboxes only augmentation
 def random_gt_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     num_gt_samples = int(len(bboxes_xy)*sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
     gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
@@ -178,7 +178,7 @@ def random_gt_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, sampl
 
 def random_gt_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     num_gt_samples = int(len(bboxes_xy) * sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
     gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
@@ -187,7 +187,7 @@ def random_gt_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sam
 
 def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, sample_gt_ratio=1, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
     num_gt_samples = int(len(bboxes_xy) * sample_gt_ratio) if len(bboxes_xy) > 1 else len(bboxes_xy)
     gt_bboxes_xy = np.stack(random.sample(list(bboxes_xy), num_gt_samples))
     random_gt_bboxes_xy = np.concatenate([random_bboxes_xy, gt_bboxes_xy], axis=0)
@@ -307,9 +307,10 @@ def get_aug_list(version):
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2']:
+    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6',
+                     '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
-                    random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # bg only transformation
+                    random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy] # bbox only transformation
         return aug_list
     elif version in ['1.6']:
