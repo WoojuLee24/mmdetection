@@ -74,10 +74,13 @@ def posterize(pil_img, level, **kwargs):
   return ImageOps.posterize(pil_img, 4 - level)
 
 
-def rotate(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
+def rotate(pil_img, level, img_size, fillcolor=None, center=None, mask=None, **kwargs):
   degrees = int_parameter(sample_level(level), 30)
   if np.random.uniform() > 0.5:
     degrees = -degrees
+  if mask is not None:
+      return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center),\
+             mask.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center)
   return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center)
 
 
@@ -86,42 +89,62 @@ def solarize(pil_img, level, **kwargs):
   return ImageOps.solarize(pil_img, 256 - level)
 
 
-def shear_x(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
+def shear_x(pil_img, level, img_size, fillcolor=None, center=None, mask=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
   tx = 0 if center is None else -level * center[1]
+  if mask is not None:
+      return pil_img.transform(img_size, Image.AFFINE, (1, level, tx, 0, 1, 0),
+                               resample=Image.BILINEAR, fillcolor=fillcolor),\
+             mask.transform(img_size, Image.AFFINE, (1, level, tx, 0, 1, 0),
+                               resample=Image.BILINEAR, fillcolor=fillcolor)
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, level, tx, 0, 1, 0),
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def shear_y(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
+def shear_y(pil_img, level, img_size, fillcolor=None, center=None, mask=None, **kwargs):
   level = float_parameter(sample_level(level), 0.3)
   if np.random.uniform() > 0.5:
     level = -level
   ty = 0 if center is None else -level*center[0]
+  if mask is not None:
+      return pil_img.transform(img_size, Image.AFFINE, (1, 0, 0, level, 1, ty),
+                               resample=Image.BILINEAR, fillcolor=fillcolor),\
+             mask.transform(img_size, Image.AFFINE, (1, 0, 0, level, 1, ty),
+                             resample=Image.BILINEAR, fillcolor=fillcolor)
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, 0, level, 1, ty),
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
+def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, mask=None, **kwargs):
   maxval = img_size[0] if img_size_for_level is None else img_size_for_level[0]
   level = int_parameter(sample_level(level), maxval / 3)
 
   if np.random.random() > 0.5:
     level = -level
+  if mask is not None:
+      return pil_img.transform(img_size, Image.AFFINE, (1, 0, level, 0, 1, 0),
+                        resample=Image.BILINEAR, fillcolor=fillcolor),\
+             mask.transform(img_size, Image.AFFINE, (1, 0, level, 0, 1, 0),
+                        resample=Image.BILINEAR, fillcolor=fillcolor)
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, level, 0, 1, 0),
                            resample=Image.BILINEAR, fillcolor=fillcolor)
 
 
-def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
+def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, mask=None, **kwargs):
   maxval = img_size[1] if img_size_for_level is None else img_size_for_level[1]
   level = int_parameter(sample_level(level), maxval / 3)
   if np.random.random() > 0.5:
     level = -level
+  if mask is not None:
+      return pil_img.transform(img_size, Image.AFFINE, (1, 0, 0, 0, 1, level),
+                           resample=Image.BILINEAR, fillcolor=fillcolor),\
+             mask.transform(img_size, Image.AFFINE, (1, 0, 0, 0, 1, level),
+                           resample=Image.BILINEAR, fillcolor=fillcolor)
   return pil_img.transform(img_size,
                            Image.AFFINE, (1, 0, 0, 0, 1, level),
                            resample=Image.BILINEAR, fillcolor=fillcolor)

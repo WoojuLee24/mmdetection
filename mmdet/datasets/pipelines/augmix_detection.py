@@ -18,7 +18,7 @@ except ImportError:
     albumentations = None
     Compose = None
 
-from PIL import Image
+from PIL import Image, ImageDraw
 from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, solarize, color,
                                              contrast, brightness, sharpness,
                                              rotate, shear_x, shear_y, translate_x, translate_y,)
@@ -195,39 +195,44 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 
 # Background only augmentation
-def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillcolor=None, **kwargs):
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
         bboxes_xy   : (tensor) has shape of (num_bboxes, 4) with [x1, y1, x2, y2]
         aug_func    : (func) The argument is bbox_content # TODO: severity?
     '''
-    if not isinstance(img, np.ndarray):
-        img = np.asarray(img)
+    if isinstance(img, np.ndarray):
+        img = Image.fromarray(img)
 
     # Make the union of bboxes
-    bbox_content = img.copy()
-    mask = np.zeros_like(bbox_content)
+    fill_img = Image.new('L', img.size, fillcolor)
+    mask = Image.new('L', img.size, 0); draw = ImageDraw.Draw(mask)
+    expanded_mask = Image.new('L', img.size, 0); expanded_draw = ImageDraw.Draw(expanded_mask)
     for i in range(len(bboxes_xy)):
         bbox_xy = bboxes_xy[i]
         x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
-        if fillcolor is None:
-            bbox_content[y1:y2 + 1, x1:x2 + 1, :] = 0.0
-        elif isinstance(fillcolor, tuple):
-            assert len(fillcolor) == bbox_content.shape[-1]
-            for ch in range(len(fillcolor)):
-                bbox_content[y1:y2 + 1, x1:x2 + 1, ch].fill(fillcolor[ch])
-        else:
-            bbox_content[y1:y2 + 1, x1:x2 + 1, :].fill(fillcolor)
-        mask[y1:y2 + 1, x1:x2 + 1, :] = 1
+        draw.rectangle((x1, y1, x2, y2), fill=255)
+        expanded_draw.rectangle((x1+3, y1+3, x2-3, y2-3), fill=255)
+
+    if fillmode is None:
+        bbox_content = Image.composite(fill_img, img, mask)
+    elif fillmode == 'img':
+        bbox_content = Image.composite(fill_img, img, expanded_mask)
+    else:
+        raise TypeError
 
     # Augment
-    kwargs['img_size'] = Image.fromarray(bbox_content).size
-    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor)
-    augmented_bbox_content = np.asarray(augmented_bbox_content)
+    kwargs['img_size'] = bbox_content.size
 
     # Overwrite augmented_bbox_content into img
-    img = img * mask + augmented_bbox_content * (mask==0)
+    if fillmode is None:
+        augmented_bbox_content = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
+        img = Image.composite(img, augmented_bbox_content, mask)
+    elif fillmode == 'img':
+        augmented_bbox_content, augmented_mask = aug_func(bbox_content, **kwargs, fillcolor=fillcolor, mask=mask)
+        maintained_mask = Image.composite(mask, augmented_mask, mask)
+        img = Image.composite(img, augmented_bbox_content, maintained_mask)
 
     return img
 
@@ -322,6 +327,19 @@ def get_aug_list(version):
                     random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy, # random bboxes and gt bboxes only transformation
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy]  # bg only transformation
         return aug_list
+    elif version in ['1.9']:
+        policy1 = [
+            autocontrast, equalize, posterize, solarize,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
+        policy2 = [
+            autocontrast, equalize, posterize, solarize,
+            bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy
+        ]
+        policy3 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
+        ]
+        return dict(policies=[policy1, policy2, policy3])
     else:
         raise NotImplementedError
 
@@ -362,13 +380,18 @@ class AugMixDetection:
 
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
-            results['img'] = np.asarray(self.aug_and_mix(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
+            if isinstance(self.aug_list, dict):
+                results['img'] = np.asarray(self.aug_and_mix_with_policy(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
+            else:
+                results['img'] = np.asarray(self.aug_and_mix(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
             return results
 
         results['custom_field'] = []
         for i in range(2, self.num_views+1):
             if isinstance(self.aug_list, tuple):
                 img_augmix = self.multiaug_and_mix(results['img'].copy(), results['gt_bboxes'])
+            elif isinstance(self.aug_list, dict):
+                img_augmix = self.aug_and_mix_with_policy(results['img'].copy(), results['gt_bboxes'])
             else:
                 img_augmix = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
             results[f'img{i}'] = np.array(img_augmix, dtype=results['img'].dtype)
@@ -420,6 +443,43 @@ class AugMixDetection:
         img_augmix = (1-sample_weight) * img_orig + sample_weight * img_mix
         img_augmix = np.array(img_augmix, dtype=np.float32)
         return img_augmix
+
+    def aug_and_mix_with_policy(self, img_orig, gt_bboxes):
+        # TODO: change library to albumentation. It will make it faster.
+        img_height, img_width, _ = img_orig.shape
+        img_size = (img_width, img_height)
+
+        # Sample
+        #   > mixing_weights: [w1, w2, ..., wk] ~ Dirichlet(alpha, alpha, ..., alpha)
+        #   > sample_weight: m ~ Beta(alpha, alpha)
+        mixing_weights = np.float32(np.random.dirichlet([self.aug_prob_coeff] * self.mixture_width))
+        sample_weight = np.float32(np.random.beta(self.aug_prob_coeff, self.aug_prob_coeff))
+
+        # Fill x_aug with zeros
+        img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
+
+        policies = self.aug_list['policies']
+        assert len(policies) == self.mixture_width
+
+        for i in range(self.mixture_width):
+            # Sample operations : [op1, op2, op3] ~ O
+            if isinstance(self.mixture_depth, tuple):
+                depth = np.random.randint(*self.mixture_depth)
+            else:
+                depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 4)
+            op_chain = np.random.choice(policies[i], depth, replace=False)  # not allow same aug if replace is False.
+
+            # Augment
+            img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
+
+            # Mixing
+            img_aug = np.asarray(img_aug, dtype=np.float32)
+            img_mix += mixing_weights[i] * img_aug
+
+        img_augmix = (1 - sample_weight) * img_orig + sample_weight * img_mix
+        img_augmix = np.array(img_augmix, dtype=np.float32)
+        return img_augmix
+
 
     def aug_and_mix(self, img_orig, gt_bboxes):
         # TODO: change library to albumentation. It will make it faster.
