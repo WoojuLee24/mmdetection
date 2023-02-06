@@ -74,11 +74,20 @@ def posterize(pil_img, level, **kwargs):
   return ImageOps.posterize(pil_img, 4 - level)
 
 
-def rotate(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
-  degrees = int_parameter(sample_level(level), 30)
-  if np.random.uniform() > 0.5:
-    degrees = -degrees
-  return pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center)
+def rotate(pil_img, level, img_size, fillcolor=None, center=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
+    degrees = int_parameter(sample_level(level), 30)
+    if np.random.uniform() > 0.5:
+        degrees = -degrees
+
+    outputs = dict(img=pil_img.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center))
+
+    if mask is not None:
+        outputs['mask'] = mask.rotate(degrees, resample=Image.BILINEAR, fillcolor=fillcolor, center=center)
+
+    if return_bbox:
+        outputs['gt_bbox'] = bbox_xy
+
+    return outputs
 
 
 def solarize(pil_img, level, **kwargs):
@@ -86,45 +95,83 @@ def solarize(pil_img, level, **kwargs):
   return ImageOps.solarize(pil_img, 256 - level)
 
 
-def shear_x(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
-  level = float_parameter(sample_level(level), 0.3)
-  if np.random.uniform() > 0.5:
-    level = -level
-  tx = 0 if center is None else -level * center[1]
-  return pil_img.transform(img_size,
-                           Image.AFFINE, (1, level, tx, 0, 1, 0),
-                           resample=Image.BILINEAR, fillcolor=fillcolor)
+def shear_x(pil_img, level, img_size, fillcolor=None, center=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
+    level = float_parameter(sample_level(level), 0.3)
+    if np.random.uniform() > 0.5:
+        level = -level
+    tx = 0 if center is None else -level * center[1]
+
+    outputs = dict(img=pil_img.transform(img_size, Image.AFFINE, (1, level, tx, 0, 1, 0),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor))
+
+    if mask is not None:
+        outputs['mask'] = mask.transform(img_size, Image.AFFINE, (1, level, tx, 0, 1, 0),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor)
+
+    if return_bbox:
+        outputs['gt_bbox'] = bbox_xy
+
+    return outputs
 
 
-def shear_y(pil_img, level, img_size, fillcolor=None, center=None, **kwargs):
-  level = float_parameter(sample_level(level), 0.3)
-  if np.random.uniform() > 0.5:
-    level = -level
-  ty = 0 if center is None else -level*center[0]
-  return pil_img.transform(img_size,
-                           Image.AFFINE, (1, 0, 0, level, 1, ty),
-                           resample=Image.BILINEAR, fillcolor=fillcolor)
+def shear_y(pil_img, level, img_size, fillcolor=None, center=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
+    level = float_parameter(sample_level(level), 0.3)
+    if np.random.uniform() > 0.5:
+        level = -level
+    ty = 0 if center is None else -level * center[0]
+
+    outputs = dict(img=pil_img.transform(img_size, Image.AFFINE, (1, 0, 0, level, 1, ty),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor))
+
+    if mask is not None:
+        outputs['mask'] = mask.transform(img_size, Image.AFFINE, (1, 0, 0, level, 1, ty),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor)
+
+    if return_bbox:
+        outputs['gt_bbox'] = bbox_xy
+
+    return outputs
 
 
-def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
-  maxval = img_size[0] if img_size_for_level is None else img_size_for_level[0]
-  level = int_parameter(sample_level(level), maxval / 3)
+def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
+    maxval = img_size[0] if img_size_for_level is None else img_size_for_level[0]
+    level = int_parameter(sample_level(level), maxval / 3)
+    if np.random.random() > 0.5:
+        level = -level
 
-  if np.random.random() > 0.5:
-    level = -level
-  return pil_img.transform(img_size,
-                           Image.AFFINE, (1, 0, level, 0, 1, 0),
-                           resample=Image.BILINEAR, fillcolor=fillcolor)
+    outputs = dict(img=pil_img.transform(img_size, Image.AFFINE, (1, 0, level, 0, 1, 0),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor))
+
+    if mask is not None:
+        outputs['mask'] = mask.transform(img_size, Image.AFFINE, (1, 0, level, 0, 1, 0),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor)
+    if return_bbox:
+        bbox_xy[0] = max(bbox_xy[0], bbox_xy[0] - level)
+        bbox_xy[2] = min(bbox_xy[2], bbox_xy[2] - level)
+        outputs['gt_bbox'] = bbox_xy
+
+    return outputs
 
 
-def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, **kwargs):
-  maxval = img_size[1] if img_size_for_level is None else img_size_for_level[1]
-  level = int_parameter(sample_level(level), maxval / 3)
-  if np.random.random() > 0.5:
-    level = -level
-  return pil_img.transform(img_size,
-                           Image.AFFINE, (1, 0, 0, 0, 1, level),
-                           resample=Image.BILINEAR, fillcolor=fillcolor)
+def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
+    maxval = img_size[1] if img_size_for_level is None else img_size_for_level[1]
+    level = int_parameter(sample_level(level), maxval / 3)
+    if np.random.random() > 0.5:
+        level = -level
+
+    outputs = dict(img=pil_img.transform(img_size, Image.AFFINE, (1, 0, 0, 0, 1, level),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor))
+
+    if mask is not None:
+        outputs['mask'] = mask.transform(img_size, Image.AFFINE, (1, 0, 0, 0, 1, level),
+                                         resample=Image.BILINEAR, fillcolor=fillcolor)
+
+    if return_bbox:
+        bbox_xy[1] = max(bbox_xy[1], bbox_xy[1] - level)
+        bbox_xy[3] = min(bbox_xy[3], bbox_xy[3] - level)
+        outputs['gt_bbox'] = bbox_xy
+
+    return outputs
 
 
 # operation that overlaps with ImageNet-C's test set
