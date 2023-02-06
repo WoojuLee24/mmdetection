@@ -26,7 +26,7 @@ from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, 
 
 # BBoxOnlyAugmentation
 # REF: https://github.com/poodarchu/learn_aug_for_object_detection.numpy/
-def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, **kwargs):
+def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, return_bbox=False, **kwargs):
     '''
     Args:
         img     : (np.array) (img_width, img_height, channel)
@@ -53,8 +53,13 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
 
     # Augment
     kwargs['img_size'] = Image.fromarray(bbox_content).size
-    augmented_bbox_content = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor, center=center)
-    augmented_bbox_content = np.asarray(augmented_bbox_content)
+    outputs = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor, center=center,
+                       bbox_xy=bbox_xy, return_bbox=False)
+    if isinstance(outputs, dict):
+        augmented_bbox_content = np.asarray(outputs['img'])
+        augmented_gt_bbox = outputs['gt_bbox'] if 'gt_bbox' in outputs else bbox_xy
+    else:
+        augmented_bbox_content = np.asarray(outputs)
     if fillmode == 'img':
         augmented_bbox_content = augmented_bbox_content[y1:y2+1, x1:x2+1, :]
 
@@ -71,19 +76,28 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
     # Overwrite augmented_bbox_content into img
     img = img * mask + augmented_bbox_content * (mask==0)
 
-    return img
+    if return_bbox:
+        return img, augmented_gt_bbox
+    else:
+        return img
 
 
-def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, **kwargs):
+def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
         bboxes_xy   : (tensor) has shape of (num_bboxes, 4) with [x1, y1, x2, y2]
         aug_func    : (func) The argument is bbox_content # TODO: severity?
     '''
-    for i in range(len(bboxes_xy)):
-        img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, **kwargs)
-    return Image.fromarray(img)
+    if return_bbox:
+        new_bboxes_xy = np.zeros_like(bboxes_xy)
+        for i in range(len(bboxes_xy)):
+            img, new_bboxes_xy[i] = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, return_bbox=True, **kwargs)
+        return Image.fromarray(img), new_bboxes_xy
+    else:
+        for i in range(len(bboxes_xy)):
+            img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, **kwargs)
+        return Image.fromarray(img)
 
 
 def bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, **kwargs):
@@ -227,10 +241,16 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
 
     # Overwrite augmented_bbox_content into img
     if fillmode is None:
-        augmented_bbox_content = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
+        outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
+        augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = Image.composite(img, augmented_bbox_content, mask)
     elif fillmode == 'img':
-        augmented_bbox_content, augmented_mask = aug_func(bbox_content, **kwargs, fillcolor=fillcolor, mask=mask)
+        outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor, mask=mask)
+        if isinstance(outputs, dict):
+            augmented_bbox_content = outputs['img']
+            augmented_mask = outputs['mask']
+        else:
+            (augmented_bbox_content, augmented_mask) = outputs
         maintained_mask = Image.composite(mask, augmented_mask, mask)
         img = Image.composite(img, augmented_bbox_content, maintained_mask)
 
@@ -333,7 +353,7 @@ def get_aug_list(version):
                     random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy, # random bboxes and gt bboxes only transformation
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy]  # bg only transformation
         return aug_list
-    elif version in ['1.9']:
+    elif version in ['1.9', '1.9.1']:
         policy1 = [
             autocontrast, equalize, posterize, solarize,
             bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
@@ -345,7 +365,10 @@ def get_aug_list(version):
             autocontrast, equalize, posterize, solarize,
             random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
         ]
-        return dict(policies=[policy1, policy2, policy3])
+        aug_list = dict(policies=[policy1, policy2, policy3])
+        if version in ['1.9.1']:
+            aug_list['return_bbox_list'] = [True, False, False]
+        return aug_list
     else:
         raise NotImplementedError
 
@@ -387,21 +410,28 @@ class AugMixDetection:
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
             if isinstance(self.aug_list, dict):
-                results['img'] = np.asarray(self.aug_and_mix_with_policy(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
+                return_bbox_list = self.aug_list['return_bbox_list'] if 'return_bbox_list' in self.aug_list else [False] * len(self.aug_list['policies'])
+                outputs = self.aug_and_mix_with_policy(results['img'], results['gt_bboxes'], return_bbox_list=return_bbox_list)
+                results['img'] = np.asarray(outputs['img'], dtype=results['img'].dtype)
+                if 'gt_bboxes' in outputs:
+                    results['gt_bboxes'] = outputs['gt_bboxes']
             else:
                 results['img'] = np.asarray(self.aug_and_mix(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
             return results
 
         results['custom_field'] = []
         for i in range(2, self.num_views+1):
+            gt_bboxes_augmix = None
             if isinstance(self.aug_list, tuple):
                 img_augmix = self.multiaug_and_mix(results['img'].copy(), results['gt_bboxes'])
             elif isinstance(self.aug_list, dict):
-                img_augmix = self.aug_and_mix_with_policy(results['img'].copy(), results['gt_bboxes'])
+                outputs = self.aug_and_mix_with_policy(results['img'].copy(), results['gt_bboxes'])
+                img_augmix = outputs['img']
+                gt_bboxes_augmix = outputs['gt_bboxes'] if 'gt_bboxes' in outputs else gt_bboxes_augmix
             else:
                 img_augmix = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
             results[f'img{i}'] = np.array(img_augmix, dtype=results['img'].dtype)
-            results[f'gt_bboxes{i}'] = copy.deepcopy(results['gt_bboxes']) # TODO: allow to geometric operations containing bbox
+            results[f'gt_bboxes{i}'] = copy.deepcopy(results['gt_bboxes']) if gt_bboxes_augmix is None else gt_bboxes_augmix # TODO: allow to geometric operations containing bbox
             results[f'gt_labels{i}'] = copy.deepcopy(results['gt_labels']) # TODO: allow to geometric operations containing bbox
             results['img_fields'].append(f'img{i}')
             results['bbox_fields'].append(f'gt_bboxes{i}')
@@ -450,7 +480,7 @@ class AugMixDetection:
         img_augmix = np.array(img_augmix, dtype=np.float32)
         return img_augmix
 
-    def aug_and_mix_with_policy(self, img_orig, gt_bboxes):
+    def aug_and_mix_with_policy(self, img_orig, gt_bboxes, return_bbox_list=False):
         # TODO: change library to albumentation. It will make it faster.
         img_height, img_width, _ = img_orig.shape
         img_size = (img_width, img_height)
@@ -465,6 +495,9 @@ class AugMixDetection:
         img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
 
         policies = self.aug_list['policies']
+        if return_bbox_list == False:
+            return_bbox_list = [False] * len(policies)
+        gt_bboxes_aug = np.zeros_like(gt_bboxes)
         assert len(policies) == self.mixture_width
 
         for i in range(self.mixture_width):
@@ -476,7 +509,13 @@ class AugMixDetection:
             op_chain = np.random.choice(policies[i], depth, replace=False)  # not allow same aug if replace is False.
 
             # Augment
-            img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
+            if return_bbox_list[i]:
+                img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity,
+                                                    gt_bboxes=gt_bboxes, return_bbox=True)
+                gt_bboxes_aug += mixing_weights[i] * new_gt_bboxes
+            else:
+                img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
+                gt_bboxes_aug += mixing_weights[i] * gt_bboxes
 
             # Mixing
             img_aug = np.asarray(img_aug, dtype=np.float32)
@@ -484,7 +523,12 @@ class AugMixDetection:
 
         img_augmix = (1 - sample_weight) * img_orig + sample_weight * img_mix
         img_augmix = np.array(img_augmix, dtype=np.float32)
-        return img_augmix
+
+        outputs = dict(img=img_augmix)
+        if any(return_bbox_list):
+            gt_bboxes_aug = (1 - sample_weight) * gt_bboxes + sample_weight * gt_bboxes_aug
+            outputs['gt_bboxes'] = gt_bboxes_aug
+        return outputs
 
 
     def aug_and_mix(self, img_orig, gt_bboxes):
@@ -519,7 +563,7 @@ class AugMixDetection:
         img_augmix = np.array(img_augmix, dtype=np.float32)
         return img_augmix
 
-    def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None):
+    def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None, return_bbox=False):
         '''
         img: np.array
         '''
@@ -536,10 +580,25 @@ class AugMixDetection:
             if self.geo_severity is not None:
                 if op in GEO_OP_LIST:
                     aug_severity = self.geo_severity
-            img_aug = op(img_aug, level=aug_severity,
-                         img_size=img_size, bboxes_xy=gt_bboxes, **self.kwargs)
+            if return_bbox:
+                outputs = op(img_aug, level=aug_severity,
+                             img_size=img_size, bboxes_xy=gt_bboxes, return_bbox=return_bbox, **self.kwargs)
+                if isinstance(outputs, dict):
+                    img_aug = outputs['img']
+                    gt_bboxes = outputs['gt_bbox']
+                elif isinstance(outputs, tuple):
+                    img_aug = outputs[0]
+                    gt_bboxes = outputs[1]
+                else:
+                    img_aug = outputs
+            else:
+                img_aug = op(img_aug, level=aug_severity,
+                             img_size=img_size, bboxes_xy=gt_bboxes, return_bbox=return_bbox, **self.kwargs)
 
-        return img_aug
+        if return_bbox:
+            return img_aug, gt_bboxes
+        else:
+            return img_aug
 
     def __repr__(self):
         repr_str = self.__class__.__name__
