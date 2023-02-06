@@ -54,7 +54,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
     # Augment
     kwargs['img_size'] = Image.fromarray(bbox_content).size
     outputs = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor, center=center,
-                       bbox_xy=bbox_xy, return_bbox=False)
+                       bbox_xy=bbox_xy, return_bbox=return_bbox)
     if isinstance(outputs, dict):
         augmented_bbox_content = np.asarray(outputs['img'])
         augmented_gt_bbox = outputs['gt_bbox'] if 'gt_bbox' in outputs else bbox_xy

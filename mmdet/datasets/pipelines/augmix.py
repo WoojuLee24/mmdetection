@@ -146,8 +146,8 @@ def translate_x(pil_img, level, img_size, fillcolor=None, img_size_for_level=Non
         outputs['mask'] = mask.transform(img_size, Image.AFFINE, (1, 0, level, 0, 1, 0),
                                          resample=Image.BILINEAR, fillcolor=fillcolor)
     if return_bbox:
-        bbox_xy[0] = max(bbox_xy[0], bbox_xy[0] + level)
-        bbox_xy[2] = min(bbox_xy[2], bbox_xy[2] + level)
+        bbox_xy[0] = max(bbox_xy[0], bbox_xy[0] - level)
+        bbox_xy[2] = min(bbox_xy[2], bbox_xy[2] - level)
         outputs['gt_bbox'] = bbox_xy
 
     return outputs
@@ -167,8 +167,8 @@ def translate_y(pil_img, level, img_size, fillcolor=None, img_size_for_level=Non
                                          resample=Image.BILINEAR, fillcolor=fillcolor)
 
     if return_bbox:
-        bbox_xy[1] = max(bbox_xy[1], bbox_xy[1] + level)
-        bbox_xy[3] = min(bbox_xy[3], bbox_xy[3] + level)
+        bbox_xy[1] = max(bbox_xy[1], bbox_xy[1] - level)
+        bbox_xy[3] = min(bbox_xy[3], bbox_xy[3] - level)
         outputs['gt_bbox'] = bbox_xy
 
     return outputs
