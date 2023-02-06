@@ -164,20 +164,20 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
     return random_bboxes_xy
 
 
-def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
-    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, **kwargs)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
-def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
-def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, **kwargs):
+def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
-    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
@@ -338,7 +338,7 @@ def get_aug_list(version):
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6',
+    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7',
                      '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
@@ -390,6 +390,7 @@ class AugMixDetection:
                  mixture_depth=-1,
                  geo_severity=None,
                  to_rgb=True,
+                 return_bbox=False,
                  **kwargs):
         super(AugMixDetection, self).__init__()
         self.mixture_width = 3
@@ -405,6 +406,7 @@ class AugMixDetection:
         self.to_rgb = to_rgb
 
         self.geo_severity = geo_severity
+        self.return_bbox = return_bbox
         self.kwargs = kwargs
 
     def __call__(self, results, *args, **kwargs):
@@ -412,11 +414,11 @@ class AugMixDetection:
             if isinstance(self.aug_list, dict):
                 return_bbox_list = self.aug_list['return_bbox_list'] if 'return_bbox_list' in self.aug_list else [False] * len(self.aug_list['policies'])
                 outputs = self.aug_and_mix_with_policy(results['img'], results['gt_bboxes'], return_bbox_list=return_bbox_list)
-                results['img'] = np.asarray(outputs['img'], dtype=results['img'].dtype)
-                if 'gt_bboxes' in outputs:
-                    results['gt_bboxes'] = outputs['gt_bboxes']
             else:
-                results['img'] = np.asarray(self.aug_and_mix(results['img'], results['gt_bboxes']), dtype=results['img'].dtype)
+                outputs = self.aug_and_mix(results['img'], results['gt_bboxes'], return_bbox=self.return_bbox)
+            results['img'] = np.asarray(outputs['img'], dtype=results['img'].dtype)
+            if 'gt_bboxes' in outputs:
+                results['gt_bboxes'] = outputs['gt_bboxes']
             return results
 
         results['custom_field'] = []
@@ -429,7 +431,9 @@ class AugMixDetection:
                 img_augmix = outputs['img']
                 gt_bboxes_augmix = outputs['gt_bboxes'] if 'gt_bboxes' in outputs else gt_bboxes_augmix
             else:
-                img_augmix = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
+                outputs = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
+                img_augmix = outputs['img']
+                gt_bboxes_augmix = outputs['gt_bboxes'] if 'gt_bboxes' in outputs else gt_bboxes_augmix
             results[f'img{i}'] = np.array(img_augmix, dtype=results['img'].dtype)
             results[f'gt_bboxes{i}'] = copy.deepcopy(results['gt_bboxes']) if gt_bboxes_augmix is None else gt_bboxes_augmix # TODO: allow to geometric operations containing bbox
             results[f'gt_labels{i}'] = copy.deepcopy(results['gt_labels']) # TODO: allow to geometric operations containing bbox
@@ -531,7 +535,7 @@ class AugMixDetection:
         return outputs
 
 
-    def aug_and_mix(self, img_orig, gt_bboxes):
+    def aug_and_mix(self, img_orig, gt_bboxes, return_bbox=False):
         # TODO: change library to albumentation. It will make it faster.
         img_height, img_width, _ = img_orig.shape
         img_size = (img_width, img_height)
@@ -544,6 +548,7 @@ class AugMixDetection:
 
         # Fill x_aug with zeros
         img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
+        gt_bboxes_aug = np.zeros_like(gt_bboxes)
         for i in range(self.mixture_width):
             # Sample operations : [op1, op2, op3] ~ O
             if isinstance(self.mixture_depth, tuple):
@@ -553,7 +558,12 @@ class AugMixDetection:
             op_chain = np.random.choice(self.aug_list, depth, replace=False) # not allow same aug if replace is False.
 
             # Augment
-            img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
+            if return_bbox:
+                img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=True)
+                gt_bboxes_aug += mixing_weights[i] * new_gt_bboxes
+            else:
+                img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=False)
+                gt_bboxes_aug += mixing_weights[i] * gt_bboxes
 
             # Mixing
             img_aug = np.asarray(img_aug, dtype=np.float32)
@@ -561,7 +571,11 @@ class AugMixDetection:
 
         img_augmix = (1-sample_weight) * img_orig + sample_weight * img_mix
         img_augmix = np.array(img_augmix, dtype=np.float32)
-        return img_augmix
+        outputs = dict(img=img_augmix)
+        if return_bbox:
+            gt_bboxes_aug = (1 - sample_weight) * gt_bboxes + sample_weight * gt_bboxes_aug
+            outputs['gt_bboxes'] = gt_bboxes_aug
+        return outputs
 
     def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None, return_bbox=False):
         '''
