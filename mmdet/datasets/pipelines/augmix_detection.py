@@ -515,7 +515,7 @@ class AugMixDetection:
             # Augment
             if return_bbox_list[i]:
                 img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity,
-                                                    gt_bboxes=gt_bboxes, return_bbox=True)
+                                                    gt_bboxes=gt_bboxes.copy(), return_bbox=True)
                 gt_bboxes_aug += mixing_weights[i] * new_gt_bboxes
             else:
                 img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes)
@@ -559,7 +559,7 @@ class AugMixDetection:
 
             # Augment
             if return_bbox:
-                img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=True)
+                img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes.copy(), return_bbox=True)
                 gt_bboxes_aug += mixing_weights[i] * new_gt_bboxes
             else:
                 img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=False)
