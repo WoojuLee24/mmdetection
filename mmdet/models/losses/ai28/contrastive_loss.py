@@ -637,6 +637,124 @@ def supcontrastv1_0(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         create mask anchor and masks contrast
         input: only clean logit
         mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
+        logits_mask (mask contrast): Self-instance case should be excluded
+        mask_fg: only fg
+        mask_anchor: same target
+        mask_anchor_except_eye: same target except self-case
+        mask_anchor_fg: same fg target except self-case
+        mask_contrast_except_eye:
+
+        v1.0
+
+    """
+
+    mask = None
+    contrast_mode = 'all'
+    base_temper = temper
+    device = logits_clean.device
+    targets = labels
+    targets = targets.contiguous().view(-1, 1)
+
+    inds, _ = (targets != targets.max()).nonzero(as_tuple=True)
+
+    fg = (targets != targets.max()).float()
+
+    if inds.size(0) > min_samples:
+        # logits_clean = logits_clean[inds, :]    # fg
+        # targets = targets[inds, :]  # fg
+        batch_size = logits_clean.size()[0]
+
+        mask_fg = torch.matmul(fg, fg.T)
+        # mask_fg_np = mask_fg.detach().cpu().numpy()
+        mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
+        mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
+        mask_anchor_except_eye = mask_anchor - mask_eye
+        # mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
+
+        mask_anchor_fg = mask_anchor_except_eye * mask_fg
+        mask_anchor_fg = mask_anchor_fg.detach()
+        # mask_anchor_fg_np = mask_anchor_fg.detach().cpu().numpy()
+        mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+        # mask_contrast_except_eye = mask_contrast - mask_eye
+        mask_contrast_except_eye = mask_contrast - mask_eye
+        mask_contrast_except_eye = mask_contrast_except_eye.detach()
+        # mask_contrast_except_eye_np = mask_contrast_except_eye.detach().cpu().numpy()
+
+        loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
+                                      mask_anchor_fg, mask_contrast_except_eye, lambda_weight, temper)
+        loss = loss1
+    else:
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
+
+    return loss
+
+
+def supcontrastv1_1(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, min_samples=10,
+                            reduction='batchmean', **kwargs):
+    """
+        supcontrast loss
+        create mask anchor and masks contrast
+        input: only clean logit
+        mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
+        logits_mask (mask contrast): Self-instance case should be excluded.
+        mask_fg: only fg
+        mask_anchor: same target
+        mask_anchor_except_eye: same target except self-case
+        mask_anchor_fg: same fg target except self-case
+        mask_contrast_except_eye:
+
+        v1.1
+
+    """
+
+    mask = None
+    contrast_mode = 'all'
+    base_temper = temper
+    device = logits_clean.device
+    targets = labels
+    targets = targets.contiguous().view(-1, 1)
+    target_set = torch.unique(targets)
+    targets_fg = targets[targets!=8]
+
+    inds, _ = (targets != targets.max()).nonzero(as_tuple=True)
+
+    fg = (targets != targets.max()).float()
+
+    if inds.size(0) > min_samples:
+        # logits_clean = logits_clean[inds, :]    # fg
+        # targets = targets[inds, :]  # fg
+        batch_size = logits_clean.size()[0]
+
+        # mask_fg = torch.matmul(fg, fg.T)
+        # mask_fg_np = mask_fg.detach().cpu().numpy()
+        mask_eye = torch.eye(batch_size, dtype=torch.float32).to(device)
+        mask_anchor = torch.eq(targets, targets.T).float()  # [B, B]
+        mask_anchor_except_eye = mask_anchor - mask_eye
+        mask_anchor_except_eye = mask_anchor_except_eye.detach()
+        mask_anchor_except_eye_np = mask_anchor_except_eye.detach().cpu().numpy()
+
+        mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
+        # mask_contrast_except_eye = mask_contrast - mask_eye
+        mask_contrast_except_eye = mask_contrast - mask_eye
+        mask_contrast_except_eye = mask_contrast_except_eye.detach()
+        mask_contrast_except_eye_np = mask_contrast_except_eye.detach().cpu().numpy()
+
+        loss1 = supcontrast_maskv0_01(logits_clean, logits_clean, targets,
+                                      mask_anchor_except_eye, mask_contrast_except_eye, lambda_weight, temper)
+        loss = loss1
+    else:
+        loss = torch.tensor(0., device=device, dtype=torch.float32)
+
+    return loss
+
+
+def supcontrastv1_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, min_samples=10,
+                            reduction='batchmean', **kwargs):
+    """
+        supcontrast loss
+        create mask anchor and masks contrast
+        input: only clean logit
+        mask (mask anchor): augmented instance, original same class, augmented same class [3*B, 3*B]
         logits_mask (mask contrast): Self-instance case was excluded already, so we don't have to exclude it explicitly.
         mask_fg: only fg
         mask_anchor: same target
