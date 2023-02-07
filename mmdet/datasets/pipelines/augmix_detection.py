@@ -390,7 +390,7 @@ def get_aug_list(version):
         if version in ['1.9.1']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
-    elif version in ['1.10']:
+    elif version in ['1.10', '1.10.1']:
         policy1 = [
             autocontrast, equalize, posterize, solarize,
             bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
