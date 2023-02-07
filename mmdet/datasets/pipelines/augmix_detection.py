@@ -374,7 +374,7 @@ def get_aug_list(version):
                     random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy, # random bboxes and gt bboxes only transformation
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy]  # bg only transformation
         return aug_list
-    elif version in ['1.9', '1.9.1']:
+    elif version in ['1.9', '1.9.1', '1.9.2']:
         policy1 = [
             autocontrast, equalize, posterize, solarize,
             bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
@@ -387,7 +387,7 @@ def get_aug_list(version):
             random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
         ]
         aug_list = dict(policies=[policy1, policy2, policy3])
-        if version in ['1.9.1']:
+        if version in ['1.9.1', '1.9.2']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
     elif version in ['1.10', '1.10.1']:
