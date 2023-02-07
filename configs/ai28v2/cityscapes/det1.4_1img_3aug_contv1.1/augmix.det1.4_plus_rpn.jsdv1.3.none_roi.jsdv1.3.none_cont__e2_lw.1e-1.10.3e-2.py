@@ -33,7 +33,7 @@ model = dict(
     rpn_head=dict(
         loss_cls=dict(
             type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0, num_views=num_views,
-            additional_loss='jsdv1_3_2aug', lambda_weight=0.1, wandb_name='rpn_cls'),
+            additional_loss='jsdv1_3', lambda_weight=0.1, wandb_name='rpn_cls'),
         loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
                        additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
@@ -45,7 +45,7 @@ model = dict(
             out_dim_cont=256,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
+                additional_loss='jsdv1_3', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
             loss_cont=dict(type='ContrastiveLossPlus', version='1.1', loss_weight=0.03, num_views=num_views,
