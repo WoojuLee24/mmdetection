@@ -75,8 +75,8 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'img2', # 'img3',
-                               'gt_bboxes', 'gt_bboxes2', # 'gt_bboxes3',
+    dict(type='Collect', keys=['img', 'img2', 'img3',
+                               'gt_bboxes', 'gt_bboxes2', 'gt_bboxes3',
                                'gt_labels']),
 ]
 data = dict(
