@@ -169,10 +169,30 @@ def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, r
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
+def random_bboxes_only_shear_x(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, shear_x, level=level, img_size=img_size, return_bbox=False, **kwargs)
+
+
+def random_bboxes_only_shear_y(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, shear_y, level=level, img_size=img_size, return_bbox=False, **kwargs)
+
+
 def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
+
+
+def random_bboxes_only_translate_x(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, translate_x, level=level, img_size=img_size, return_bbox=False, **kwargs)
+
+
+def random_bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
+    random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, translate_y, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
@@ -338,7 +358,8 @@ def get_aug_list(version):
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7', '1.5.1.1', '1.5.7.1',
+    elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7',
+                     '1.5.1.1', '1.5.7.1', '1.5.1.2',
                      '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
@@ -367,6 +388,43 @@ def get_aug_list(version):
         ]
         aug_list = dict(policies=[policy1, policy2, policy3])
         if version in ['1.9.1']:
+            aug_list['return_bbox_list'] = [True, False, False]
+        return aug_list
+    elif version in ['1.10', '1.10.1']:
+        policy1 = [
+            autocontrast, equalize, posterize, solarize,
+            bboxes_only_rotate, bboxes_only_shear_x, bboxes_only_shear_y,
+            bboxes_only_translate_x, bboxes_only_translate_y]
+        policy2 = [
+            autocontrast, equalize, posterize, solarize,
+            bg_only_rotate, bg_only_shear_x, bg_only_shear_y,
+            bg_only_translate_x, bg_only_translate_y
+        ]
+        policy3 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_x, random_bboxes_only_shear_y,
+            random_bboxes_only_translate_x, random_bboxes_only_translate_y
+        ]
+        aug_list = dict(policies=[policy1, policy2, policy3])
+        if version in ['1.10.1']:
+            aug_list['return_bbox_list'] = [True, False, False]
+        return aug_list
+    elif version in ['1.11']:
+        policy1 = [
+            autocontrast, equalize, posterize, solarize,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
+        policy2 = [
+            autocontrast, equalize, posterize, solarize,
+            bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        policy3 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        aug_list = dict(policies=[policy1, policy2, policy3])
+        if version in ['1.11.1']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
     else:
