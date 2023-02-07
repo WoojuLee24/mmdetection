@@ -425,7 +425,7 @@ def get_aug_list(version):
         ]
         aug_list = dict(policies=[policy1, policy2, policy3])
         if version in ['1.11.1']:
-            aug_list['return_bbox_list'] = [True, False, False]
+            aug_list['return_bbox_list'] = [True, True, True]
         return aug_list
     else:
         raise NotImplementedError
