@@ -409,6 +409,24 @@ def get_aug_list(version):
         if version in ['1.10.1']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
+    elif version in ['1.11']:
+        policy1 = [
+            autocontrast, equalize, posterize, solarize,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
+        policy2 = [
+            autocontrast, equalize, posterize, solarize,
+            bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        policy3 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        aug_list = dict(policies=[policy1, policy2, policy3])
+        if version in ['1.11.1']:
+            aug_list['return_bbox_list'] = [True, False, False]
+        return aug_list
     else:
         raise NotImplementedError
 
