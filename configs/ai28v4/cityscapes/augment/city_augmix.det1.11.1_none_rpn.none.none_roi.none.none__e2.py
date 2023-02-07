@@ -48,7 +48,7 @@ train_pipeline = [
     dict(type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMixDetection', num_views=1, version='1.10',
+    dict(type='AugMixDetection', num_views=1, version='1.11.1',
          aug_severity=3, mixture_depth=-1, **img_norm_cfg,
          fillmode='img',
          scales=(0.01, 0.2), ratios=(0.3, 1/0.3), num_bboxes=(3, 10)),
@@ -88,7 +88,7 @@ custom_hooks = [
 ]
 
 train_version = 'v4'
-pipeline = 'augmix.det1.10'
+pipeline = 'augmix.det1.11.1'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'

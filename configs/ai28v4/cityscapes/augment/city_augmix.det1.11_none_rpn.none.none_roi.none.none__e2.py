@@ -88,7 +88,7 @@ custom_hooks = [
 ]
 
 train_version = 'v4'
-pipeline = 'augmix.det1.11`'
+pipeline = 'augmix.det1.11'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
