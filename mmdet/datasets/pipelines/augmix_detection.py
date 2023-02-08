@@ -240,7 +240,7 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 
 # Background only augmentation
-def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, **kwargs):
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, radius=10, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -264,6 +264,8 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         bbox_content = Image.composite(fill_img, img, mask)
     elif fillmode == 'img':
         bbox_content = Image.composite(fill_img, img, expanded_mask)
+    elif fillmode == 'blur':
+        bbox_content = img
     else:
         raise TypeError
 
@@ -275,7 +277,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = Image.composite(img, augmented_bbox_content, mask)
-    elif fillmode == 'img':
+    elif fillmode == 'img' or fillmode == 'blur':
         outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
@@ -283,6 +285,9 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         else:
             (augmented_bbox_content, augmented_mask) = outputs
         maintained_mask = Image.composite(mask, augmented_mask, mask)
+
+        if fillmode == 'blur':
+            maintained_mask = maintained_mask.filter(ImageFilter.GaussianBlur(radius))
         img = Image.composite(img, augmented_bbox_content, maintained_mask)
 
     return img
