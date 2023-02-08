@@ -18,7 +18,7 @@ except ImportError:
     albumentations = None
     Compose = None
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, solarize, color,
                                              contrast, brightness, sharpness,
                                              rotate, shear_x, shear_y, translate_x, translate_y,)
@@ -26,7 +26,7 @@ from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, 
 
 # BBoxOnlyAugmentation
 # REF: https://github.com/poodarchu/learn_aug_for_object_detection.numpy/
-def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, return_bbox=False, **kwargs):
+def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, return_bbox=False, radius=10, **kwargs):
     '''
     Args:
         img     : (np.array) (img_width, img_height, channel)
@@ -48,6 +48,11 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         mask = img[y1:y2 + 1, x1:x2 + 1, :]
         center = ((x1 + x2) / 2., (y1 + y2) / 2.)
         kwargs['img_size_for_level'] = Image.fromarray(mask).size
+    elif fillmode == 'blur':
+        bbox_content = img
+        mask = img[y1:y2 + 1, x1:x2 + 1, :]
+        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
+        kwargs['img_size_for_level'] = Image.fromarray(mask).size
     else:
         raise TypeError
 
@@ -65,21 +70,27 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
     pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
-    if fillcolor is None:
+    if (fillcolor is None) and (fillmode != 'blur'):
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=0)
+    elif fillmode == 'blur':
+        pass
     else:
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fillcolor[0])
 
     mask = np.zeros_like(mask)
     mask = np.pad(mask, pad_width, 'constant', constant_values=1)
+    if fillmode == 'blur':
+        mask = Image.fromarray(mask*255)
+        mask = mask.filter(ImageFilter.GaussianBlur(radius))
+        mask = np.asarray(mask) / 255
 
     # Overwrite augmented_bbox_content into img
-    img = img * mask + augmented_bbox_content * (mask==0)
+    img = img * mask + augmented_bbox_content * (1-mask)
 
     if return_bbox:
-        return img, augmented_gt_bbox
+        return np.asarray(img, dtype=np.uint8), augmented_gt_bbox
     else:
-        return img
+        return np.asarray(img, dtype=np.uint8)
 
 
 def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False, **kwargs):
@@ -360,6 +371,7 @@ def get_aug_list(version):
         return aug_list
     elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7',
                      '1.5.1.1', '1.5.7.1', '1.5.1.2', '1.5.1.3',
+                     '1.5.1.2.1',
                      '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
