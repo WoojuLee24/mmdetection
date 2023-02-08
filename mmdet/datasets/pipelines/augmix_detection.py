@@ -229,7 +229,7 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 
 # Background only augmentation
-def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, **kwargs):
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -265,7 +265,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = Image.composite(img, augmented_bbox_content, mask)
     elif fillmode == 'img':
-        outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor, mask=mask)
+        outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
