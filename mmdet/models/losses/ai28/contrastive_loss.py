@@ -642,7 +642,7 @@ def supcontrastv1_0(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor: same target
         mask_anchor_except_eye: same target except self-case
         mask_anchor_fg: same fg target except self-case
-        mask_contrast_except_eye:
+        mask_contrast_except_eye: all except self-case
 
         v1.0
 
@@ -701,7 +701,7 @@ def supcontrastv1_1(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor: same target
         mask_anchor_except_eye: same target except self-case
         mask_anchor_fg: same fg target except self-case
-        mask_contrast_except_eye:
+        mask_contrast_except_eye: all except self-case
 
         v1.1
 
@@ -760,7 +760,7 @@ def supcontrastv1_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor: same target
         mask_anchor_except_eye: same target except self-case
         mask_anchor_fg: same fg target except self-case
-        mask_contrast_except_eye:
+        mask_contrast_except_eye: only fg (mask_fg) except self-case.
 
         v0.1
 
@@ -794,7 +794,7 @@ def supcontrastv1_2(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor_fg_np = mask_anchor_fg.detach().cpu().numpy()
         mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
         # mask_contrast_except_eye = mask_contrast - mask_eye
-        mask_contrast_except_eye = mask_contrast - mask_eye
+        mask_contrast_except_eye = (mask_contrast - mask_eye) * mask_fg
         mask_contrast_except_eye = mask_contrast_except_eye.detach()
         mask_contrast_except_eye_np = mask_contrast_except_eye.detach().cpu().numpy()
 
