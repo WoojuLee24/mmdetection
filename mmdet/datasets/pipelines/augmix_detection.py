@@ -229,7 +229,7 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 
 # Background only augmentation
-def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, **kwargs):
+def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -265,7 +265,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = Image.composite(img, augmented_bbox_content, mask)
     elif fillmode == 'img':
-        outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor, mask=mask)
+        outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
@@ -359,7 +359,7 @@ def get_aug_list(version):
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
     elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7',
-                     '1.5.1.1', '1.5.7.1', '1.5.1.2',
+                     '1.5.1.1', '1.5.7.1', '1.5.1.2', '1.5.1.3',
                      '1.8', '1.8.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,  # random_bboxes only transformation
@@ -374,7 +374,7 @@ def get_aug_list(version):
                     random_gt_only_rotate, random_gt_only_shear_xy, random_gt_only_translate_xy, # random bboxes and gt bboxes only transformation
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy]  # bg only transformation
         return aug_list
-    elif version in ['1.9', '1.9.1']:
+    elif version in ['1.9', '1.9.1', '1.9.2']:
         policy1 = [
             autocontrast, equalize, posterize, solarize,
             bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
@@ -387,7 +387,7 @@ def get_aug_list(version):
             random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
         ]
         aug_list = dict(policies=[policy1, policy2, policy3])
-        if version in ['1.9.1']:
+        if version in ['1.9.1', '1.9.2']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
     elif version in ['1.10', '1.10.1']:
@@ -409,7 +409,7 @@ def get_aug_list(version):
         if version in ['1.10.1']:
             aug_list['return_bbox_list'] = [True, False, False]
         return aug_list
-    elif version in ['1.11', '1.11.1']:
+    elif version in ['1.11', '1.11.1', '1.11.2', '1.11.3']:
         policy1 = [
             autocontrast, equalize, posterize, solarize,
             bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
@@ -424,8 +424,24 @@ def get_aug_list(version):
             bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
         ]
         aug_list = dict(policies=[policy1, policy2, policy3])
-        if version in ['1.11.1']:
+        if version in ['1.11.1', '1.11.3']:
             aug_list['return_bbox_list'] = [True, True, True]
+        return aug_list
+    elif version in ['1.12']:
+        policy1 = [
+            autocontrast, equalize, posterize, solarize,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]
+        policy2 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        policy3 = [
+            autocontrast, equalize, posterize, solarize,
+            random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy,
+            bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy
+        ]
+        aug_list = dict(policies=[policy1, policy2, policy3])
         return aug_list
     else:
         raise NotImplementedError
