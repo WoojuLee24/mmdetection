@@ -19,6 +19,7 @@ from .transforms import (Albu, CutOut, Expand, MinIoURandomCrop, MixUp, Mosaic,
                          RandomShift, Resize, SegRescale, YOLOXHSVRandomAug)
 from .pixmix import PixMix
 from .augmix_detection import AugMixDetection
+from .augmix_detection_faster import AugMixDetectionFaster
 from .color import Color
 from .auto_aug_det import AutoAugDet
 
@@ -34,5 +35,5 @@ __all__ = [
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
     'RandomAffine', 'YOLOXHSVRandomAug', 'PixMix',
     # 'GenAutoAugment', 'RandAutoAugment',
-    'AutoAugment', 'AugMixDetection', 'Color', 'AutoAugDet',
+    'AutoAugment', 'AugMixDetection', 'Color', 'AutoAugDet', 'AugMixDetectionFaster'
 ]
