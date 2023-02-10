@@ -271,15 +271,16 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         raise TypeError
 
     # Augment
+    bbox_content = Image.fromarray(bbox_content)
     kwargs['img_size'] = bbox_content.size
 
     # Overwrite augmented_bbox_content into img
     if fillmode is None:
-        outputs = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor)
+        outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = (mask/255) * img + (1.0 - mask/255) * augmented_bbox_content
     elif fillmode == 'img' or fillmode == 'blur':
-        outputs = aug_func(Image.fromarray(bbox_content), return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
+        outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
