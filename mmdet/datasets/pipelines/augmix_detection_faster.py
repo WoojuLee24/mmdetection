@@ -280,7 +280,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = (mask/255) * img + (1.0 - mask/255) * augmented_bbox_content
     elif fillmode == 'img' or fillmode == 'blur':
-        outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=mask)
+        outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=Image.fromarray(mask))
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
