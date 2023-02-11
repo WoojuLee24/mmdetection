@@ -289,10 +289,10 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         maintained_mask = (mask/255) * mask + (1 - mask/255) * augmented_mask
 
         if fillmode == 'blur':
-            maintained_mask = cv2.GaussianBlur(mask, (0,0), 10)
+            maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), 10)
         img = (maintained_mask/255) * img + (1 - maintained_mask/255) * augmented_bbox_content
 
-    return img
+    return np.asarray(img, dtype=np.uint8)
 
 
 def bg_only_rotate(pil_img, bboxes_xy, level, img_size, **kwargs):
