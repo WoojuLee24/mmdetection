@@ -82,7 +82,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
     mask = np.zeros_like(mask)
     mask = np.pad(mask, pad_width, 'constant', constant_values=1)
     if fillmode == 'blur':
-        mask = cv2.GaussianBlur(mask * 255, (0, 0), 10) / 255
+        mask = cv2.GaussianBlur(mask * 255, (0, 0), radius) / 255
 
     # Overwrite augmented_bbox_content into img
     img = img * mask + augmented_bbox_content * (1-mask)
@@ -289,7 +289,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         maintained_mask = (mask/255) * mask + (1 - mask/255) * augmented_mask
 
         if fillmode == 'blur':
-            maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), 10)
+            maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), radius)
         img = (maintained_mask/255) * img + (1 - maintained_mask/255) * augmented_bbox_content
 
     return np.asarray(img, dtype=np.uint8)
