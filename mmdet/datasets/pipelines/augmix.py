@@ -288,7 +288,13 @@ class AugMix:
             depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 4)
             for _ in range(depth):
                 op = np.random.choice(self.aug_list)
-                image_aug = op(image_aug, level=self.aug_severity, img_size=img_size)
+                outputs = op(image_aug, level=self.aug_severity, img_size=img_size)
+                if isinstance(outputs, dict):
+                    image_aug = outputs['img']
+                elif isinstance(outputs, tuple):
+                    images_aug = outputs[0]
+                else:
+                    images_aug = outputs
             # Preprocessing commutes since all coefficients are convex
             image_aug = np.asarray(image_aug, dtype=np.float32)
             mix += ws[i] * image_aug
