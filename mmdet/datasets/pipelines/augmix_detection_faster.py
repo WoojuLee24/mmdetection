@@ -290,7 +290,6 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
 
     # Make the union of bboxes
     mask = np.zeros_like(img)
-    blur_mask = np.zeros_like(img)
     fill_img = np.zeros_like(img, dtype=np.uint8)
     fill_img[:] = fillcolor
     expanded_mask = np.zeros_like(img)
@@ -305,10 +304,10 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
             resize_w, resize_h = x2 - x1 + m_x * 2, y2 - y1 + m_y * 2
             resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
             resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
-            before_blur_mask = blur_mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :]
+            before_blur_mask = mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :]
             resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
-            blur_mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
-            mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
+            mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
+            # mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
             expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
         else:
             mask[y1:y2+1, x1:x2+1, :] = 255
@@ -339,11 +338,13 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
             augmented_mask = outputs['mask']
         else:
             (augmented_bbox_content, augmented_mask) = outputs
-        maintained_mask = (mask/255) * mask + (1 - mask/255) * augmented_mask
+        # maintained_mask = (mask/255) * mask + (1 - mask/255) * augmented_mask
+        maintained_mask = (mask / 255) * mask + (1 - mask / 255) * augmented_mask
 
         if fillmode in ['blur', 'blur_margin']:
             # maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), radius)
-            maintained_mask = blur_mask
+            # maintained_mask = blur_mask
+            pass
         img = (maintained_mask/255) * img + (1 - maintained_mask/255) * augmented_bbox_content
 
     return np.asarray(img, dtype=np.uint8)
