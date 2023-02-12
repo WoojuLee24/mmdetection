@@ -78,6 +78,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
         resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
         blur_mask = np.zeros_like(img)
+        resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
         blur_mask[max(0, y1 - m_y): min(img_height, y2 + m_y), max(0, x1 - m_x): min(img_width, x2 + m_x), :] = resized_blur_box
 
         bbox_content = img
@@ -300,11 +301,12 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
             gaussian_box = kwargs['gaussian_box']
             if (x2-x1) < 1 or (y2-y1) < 1:
                 continue
-            m_x ,m_y = int((x2-x1)*radius_ratio), int((y2-y1)*radius_ratio)
+            m_x, m_y = int((x2-x1)*radius_ratio), int((y2-y1)*radius_ratio)
             resize_w, resize_h = x2 - x1 + m_x * 2, y2 - y1 + m_y * 2
             resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
             resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
             before_blur_mask = blur_mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :]
+            resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
             blur_mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
             mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
             expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
