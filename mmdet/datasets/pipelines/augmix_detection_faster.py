@@ -559,7 +559,7 @@ class AugMixDetectionFaster:
         self.return_bbox = return_bbox
         self.kwargs = kwargs
 
-        img_size, mask_size = 400, 300
+        img_size, mask_size = 240, 180
         mask = np.zeros((img_size, img_size, 3))
         mask[img_size//2 - mask_size//2: img_size//2 + mask_size//2, img_size//2 - mask_size//2: img_size//2 + mask_size//2, :] = 255
         radius_ratio = kwargs['radius_ratio'] if 'radius_ratio' in kwargs else 1/6
