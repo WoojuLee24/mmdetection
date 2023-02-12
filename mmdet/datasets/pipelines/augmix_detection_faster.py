@@ -78,7 +78,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
         resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
         blur_mask = np.zeros_like(img)
-        resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
+        resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(img_height + m_y - y1, resize_h), max(m_x - x1, 0):min(img_width + m_x - x1, resize_w), :]
         blur_mask[max(0, y1 - m_y): min(img_height, y2 + m_y), max(0, x1 - m_x): min(img_width, x2 + m_x), :] = resized_blur_box
 
         bbox_content = img
