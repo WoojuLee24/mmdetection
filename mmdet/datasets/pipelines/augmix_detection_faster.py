@@ -46,50 +46,25 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         return (np.asarray(img, dtype=np.uint8), bbox_xy) if return_bbox \
             else np.asarray(img, dtype=np.uint8)
 
+    # bbox_content
     if fillmode is None:
-        bbox_content = img[y1:y2+1, x1:x2+1, :]
-        mask = img[y1:y2+1, x1:x2+1, :]
-        center = None
-    elif fillmode == 'img':
+        bbox_content = img[y1:y2 + 1, x1:x2 + 1, :]
+        kwargs['img_size'] = (x2-x1+1, y2-y1+1)
+    elif fillmode in ['img', 'blur', 'box_blur', 'box_blur_margin']:
         bbox_content = img
-        mask = img[y1:y2 + 1, x1:x2 + 1, :]
-        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
-        kwargs['img_size_for_level'] = Image.fromarray(mask).size
-    elif fillmode in ['blur', 'box_blur']:
-        bbox_content = img
-        mask = img[y1:y2 + 1, x1:x2 + 1, :]
-        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
-        kwargs['img_size_for_level'] = Image.fromarray(mask).size
-    elif fillmode == 'box_blur_margin':
-        bbox_content = img
-        m = int(3*radius/2)
-        mask = np.zeros_like(img)
-        mask[y1+m:y2-m+1, x1+m:x2-m+1, :] = 255
-        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
-        kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
-    elif fillmode == 'blur_margin':
-        gaussian_box = kwargs['gaussian_box']
-        box_width, box_height = (x2-x1), (y2-y1)
-        m_x, m_y = int(box_width * radius_ratio), int(box_height * radius_ratio)
-        resize_w, resize_h = box_width + m_x * 2, box_height + m_y * 2
-        resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
-        resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
-        blur_mask = np.zeros_like(img)
-        resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(img_height + m_y - y1, resize_h), max(m_x - x1, 0):min(img_width + m_x - x1, resize_w), :]
-        blur_mask[max(0, y1 - m_y): min(img_height, y2 + m_y), max(0, x1 - m_x): min(img_width, x2 + m_x), :] = resized_blur_box
-
-        bbox_content = img
-        mask = np.zeros_like(img)
-        mask[y1+m_y:y2-m_y + 1, x1+m_x:x2-m_x + 1, :] = 255
-        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
-        kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
+        kwargs['img_size'] = (img_width, img_height)
     else:
         raise TypeError
 
+    center = None
+    if fillmode in ['img', 'box_blur_margin', 'blur_margin', 'blur']:
+        center = ((x1 + x2) / 2., (y1 + y2) / 2.)
+        kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
+
     # Augment
-    kwargs['img_size'] = Image.fromarray(bbox_content).size
     outputs = aug_func(Image.fromarray(bbox_content), **kwargs, fillcolor=fillcolor, center=center,
                        bbox_xy=bbox_xy, return_bbox=return_bbox)
+
     if isinstance(outputs, dict):
         augmented_bbox_content = np.asarray(outputs['img'])
         augmented_gt_bbox = outputs['gt_bbox'] if 'gt_bbox' in outputs else bbox_xy
@@ -99,34 +74,29 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = augmented_bbox_content[y1:y2+1, x1:x2+1, :]
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
-    pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
     if not fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin']:
+        pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
         fill_value = 0 if fillcolor is None else fillcolor[0]
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fill_value)
 
-    if not fillmode in ['blur_margin', 'box_blur_margin']:
-        mask = np.zeros_like(mask)
-        mask = np.pad(mask, pad_width, 'constant', constant_values=1)
+    # get mask
+    m = int(3*radius/2) if fillmode in ['box_blur_margin', 'blur_margin'] else 0
+    mask = np.zeros_like(img)
+    mask[y1 + m: y2 - m + 1, x1 + m:x2 - m + 1, :] = 255
 
+    # Blur
     if fillmode == 'blur':
-        mask = cv2.GaussianBlur(mask * 255, (0, 0), radius) / 255
-    elif fillmode == 'box_blur':
-        mask = mask * 255
-        k = int(np.sqrt(12*radius**2/times+1))
-        for i in range(times):
-            mask = cv2.blur(mask, (k, k))
-        mask = mask / 255
-    elif fillmode == 'blur_margin':
-        mask = 1 - (blur_mask/255)
-    elif fillmode == 'box_blur_margin':
-        # mask = mask * 255
+        mask = cv2.GaussianBlur(mask, (0, 0), radius)
+    elif fillmode in ['box_blur', 'box_blur_margin']:
         k = int(np.sqrt(12 * radius ** 2 / times + 1))
         for i in range(times):
             mask = cv2.blur(mask, (k, k))
-        mask = 1 - (mask / 255)
+        mask = 255 - mask
+    elif fillmode == 'blur_margin':
+        raise NotImplementedError
 
     # Overwrite augmented_bbox_content into img
-    img = img * mask + augmented_bbox_content * (1-mask)
+    img = img * (mask/255) + augmented_bbox_content * (1-mask/255)
 
     if return_bbox:
         return np.asarray(img, dtype=np.uint8), augmented_gt_bbox
@@ -439,7 +409,7 @@ def get_aug_list(version):
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
     elif version in ['1.4', '1.4.1', '1.4.2', '1.4.3', '1.4.4',
-                     '1.4.4.1', '1.4.4.2', '1.4.4.3']:
+                     '1.4.4.1', '1.4.4.2', '1.4.4.3', '1.4.4.1.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
@@ -578,12 +548,6 @@ class AugMixDetectionFaster:
         self.return_bbox = return_bbox
         self.kwargs = kwargs
 
-        img_size, mask_size = 240, 180
-        mask = np.zeros((img_size, img_size, 3))
-        mask[img_size//2 - mask_size//2: img_size//2 + mask_size//2, img_size//2 - mask_size//2: img_size//2 + mask_size//2, :] = 255
-        radius_ratio = kwargs['radius_ratio'] if 'radius_ratio' in kwargs else 1/6
-        sigma = mask_size * radius_ratio / 3
-        self.kwargs['gaussian_box'] = cv2.GaussianBlur(mask, (0, 0), sigma)
 
     def __call__(self, results, *args, **kwargs):
         if self.num_views == 1:
