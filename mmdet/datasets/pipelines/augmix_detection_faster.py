@@ -50,14 +50,14 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
     if fillmode is None:
         bbox_content = img[y1:y2 + 1, x1:x2 + 1, :]
         kwargs['img_size'] = (x2-x1+1, y2-y1+1)
-    elif fillmode in ['img', 'blur', 'box_blur', 'box_blur_margin']:
+    elif fillmode in ['img', 'blur', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
         bbox_content = img
         kwargs['img_size'] = (img_width, img_height)
     else:
         raise TypeError
 
     center = None
-    if fillmode in ['img', 'box_blur_margin', 'blur_margin', 'blur']:
+    if fillmode in ['img', 'box_blur_margin', 'blur_margin', 'blur', 'gaussian_blur_margin']:
         center = ((x1 + x2) / 2., (y1 + y2) / 2.)
         kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
 
@@ -74,19 +74,21 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = augmented_bbox_content[y1:y2+1, x1:x2+1, :]
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
-    if not fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin']:
+    if not fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
         pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
         fill_value = 0 if fillcolor is None else fillcolor[0]
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fill_value)
 
     # get mask
-    m = int(3*radius/2) if fillmode in ['box_blur_margin', 'blur_margin'] else 0
+    m = int(3*radius/2) if fillmode in ['box_blur_margin', 'blur_margin', 'gaussian_blur_margin'] else 0
     mask = np.zeros_like(img)
     mask[y1 + m: y2 - m + 1, x1 + m:x2 - m + 1, :] = 255
 
     # Blur
-    if fillmode == 'blur':
+    if fillmode in ['blur', 'gaussian_blur_margin']:
         mask = cv2.GaussianBlur(mask, (0, 0), radius)
+        if fillmode == 'gaussian_blur_margin':
+            mask = 255 - mask
     elif fillmode in ['box_blur', 'box_blur_margin']:
         k = int(np.sqrt(12 * radius ** 2 / times + 1))
         for i in range(times):
@@ -262,11 +264,11 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
     if not isinstance(img, np.ndarray):
         img = np.asarray(img)
 
-    if fillmode in ['blur_margin', 'box_blur_margin']:
+    if fillmode in ['blur_margin', 'box_blur_margin', 'gaussian_blur_margin']:
         h, w = img.shape[0], img.shape[1]
         if fillmode == 'blur_margin':
             m = int(radius * bg_margin / 2)
-        elif fillmode == 'box_blur_margin':
+        elif fillmode in ['box_blur_margin', 'gaussian_blur_margin']:
             m = int(3 * radius / 2)
 
     # Make the union of bboxes
@@ -290,7 +292,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
             mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
             # mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
             expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
-        elif fillmode == 'box_blur_margin':
+        elif fillmode in ['box_blur_margin', 'gaussian_blur_margin']:
             if (x2 - x1) < 1 or (y2 - y1) < 1:
                 continue
             mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
@@ -303,7 +305,7 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         bbox_content = (mask / 255) * fill_img + (1.0 - mask / 255) * img
     elif fillmode == 'img':
         bbox_content = (expanded_mask / 255) * fill_img + (1.0 - expanded_mask / 255) * img
-    elif fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin']:
+    elif fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
         bbox_content = img
     else:
         raise TypeError
@@ -317,17 +319,16 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = (mask/255) * img + (1.0 - mask/255) * augmented_bbox_content
-    elif fillmode in ['img', 'blur', 'blur_margin', 'box_blur', 'box_blur_margin']:
+    elif fillmode in ['img', 'blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
         outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=Image.fromarray(mask))
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
         else:
             (augmented_bbox_content, augmented_mask) = outputs
-        # maintained_mask = (mask/255) * mask + (1 - mask/255) * augmented_mask
         maintained_mask = (mask / 255) * mask + (1 - mask / 255) * augmented_mask
 
-        if fillmode in ['blur', 'blur_margin']:
+        if fillmode in ['blur', 'blur_margin', 'gaussian_blur_margin']:
             maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), radius)
         elif fillmode in ['box_blur', 'box_blur_margin']:
             k = int(np.sqrt(12*radius**2/times+1))
@@ -409,7 +410,7 @@ def get_aug_list(version):
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
     elif version in ['1.4', '1.4.1', '1.4.2', '1.4.3', '1.4.4',
-                     '1.4.4.1', '1.4.4.2', '1.4.4.3', '1.4.4.1.1']:
+                     '1.4.4.1', '1.4.4.2', '1.4.4.3', '1.4.4.1.1', '1.4.4.1.2']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
