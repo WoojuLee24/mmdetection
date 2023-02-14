@@ -57,7 +57,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         raise TypeError
 
     center = None
-    if fillmode in ['img', 'box_blur_margin', 'blur_margin', 'blur', 'gaussian_blur_margin']:
+    if fillmode in ['img', 'box_blur', 'box_blur_margin', 'blur_margin', 'blur', 'gaussian_blur_margin']:
         center = ((x1 + x2) / 2., (y1 + y2) / 2.)
         kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
 
@@ -254,7 +254,7 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 # Background only augmentation
 def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, radius=10,
-                                radius_ratio=None, bg_margin=3, times=3, **kwargs):
+                                radius_ratio=None, bg_margin=3, times=3, margin_bg=False, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -263,6 +263,13 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
     '''
     if not isinstance(img, np.ndarray):
         img = np.asarray(img)
+    if margin_bg:
+        if fillmode in ['blur_margin', 'box_blur_margin', 'gaussian_blur_margin']:
+            pass
+        elif fillmode in ['blur', 'box_blur', 'gaussian_blur']:
+            fillmode = f"{fillmode}_margin"
+        else:
+            raise ValueError
 
     if fillmode in ['blur_margin', 'box_blur_margin', 'gaussian_blur_margin']:
         h, w = img.shape[0], img.shape[1]
@@ -415,7 +422,8 @@ def get_aug_list(version):
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3']:
+    elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3',
+                     '1.4.5.1.4']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
