@@ -29,7 +29,7 @@ from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, 
 # BBoxOnlyAugmentation
 # REF: https://github.com/poodarchu/learn_aug_for_object_detection.numpy/
 def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcolor=None, return_bbox=False, radius=10,
-                                  radius_ratio=None, margin=3, times=3, **kwargs):
+                                  radius_ratio=None, margin=3, sigma_ratio=None, times=3, blur_bbox=None, **kwargs):
     '''
     Args:
         img     : (np.array) (img_width, img_height, channel)
@@ -50,14 +50,14 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
     if fillmode is None:
         bbox_content = img[y1:y2 + 1, x1:x2 + 1, :]
         kwargs['img_size'] = (x2-x1+1, y2-y1+1)
-    elif fillmode in ['img', 'blur', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
+    elif fillmode in ['img', 'blur', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin', 'var_blur']:
         bbox_content = img
         kwargs['img_size'] = (img_width, img_height)
     else:
         raise TypeError
 
     center = None
-    if fillmode in ['img', 'box_blur', 'box_blur_margin', 'blur_margin', 'blur', 'gaussian_blur_margin']:
+    if fillmode in ['img', 'box_blur', 'box_blur_margin', 'blur_margin', 'blur', 'gaussian_blur_margin', 'var_blur']:
         center = ((x1 + x2) / 2., (y1 + y2) / 2.)
         kwargs['img_size_for_level'] = (x2-x1+1, y2-y1+1)
 
@@ -74,28 +74,36 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         augmented_bbox_content = augmented_bbox_content[y1:y2+1, x1:x2+1, :]
 
     # Pad with pad_width: [[before_1, after_1], [before_2, after_2], ..., [before_N, after_N]]
-    if not fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
+    if not fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin', 'var_blur']:
         pad_width = [[y1, max(0, img_height - y2 - 1)], [x1, max(0, img_width - x2 - 1)], [0, 0]]
         fill_value = 0 if fillcolor is None else fillcolor[0]
         augmented_bbox_content = np.pad(augmented_bbox_content, pad_width, 'constant', constant_values=fill_value)
 
     # get mask
-    m = int(3*radius/2) if fillmode in ['box_blur_margin', 'blur_margin', 'gaussian_blur_margin'] else 0
-    mask = np.zeros_like(img)
-    mask[y1 + m: y2 - m + 1, x1 + m:x2 - m + 1, :] = 255
+    if blur_bbox is None:
+        m = int(3*radius/2) if fillmode in ['box_blur_margin', 'blur_margin', 'gaussian_blur_margin'] else 0
+        mask = np.zeros_like(img)
+        mask[y1 + m: y2 - m + 1, x1 + m:x2 - m + 1, :] = 255
 
-    # Blur
-    if fillmode in ['blur', 'gaussian_blur_margin']:
-        mask = cv2.GaussianBlur(mask, (0, 0), radius)
-        if fillmode == 'gaussian_blur_margin':
+        # Blur
+        if fillmode in ['blur', 'gaussian_blur_margin', 'var_blur']:
+            if fillmode == 'var_blur':
+                sigma_x, sigma_y = (x2 - x1) * sigma_ratio / 3 * 2, (y2 - y1) * sigma_ratio / 3 * 2
+                mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
+                mask = 255 - mask
+            else:
+                mask = cv2.GaussianBlur(mask, (0, 0), radius)
+            if fillmode == 'gaussian_blur_margin':
+                mask = 255 - mask
+        elif fillmode in ['box_blur', 'box_blur_margin']:
+            k = int(np.sqrt(12 * radius ** 2 / times + 1))
+            for i in range(times):
+                mask = cv2.blur(mask, (k, k))
             mask = 255 - mask
-    elif fillmode in ['box_blur', 'box_blur_margin']:
-        k = int(np.sqrt(12 * radius ** 2 / times + 1))
-        for i in range(times):
-            mask = cv2.blur(mask, (k, k))
-        mask = 255 - mask
-    elif fillmode == 'blur_margin':
-        raise NotImplementedError
+        elif fillmode == 'blur_margin':
+            raise NotImplementedError
+    else:
+        mask = 255 - blur_bbox
 
     # Overwrite augmented_bbox_content into img
     img = img * (mask/255) + augmented_bbox_content * (1-mask/255)
@@ -106,7 +114,7 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         return np.asarray(img, dtype=np.uint8)
 
 
-def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False, **kwargs):
+def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False, blur_bboxes=None, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -120,7 +128,8 @@ def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False,
         return Image.fromarray(img), new_bboxes_xy
     else:
         for i in range(len(bboxes_xy)):
-            img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, **kwargs)
+            blur_bbox = None if blur_bboxes == None else blur_bboxes[i]
+            img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, blur_bbox=blur_bbox, **kwargs)
         return Image.fromarray(img)
 
 
@@ -190,38 +199,52 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
 
 def random_bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, rotate, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_shear_x(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, shear_x, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_shear_y(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, shear_y, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_shear_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     func = bboxes_only_shear_x if np.random.rand() < 0.5 else bboxes_only_shear_y
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
 def random_bboxes_only_translate_x(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, translate_x, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_translate_y(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return _apply_bboxes_only_augmentation(pil_img, random_bboxes_xy, translate_y, level=level, img_size=img_size, return_bbox=False, **kwargs)
 
 
 def random_bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes, return_bbox=False, **kwargs):
     func = bboxes_only_translate_x if np.random.rand() < 0.5 else bboxes_only_translate_y
     random_bboxes_xy = generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy, return_bbox=False, **kwargs)
+    if 'blur_bboxes' in kwargs:
+        kwargs['blur_bboxes'] = None
     return func(pil_img, random_bboxes_xy, level, img_size, **kwargs)
 
 
@@ -254,7 +277,7 @@ def random_gt_only_translate_xy(pil_img, bboxes_xy, level, img_size, num_bboxes,
 
 # Background only augmentation
 def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcolor=0, return_bbox=False, radius=10,
-                                radius_ratio=None, bg_margin=3, times=3, margin_bg=False, **kwargs):
+                                radius_ratio=None, bg_margin=3, times=3, margin_bg=False, sigma_ratio=None, blur_bboxes=None, **kwargs):
     '''
     Args:
         img         : (np.array) (img_width, img_height, channel)
@@ -283,36 +306,40 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
     fill_img = np.zeros_like(img, dtype=np.uint8)
     fill_img[:] = fillcolor
     expanded_mask = np.zeros_like(img)
-    for i in range(len(bboxes_xy)):
-        bbox_xy = bboxes_xy[i]
-        x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
-        if fillmode == 'blur_margin':
-            gaussian_box = kwargs['gaussian_box']
-            if (x2-x1) < 1 or (y2-y1) < 1:
-                continue
-            m_x, m_y = int((x2-x1)*radius_ratio), int((y2-y1)*radius_ratio)
-            resize_w, resize_h = x2 - x1 + m_x * 2, y2 - y1 + m_y * 2
-            resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
-            resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
-            before_blur_mask = mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :]
-            resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
-            mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
-            # mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
-            expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
-        elif fillmode in ['box_blur_margin', 'gaussian_blur_margin']:
-            if (x2 - x1) < 1 or (y2 - y1) < 1:
-                continue
-            mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
-            expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
-        else:
-            mask[y1:y2+1, x1:x2+1, :] = 255
-            expanded_mask[y1:y2 + 1, x1:x2 + 1, :] = 255
+    if blur_bboxes is None:
+        for i in range(len(bboxes_xy)):
+            bbox_xy = bboxes_xy[i]
+            x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+            if fillmode == 'blur_margin':
+                gaussian_box = kwargs['gaussian_box']
+                if (x2-x1) < 1 or (y2-y1) < 1:
+                    continue
+                m_x, m_y = int((x2-x1)*radius_ratio), int((y2-y1)*radius_ratio)
+                resize_w, resize_h = x2 - x1 + m_x * 2, y2 - y1 + m_y * 2
+                resized_blur_box = cv2.resize(gaussian_box, (resize_w, resize_h), interpolation=cv2.INTER_LINEAR)
+                resized_blur_box = np.asarray(resized_blur_box, dtype=np.uint8)
+                before_blur_mask = mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :]
+                resized_blur_box = resized_blur_box[max(m_y - y1, 0):min(h + m_y - y1, resize_h), max(m_x - x1, 0):min(w + m_x - x1, resize_w), :]
+                mask[max(0, y1-m_y): min(h, y2+m_y), max(0, x1-m_x): min(w, x2+m_x), :] = np.maximum(before_blur_mask, resized_blur_box)
+                # mask[max(0, y1-m_y): min(h, y2+m_y+1), max(0, x1-m_x): min(w, x2+m_x+1), :] = 255
+                expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
+            elif fillmode in ['box_blur_margin', 'gaussian_blur_margin']:
+                if (x2 - x1) < 1 or (y2 - y1) < 1:
+                    continue
+                mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
+                expanded_mask[max(0, y1-m): min(h, y2+m+1), max(0, x1-m): min(w, x2+m+1), :] = 255
+            else:
+                mask[y1:y2+1, x1:x2+1, :] = 255
+                expanded_mask[y1:y2 + 1, x1:x2 + 1, :] = 255
+    else:
+        for i in range(len(blur_bboxes)):
+            mask = np.maximum(mask, blur_bboxes[i])
 
     if fillmode is None:
         bbox_content = (mask / 255) * fill_img + (1.0 - mask / 255) * img
     elif fillmode == 'img':
         bbox_content = (expanded_mask / 255) * fill_img + (1.0 - expanded_mask / 255) * img
-    elif fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
+    elif fillmode in ['blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin', 'var_blur']:
         bbox_content = img
     else:
         raise TypeError
@@ -326,21 +353,28 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
         outputs = aug_func(bbox_content, **kwargs, fillcolor=fillcolor)
         augmented_bbox_content = outputs['img'] if isinstance(outputs, dict) else outputs
         img = (mask/255) * img + (1.0 - mask/255) * augmented_bbox_content
-    elif fillmode in ['img', 'blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin']:
+    elif fillmode in ['img', 'blur', 'blur_margin', 'box_blur', 'box_blur_margin', 'gaussian_blur_margin', 'var_blur']:
         outputs = aug_func(bbox_content, return_bbox=False, **kwargs, fillcolor=fillcolor, mask=Image.fromarray(mask))
         if isinstance(outputs, dict):
             augmented_bbox_content = outputs['img']
             augmented_mask = outputs['mask']
         else:
             (augmented_bbox_content, augmented_mask) = outputs
-        maintained_mask = (mask / 255) * mask + (1 - mask / 255) * augmented_mask
+        if fillmode == 'var_blur':
+            maintained_mask = np.maximum(mask, augmented_mask)
+        else:
+            maintained_mask = (mask / 255) * mask + (1 - mask / 255) * augmented_mask
 
-        if fillmode in ['blur', 'blur_margin', 'gaussian_blur_margin']:
-            maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), radius)
-        elif fillmode in ['box_blur', 'box_blur_margin']:
-            k = int(np.sqrt(12*radius**2/times+1))
-            for i in range(times):
-                maintained_mask = cv2.blur(maintained_mask, (k, k))
+        if blur_bboxes is None:
+            if fillmode in ['blur', 'blur_margin', 'gaussian_blur_margin', 'var_blur']:
+                if fillmode == 'var_blur':
+                    maintained_mask = cv2.GaussianBlur(maintained_mask, (0, 0), sigma)
+                else:
+                    maintained_mask = cv2.GaussianBlur(maintained_mask, (0,0), radius)
+            elif fillmode in ['box_blur', 'box_blur_margin']:
+                k = int(np.sqrt(12*radius**2/times+1))
+                for i in range(times):
+                    maintained_mask = cv2.blur(maintained_mask, (k, k))
         img = (maintained_mask/255) * img + (1 - maintained_mask/255) * augmented_bbox_content
 
     return np.asarray(img, dtype=np.uint8)
@@ -417,13 +451,14 @@ def get_aug_list(version):
                     bboxes_only_translate_x, bboxes_only_translate_y] # bbox only transformation
         return aug_list
     elif version in ['1.4', '1.4.1', '1.4.2', '1.4.3', '1.4.4',
-                     '1.4.4.1', '1.4.4.2', '1.4.4.3', '1.4.4.1.1', '1.4.4.1.2']:
+                     '1.4.4.1', '1.4.4.2', '1.4.4.3', '1.4.4.1.1', '1.4.4.1.2',
+                     '2.1']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
-    elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3',
-                     '1.4.5.1.4']:
+    elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3', '1.4.5.1.4',
+                     '2.2']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
@@ -539,6 +574,7 @@ class AugMixDetectionFaster:
                  geo_severity=None,
                  to_rgb=True,
                  return_bbox=False,
+                 pre_blur=False,
                  **kwargs):
         super(AugMixDetectionFaster, self).__init__()
         self.mixture_width = 3
@@ -555,6 +591,7 @@ class AugMixDetectionFaster:
 
         self.geo_severity = geo_severity
         self.return_bbox = return_bbox
+        self.pre_blur = pre_blur
         self.kwargs = kwargs
 
 
@@ -564,7 +601,7 @@ class AugMixDetectionFaster:
                 return_bbox_list = self.aug_list['return_bbox_list'] if 'return_bbox_list' in self.aug_list else [False] * len(self.aug_list['policies'])
                 outputs = self.aug_and_mix_with_policy(results['img'], results['gt_bboxes'], return_bbox_list=return_bbox_list)
             else:
-                outputs = self.aug_and_mix(results['img'], results['gt_bboxes'], return_bbox=self.return_bbox)
+                outputs = self.aug_and_mix(results['img'], results['gt_bboxes'], return_bbox=self.return_bbox, pre_blur=self.pre_blur)
             results['img'] = np.asarray(outputs['img'], dtype=results['img'].dtype)
             if 'gt_bboxes' in outputs:
                 results['gt_bboxes'] = outputs['gt_bboxes']
@@ -580,7 +617,7 @@ class AugMixDetectionFaster:
                 img_augmix = outputs['img']
                 gt_bboxes_augmix = outputs['gt_bboxes'] if 'gt_bboxes' in outputs else gt_bboxes_augmix
             else:
-                outputs = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'])
+                outputs = self.aug_and_mix(results['img'].copy(), results['gt_bboxes'], pre_blur=self.pre_blur)
                 img_augmix = outputs['img']
                 gt_bboxes_augmix = outputs['gt_bboxes'] if 'gt_bboxes' in outputs else gt_bboxes_augmix
             results[f'img{i}'] = np.array(img_augmix, dtype=results['img'].dtype)
@@ -684,7 +721,7 @@ class AugMixDetectionFaster:
         return outputs
 
 
-    def aug_and_mix(self, img_orig, gt_bboxes, return_bbox=False):
+    def aug_and_mix(self, img_orig, gt_bboxes, return_bbox=False, pre_blur=False):
         # TODO: change library to albumentation. It will make it faster.
         img_height, img_width, _ = img_orig.shape
         img_size = (img_width, img_height)
@@ -699,6 +736,19 @@ class AugMixDetectionFaster:
         img_mix = np.zeros_like(img_orig.copy(), dtype=np.float32)
         gt_bboxes_aug = np.zeros_like(gt_bboxes)
 
+        blur_bboxes = None
+        if pre_blur:
+            blur_bboxes = []
+            for i in range(len(gt_bboxes)):
+                bbox_xy = gt_bboxes[i]
+                x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+                mask = np.zeros_like(img_orig)
+                mask[y1: y2 + 1, x1:x2 + 1, :] = 255
+                sigma_ratio = self.kwargs['sigma_ratio']
+                sigma_x, sigma_y = (x2-x1)*sigma_ratio/3*2, (y2-y1)*sigma_ratio/3*2
+                mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
+                blur_bboxes.append(mask)
+
         for i in range(self.mixture_width):
             # Sample operations : [op1, op2, op3] ~ O
             if isinstance(self.mixture_depth, tuple):
@@ -712,7 +762,7 @@ class AugMixDetectionFaster:
                 img_aug, new_gt_bboxes = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes.copy(), return_bbox=True)
                 gt_bboxes_aug += mixing_weights[i] * new_gt_bboxes
             else:
-                img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=False)
+                img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes, return_bbox=False, blur_bboxes=blur_bboxes)
                 gt_bboxes_aug += mixing_weights[i] * gt_bboxes
 
             # Mixing
@@ -727,7 +777,7 @@ class AugMixDetectionFaster:
             outputs['gt_bboxes'] = gt_bboxes_aug
         return outputs
 
-    def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None, return_bbox=False):
+    def chain(self, img, op_chain, img_size, aug_severity, gt_bboxes=None, return_bbox=False, blur_bboxes=None):
         '''
         img: np.array
         '''
@@ -757,7 +807,7 @@ class AugMixDetectionFaster:
                     img_aug = outputs
             else:
                 img_aug = op(img_aug, level=aug_severity,
-                             img_size=img_size, bboxes_xy=gt_bboxes, return_bbox=return_bbox, **self.kwargs)
+                             img_size=img_size, bboxes_xy=gt_bboxes, return_bbox=return_bbox, blur_bboxes=blur_bboxes, **self.kwargs)
 
         if return_bbox:
             return img_aug, gt_bboxes
