@@ -89,6 +89,8 @@ def _apply_bbox_only_augmentation(img, bbox_xy, aug_func, fillmode=None, fillcol
         if fillmode in ['blur', 'gaussian_blur_margin', 'var_blur']:
             if fillmode == 'var_blur':
                 sigma_x, sigma_y = (x2 - x1) * sigma_ratio / 3 * 2, (y2 - y1) * sigma_ratio / 3 * 2
+                if sigma_x <= 0 or sigma_y <= 0:
+                    sigma_x = sigma_y = 1e-8
                 mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
                 mask = 255 - mask
             else:
@@ -749,6 +751,9 @@ class AugMixDetectionFaster:
                 mask[y1: y2 + 1, x1:x2 + 1, :] = 255
                 sigma_ratio = self.kwargs['sigma_ratio']
                 sigma_x, sigma_y = (x2-x1)*sigma_ratio/3*2, (y2-y1)*sigma_ratio/3*2
+                if sigma_x <= 0 or sigma_y <= 0:
+                    blur_bboxes.append(None)
+                    continue
                 mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
                 blur_bboxes.append(mask)
 
