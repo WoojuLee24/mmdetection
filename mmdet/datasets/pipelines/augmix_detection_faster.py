@@ -742,6 +742,9 @@ class AugMixDetectionFaster:
             for i in range(len(gt_bboxes)):
                 bbox_xy = gt_bboxes[i]
                 x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+                if x2-x1 < 1 or y2-y1 < 1:
+                    blur_bboxes.append(None)
+                    continue
                 mask = np.zeros_like(img_orig)
                 mask[y1: y2 + 1, x1:x2 + 1, :] = 255
                 sigma_ratio = self.kwargs['sigma_ratio']
