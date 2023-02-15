@@ -335,8 +335,9 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
                 expanded_mask[y1:y2 + 1, x1:x2 + 1, :] = 255
     else:
         for i in range(len(blur_bboxes)):
-            if not blur_bboxes[i] is None:
-                mask = np.maximum(mask, blur_bboxes[i])
+            if blur_bboxes[i] is None:
+                continue
+            mask = np.maximum(mask, blur_bboxes[i])
 
     if fillmode is None:
         bbox_content = (mask / 255) * fill_img + (1.0 - mask / 255) * img
