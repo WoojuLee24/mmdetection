@@ -571,6 +571,7 @@ GEO_OP_LIST = [bg_only_rotate, bg_only_shear_xy, bg_only_shear_x, bg_only_shear_
 @PIPELINES.register_module()
 class AugMixDetectionFaster:
     def __init__(self, mean, std,
+                 mixture_width=3,
                  num_views=3,
                  version='0.1',
                  aug_severity=6,
@@ -581,7 +582,7 @@ class AugMixDetectionFaster:
                  pre_blur=False,
                  **kwargs):
         super(AugMixDetectionFaster, self).__init__()
-        self.mixture_width = 3
+        self.mixture_width = mixture_width
         self.aug_prob_coeff = 1.
 
         self.mean = np.array(mean, dtype=np.float32)
