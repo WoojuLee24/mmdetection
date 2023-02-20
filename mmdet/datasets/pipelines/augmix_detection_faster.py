@@ -483,6 +483,11 @@ def get_aug_list(version):
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
+    elif version in ['2.6']:
+        aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy, # bbox only transformation
+                    random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy] # random_bboxes only transformation
+        return aug_list
     elif version in ['1.5', '1.5.0', '1.5.1', '1.5.2', '1.5.3', '1.5.4', '1.5.5', '1.5.6', '1.5.7',
                      '1.5.1.1', '1.5.7.1', '1.5.1.2', '1.5.1.3',
                      '1.5.1.2.1', '1.5.1.2.2', '1.5.1.2.3', '1.5.1.2.4',
