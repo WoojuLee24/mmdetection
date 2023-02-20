@@ -462,7 +462,7 @@ def get_aug_list(version):
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
         return aug_list
     elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3', '1.4.5.1.4',
-                     '2.2', '2.2.1', '2.2.2', '2.2.4']:
+                     '2.2', '2.2.1', '2.2.2', '2.2.4', '2.3']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
@@ -589,6 +589,7 @@ class AugMixDetectionFaster:
                  to_rgb=True,
                  return_bbox=False,
                  pre_blur=False,
+                 use_mix=True,
                  **kwargs):
         super(AugMixDetectionFaster, self).__init__()
         self.mixture_width = mixture_width
@@ -606,6 +607,7 @@ class AugMixDetectionFaster:
         self.geo_severity = geo_severity
         self.return_bbox = return_bbox
         self.pre_blur = pre_blur
+        self.use_mix = use_mix
         self.kwargs = kwargs
 
 
@@ -768,6 +770,14 @@ class AugMixDetectionFaster:
                     continue
                 mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
                 blur_bboxes.append(mask)
+
+        if self.use_mix is False:
+            depth = self.mixture_depth if self.mixture_depth > 0 else np.random.randint(1, 4)
+            op_chain = np.random.choice(self.aug_list, depth, replace=False)
+            img_aug = self.chain(img_orig.copy(), op_chain, img_size, self.aug_severity, gt_bboxes=gt_bboxes,
+                                 return_bbox=False, blur_bboxes=blur_bboxes)
+            outputs = dict(img=np.asarray(img_aug, dtype=np.float32))
+            return outputs
 
         for i in range(self.mixture_width):
             # Sample operations : [op1, op2, op3] ~ O
