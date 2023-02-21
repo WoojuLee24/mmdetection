@@ -73,27 +73,33 @@ class ContrastiveLossPlus(nn.Module):
             return torch.zeros(1)
         if self.normalized_input:
             cont_feats = F.normalize(cont_feats, dim=1)
-        # hard anchor sampling
-        # just split with fixed dim 512
-        total_views = cont_feats.size(0) // 512
-        cont_feats = cont_feats.contiguous().view(total_views, 512, -1)
-        labels = labels.contiguous().view(total_views, -1)
-        pred_cls = pred_cls.contiguous().view(total_views, -1)
-        feats_, labels_ = self._hard_anchor_sampling(cont_feats, labels, pred_cls)
-        label_weights = None # TODO: is label_weights necessary?
-
-        feats_ = feats_.squeeze(dim=1)
-        if self.memory > 0:
-            q_feats, q_labels = self._sample_negative(self.queue)   # exclude background class (background mean is useless)
-            q_feats = q_feats.contiguous().detach()
-            q_labels = q_labels.contiguous().view(-1,)
-            feats_ = torch.cat([feats_, q_feats], dim=0)
-            labels_ = torch.cat([labels_, q_labels], dim=0)
-
-        # contrastive loss v0.1 all.fg.bg
-        loss = self.loss(feats_, labels_, temper=self.temperature, min_samples=10,
+        # Default: contrastive loss v1.0 all, fg and bg
+        # feats_: [2048, 256], lables_: [2048, ]
+        loss = self.loss(cont_feats, labels, temper=self.temperature, min_samples=10,
                          fg_iou=fg_iou, iou_act=self.iou_act, iou_th=self.iou_th)
-        # loss = supcontrast_clean_fg_bg(feats_, labels_, temper=self.temperature, min_samples=10)
+        # hard anchor sampling: deprecated
+        # # just split with fixed dim 512
+        # total_views = cont_feats.size(0) // 512
+        # if total_views != 4:
+        #     print("check")
+        # cont_feats = cont_feats.contiguous().view(total_views, 512, -1)
+        # labels = labels.contiguous().view(total_views, -1)
+        # pred_cls = pred_cls.contiguous().view(total_views, -1)
+        # feats_, labels_ = self._hard_anchor_sampling(cont_feats, labels, pred_cls)
+        # label_weights = None # TODO: is label_weights necessary?
+        #
+        # feats_ = feats_.squeeze(dim=1)
+        # if self.memory > 0:
+        #     q_feats, q_labels = self._sample_negative(self.queue)   # exclude background class (background mean is useless)
+        #     q_feats = q_feats.contiguous().detach()
+        #     q_labels = q_labels.contiguous().view(-1,)
+        #     feats_ = torch.cat([feats_, q_feats], dim=0)
+        #     labels_ = torch.cat([labels_, q_labels], dim=0)
+        #
+        # # contrastive loss v0.1 all.fg.bg
+        # # feats_: [2048, 256], lables_: [2048, ]
+        # loss = self.loss(feats_, labels_, temper=self.temperature, min_samples=10,
+        #                  fg_iou=fg_iou, iou_act=self.iou_act, iou_th=self.iou_th)
 
         # Enqueue and dequeue
         if self.memory > 0: # TODO: Exception handling
