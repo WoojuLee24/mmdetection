@@ -14,19 +14,19 @@ from mmcv.runner import (get_dist_info, init_dist)
 from mmdet.apis import set_random_seed
 from mmdet.datasets import build_dataloader, build_dataset
 import numpy as np
-from PIL import Image
+import PIL
 
 
 ''''
 How 2 run?
-    you can set the parameters same as test_robustness.py !
-    Note:   This code is simply written based on test_robustness.py
-            Therefore, it was not completely focused on saving dataset-c.
-            Therefore, unnecessary parameters or codes are included.
-            Please set the required parameters by referring to save_data() function.
-            You can just enter any value for the remaining parameters.
-    WARN:   batch_size is only supported for one.
-    E.g., `/ws/external/configs/ai28v3/cityscapes/faster_rcnn_r50_fpn_1x_cityscapes.py --show-dir /ws/data/cityscapes-c`
+    `python3 get_corrupted_dataset.py $CONFIG_FILE --show-dir $SAVE_DIR`
+    E.g., 
+        ```
+        python3 get_corrupted_dataset.py \
+        /ws/external/configs/generate_dataset/pascal_voc-c.py \
+        --show-dir /ws/data/VOCdevkit-C/VOC2007 \
+        --corruptions benchmark --seed 0
+        ```
 '''
 
 def parse_args():
@@ -56,6 +56,7 @@ def parse_args():
         help='corruption severity levels')
     parser.add_argument(
         '--workers', type=int, default=32, help='workers per gpu')
+    parser.add_argument('--debug', action='store_true')
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument(
         '--launcher',
@@ -84,14 +85,13 @@ def save_data(data_loader, out_dir=None):
         dataset_type = 'cityscapes'
     elif 'coco' in data_loader.dataset.img_prefix:
         dataset_type = 'coco'
+    elif 'VOCdevkit' in data_loader.dataset.img_prefix:
+        dataset_type = 'pascal_voc'
     else:
         raise TypeError
 
     for i, data in enumerate(data_loader):
-        img_tensor = data['img'][0] # .data[0]
-        img_metas = data['img_metas'][0].data[0]
-        imgs = tensor2imgs(img_tensor, **img_metas[0]['img_norm_cfg'])
-
+        img_metas = data['img_metas'].data[0]
         ori_filename = img_metas[0]['ori_filename']
         fn_ = ori_filename.split("/")
         if len(fn_) > 1:
@@ -100,12 +100,15 @@ def save_data(data_loader, out_dir=None):
                 os.makedirs(f"{out_dir}/{directory_name}")
         save_path = f'{out_dir}/{ori_filename}'
 
-        img = imgs[0]
-        img = mmcv.bgr2rgb(img)
-        img = np.ascontiguousarray(img)
-        img_save = Image.fromarray(img)
+        if '.jpg' in save_path:
+            save_path = save_path.replace('.jpg', '.png')
+
+        img_tensor = data['img']
+        img_vis = np.asarray(img_tensor[0], dtype=np.uint8)
+        img = PIL.Image.fromarray(img_vis)
+        img.save(save_path, quality='keep')
+
         print(save_path)
-        img_save.save(save_path)
 
     return 0
 
@@ -127,6 +130,9 @@ def main():
     cfg.data.test.test_mode = True
     if args.workers == 0:
         args.workers = cfg.data.workers_per_gpu
+    if args.debug:
+        args.workers = 0
+        args.launcher = 'none'
 
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
