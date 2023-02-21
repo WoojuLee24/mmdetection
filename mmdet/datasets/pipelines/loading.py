@@ -37,11 +37,13 @@ class LoadImageFromFile:
     def __init__(self,
                  to_float32=False,
                  color_type='color',
-                 file_client_args=dict(backend='disk')):
+                 file_client_args=dict(backend='disk'),
+                 use_stylized_data=False):
         self.to_float32 = to_float32
         self.color_type = color_type
         self.file_client_args = file_client_args.copy()
         self.file_client = None
+        self.use_stylized_data = use_stylized_data
 
     def __call__(self, results):
         """Call functions to load image and get image meta information.
@@ -61,6 +63,10 @@ class LoadImageFromFile:
                                 results['img_info']['filename'])
         else:
             filename = results['img_info']['filename']
+
+        if 'stylized' in filename and self.use_stylized_data:
+            dataset_type = results['img_prefix'].split('/ws/data/')[-1].split('/')[0]
+            filename = filename.replace(dataset_type, f'stylized-{dataset_type}')
 
         img_bytes = self.file_client.get(filename)
         img = mmcv.imfrombytes(img_bytes, flag=self.color_type)
