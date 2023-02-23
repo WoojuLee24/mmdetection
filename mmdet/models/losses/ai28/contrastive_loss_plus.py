@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from ...builder import LOSSES
 from mmdet.models.losses.ai28.contrastive_loss import supcontrast_clean_fg_bg, supcontrastv0_2, \
-    supcontrastv1_0, supcontrastv1_1, supcontrastv1_2
+    supcontrastv1_0, supcontrastv1_1, supcontrastv1_2, supcontrastv1_3
 
 
 @LOSSES.register_module()
@@ -56,6 +56,8 @@ class ContrastiveLossPlus(nn.Module):
             self.loss = supcontrastv1_1
         elif self.version in ['1.2']:
             self.loss = supcontrastv1_2
+        elif self.version in ['1.3']:
+            self.loss = supcontrastv1_3
 
         else:
             raise NotImplementedError(f'does not support version=={version}')
