@@ -15,15 +15,19 @@ model = dict(
     roi_head=dict(
         type='ContrastiveRoIHead',
         bbox_head=dict(
-        num_classes=num_classes,
-        loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-            additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
-                       additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
-        loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.01, num_views=num_views,
-                       memory=0, num_classes=num_classes, dim=256)
-    )),
+            type='Shared2FCContrastiveHead',
+            with_cont=True,
+            cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
+            out_dim_cont=256,
+            num_classes=num_classes,
+            loss_cls=dict(
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
+                additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
+            loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
+                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
+            loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.01, num_views=num_views,
+                           memory=0, num_classes=num_classes, dim=256)
+        )),
     train_cfg=dict(
         wandb=dict(
             log=dict(
