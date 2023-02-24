@@ -28,8 +28,8 @@ model = dict(
                 additional_loss='jsdv1_3_2aug', lambda_weight=20, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0, wandb_name='roi_bbox'),
-            loss_cont=dict(type='ContrastiveLossPlus', version='1.3', loss_weight=0.01, num_views=num_views,
-                           memory=0, num_classes=num_classes, dim=256))),
+            loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.01, num_views=num_views,
+                           memory=0, num_classes=81, dim=256))),
     train_cfg=dict(
         wandb=dict(log=dict(features_list=[], vars=['log_vars'])),
         analysis_list=[]
@@ -91,7 +91,7 @@ pipeline = 'augmix.det2.2.4'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
 roi_loss = 'jsdv1.3.none.contv1.0'
-lambda_weight = '1e-1.10.1e-2'
+lambda_weight = '1e-1.20.1e-2'
 
 name = f"{train_version}_{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
