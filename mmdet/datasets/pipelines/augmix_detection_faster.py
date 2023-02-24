@@ -127,12 +127,18 @@ def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False,
         new_bboxes_xy = np.zeros_like(bboxes_xy)
         for i in range(len(bboxes_xy)):
             img, new_bboxes_xy[i] = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, return_bbox=True, **kwargs)
-        return Image.fromarray(img), new_bboxes_xy
+        if isinstance(img, np.ndarray):
+            return Image.fromarray(img), new_bboxes_xy
+        else:
+            return img, new_bboxes_xy
     else:
         for i in range(len(bboxes_xy)):
             blur_bbox = None if blur_bboxes == None else blur_bboxes[i]
             img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, blur_bbox=blur_bbox, **kwargs)
-        return Image.fromarray(img)
+        if isinstance(img, np.ndarray):
+            return Image.fromarray(img)
+        else:
+            return img
 
 
 def bboxes_only_rotate(pil_img, bboxes_xy, level, img_size, **kwargs):
