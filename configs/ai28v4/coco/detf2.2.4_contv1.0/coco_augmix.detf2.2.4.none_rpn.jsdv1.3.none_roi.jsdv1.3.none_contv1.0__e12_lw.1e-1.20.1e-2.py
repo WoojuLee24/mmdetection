@@ -1,10 +1,14 @@
 _base_ = [
     '/ws/external/configs/_base_/models/faster_rcnn_r50_fpn.py',
-    '/ws/external/configs/_base_/datasets/voc0712.py',
+    '/ws/external/configs/_base_/datasets/coco_detection.py',
+    '/ws/external/configs/_base_/schedules/schedule_1x.py',
     '/ws/external/configs/_base_/default_runtime.py'
 ]
 num_views=2
-num_classes=20
+num_classes=80
+#############
+### MODEL ###
+#############
 model = dict(
     rpn_head=dict(
         loss_cls=dict(
@@ -19,21 +23,15 @@ model = dict(
             with_cont=True,
             cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
             out_dim_cont=256,
-            num_classes=num_classes,
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=10, wandb_name='roi_cls', log_pos_ratio=True),
+                additional_loss='jsdv1_3_2aug', lambda_weight=20, wandb_name='roi_cls', log_pos_ratio=True),
             loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
-                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
+                           additional_loss="None", lambda_weight=0.0, wandb_name='roi_bbox'),
             loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.01, num_views=num_views,
-                           memory=0, num_classes=num_classes, dim=256)
-        )),
+                           memory=0, num_classes=81, dim=256))),
     train_cfg=dict(
-        wandb=dict(
-            log=dict(
-                features_list=[],
-                vars=['log_vars']),
-        ),
+        wandb=dict(log=dict(features_list=[], vars=['log_vars'])),
         analysis_list=[]
     )
 )
@@ -41,13 +39,14 @@ model = dict(
 ###############
 ### DATASET ###
 ###############
+# dataset settings
 custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix_detection_faster'], allow_failed_imports=False)
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
     dict(type='AugMixDetectionFaster', num_views=num_views, version='2.2',
@@ -59,26 +58,24 @@ train_pipeline = [
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'img2',
-                               'gt_bboxes', 'gt_bboxes2',
-                               'gt_labels']),
+                               'gt_bboxes', 'gt_bboxes2', 'gt_labels']),
 ]
 data = dict(
     samples_per_gpu=2, workers_per_gpu=4,
-    train=dict(dataset=dict(pipeline=train_pipeline))
-)
+    train=dict(pipeline=train_pipeline))
 
 ################
 ### RUN TIME ###
 ################
-# optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
-optimizer_config = dict(grad_clip=None)
 # learning policy
-# actual epoch = 3 * 3 = 9
-lr_config = dict(policy='step', step=[3])
-# runtime settings
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    step=[8, 11])
 runner = dict(
-    type='EpochBasedRunner', max_epochs=4)  # actual epoch = 4 * 3 = 12
+    type='EpochBasedRunner', max_epochs=12)
 
 ###########
 ### LOG ###
@@ -89,12 +86,12 @@ custom_hooks = [
 ]
 
 train_version = 'v4'
-dataset = 'voc'
+dataset = 'coco'
 pipeline = 'augmix.det2.2.4'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
 roi_loss = 'jsdv1.3.none.contv1.0'
-lambda_weight = '1e-1.10.1e-2'
+lambda_weight = '1e-1.20.1e-2'
 
 name = f"{train_version}_{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
@@ -103,7 +100,8 @@ print(f"{name}")
 print('++++++++++++++++++++')
 
 log_config = dict(interval=100,
-                  hooks=[
-                      dict(type='TextLoggerHook'),
-                  ]
-                  )
+                  hooks=[dict(type='TextLoggerHook')])
+
+############
+### LOAD ###
+############
