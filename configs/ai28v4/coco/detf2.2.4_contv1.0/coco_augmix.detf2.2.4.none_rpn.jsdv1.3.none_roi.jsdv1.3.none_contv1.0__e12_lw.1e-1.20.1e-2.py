@@ -1,7 +1,8 @@
 _base_ = [
     '/ws/external/configs/_base_/models/faster_rcnn_r50_fpn.py',
     '/ws/external/configs/_base_/datasets/coco_detection.py',
-    '/ws/external/configs/_base_/schedules/schedule_1x.py',
+    '/ws/external/configs/_base_/schedules/ai28.py',
+    # '/ws/external/configs/_base_/schedules/schedule_1x.py',
     '/ws/external/configs/_base_/default_runtime.py'
 ]
 num_views=2
@@ -19,6 +20,7 @@ model = dict(
     roi_head=dict(
         type='ContrastiveRoIHead',
         bbox_head=dict(
+            num_classes=80,
             type='Shared2FCContrastiveHead',
             with_cont=True,
             cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
@@ -29,7 +31,7 @@ model = dict(
             loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0, wandb_name='roi_bbox'),
             loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.01, num_views=num_views,
-                           memory=0, num_classes=81, dim=256))),
+                           memory=0, num_classes=81, dim=256, min_samples=5))),
     train_cfg=dict(
         wandb=dict(log=dict(features_list=[], vars=['log_vars'])),
         analysis_list=[]
@@ -61,7 +63,7 @@ train_pipeline = [
                                'gt_bboxes', 'gt_bboxes2', 'gt_labels']),
 ]
 data = dict(
-    samples_per_gpu=2, workers_per_gpu=4,
+    samples_per_gpu=4, workers_per_gpu=4,
     train=dict(pipeline=train_pipeline))
 
 ################
@@ -76,6 +78,7 @@ lr_config = dict(
     step=[8, 11])
 runner = dict(
     type='EpochBasedRunner', max_epochs=12)
+optimizer_config = dict(grad_clip=None, detect_anomalous_params=True)
 
 ###########
 ### LOG ###

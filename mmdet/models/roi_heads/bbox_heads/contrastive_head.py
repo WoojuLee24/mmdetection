@@ -145,7 +145,10 @@ class ContrastiveHead(BBoxHead):
 
         # if ious[ious < 0.7].float().sum() > 0:
         #     print('iou lower than 0.7 found !')
-        if cont_feats is not None:
+        labels = labels.contiguous().view(-1, 1)
+        inds, _ = (labels != labels.max()).nonzero(as_tuple=True)
+        if (cont_feats is not None) \
+                and (inds.size()[0] > self.loss_cont.min_samples):
             if cont_feats.numel() > 0:
                 loss_cont = self.loss_cont(
                     cont_feats,
@@ -283,6 +286,7 @@ class ConvFCContrastiveHead(ContrastiveHead):
                          in_channels, feat_channels,
                          return_relu=False):
         layer_list = []
+        # layer_list = nn.ModuleList()
         num_relu = num_linear if return_relu else num_linear - 1
         for i in range(num_linear):
             in_channels = in_channels if i == 0 else feat_channels
@@ -290,6 +294,7 @@ class ConvFCContrastiveHead(ContrastiveHead):
             if i < num_relu - 1:
                 layer_list.append(nn.ReLU(inplace=True))
         return nn.Sequential(*layer_list)
+        # return layer_list
 
     def _add_conv_fc_branch(self,
                             num_branch_convs,
@@ -378,6 +383,12 @@ class ConvFCContrastiveHead(ContrastiveHead):
         cls_score = self.fc_cls(x_cls) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
         cont_feats = self.fc_cont(x_cont) if self.with_cont else None
+        # if self.with_cont:
+        #     for fc in self.fc_cont:
+        #         x_cont = fc(x_cont)
+        #     cont_feats = x_cont
+        # else:
+        #     cont_feats = None
         return cls_score, bbox_pred, cont_feats
 
 

@@ -3,37 +3,26 @@ _base_ = [
     '/ws/external/configs/_base_/datasets/voc0712.py',
     '/ws/external/configs/_base_/default_runtime.py'
 ]
-num_views=2
 model = dict(
-    rpn_head=dict(
-        loss_cls=dict(
-            type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0, num_views=num_views,
-            additional_loss='jsdv1_3_2aug', lambda_weight=0.1, wandb_name='rpn_cls'),
-        loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
-                       additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
-    roi_head=dict(
-        bbox_head=dict(
-            num_classes=20,
-            loss_cls=dict(
-                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=20, wandb_name='roi_cls', log_pos_ratio=True),
-            loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
-                       additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
-    )),
+    roi_head=dict(bbox_head=dict(num_classes=20)),
     train_cfg=dict(
         wandb=dict(
             log=dict(
                 features_list=[],
                 vars=['log_vars']),
         ),
-        analysis_list=[]
+        analysis_list=[
+            dict(type='loss_weight', outputs=dict()),
+            dict(type='bbox_head_loss',
+                 log_list=['acc_pos', 'acc_neg', 'acc_orig', 'consistency']),
+        ]
     )
 )
 
 ###############
 ### DATASET ###
 ###############
-custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix_detection_faster'], allow_failed_imports=False)
+custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix'], allow_failed_imports=False)
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -42,17 +31,11 @@ train_pipeline = [
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMixDetectionFaster', num_views=num_views, version='2.2',
-         aug_severity=3, mixture_depth=-1, **img_norm_cfg,
-         num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
-         pre_blur=True, fillmode='var_blur', sigma_ratio=1 / 8,
-         mixture_width=1, ),
+    dict(type='AugMix', no_jsd=True, aug_list='augmentations', **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'img2',
-                               'gt_bboxes', 'gt_bboxes2',
-                               'gt_labels']),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
 ]
 data = dict(
     samples_per_gpu=2, workers_per_gpu=4,
@@ -80,15 +63,14 @@ custom_hooks = [
          layer_list=model['train_cfg']['wandb']['log']['features_list']),
 ]
 
-train_version = 'v4'
 dataset = 'voc'
-pipeline = 'augmix.det2.2.4'
+pipeline = 'augmix.augs'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
 lambda_weight = ''
 
-name = f"{train_version}_{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
+name = f"{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
 print('++++++++++++++++++++')
 print(f"{name}")
@@ -97,5 +79,22 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': name,
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{pipeline}",
+                                                  # losses
+                                                  'loss type(rpn)': f"{rpn_loss}",
+                                                  'loss type(roi)': f"{roi_loss}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                                  'lambda_weight': lambda_weight,
+                                              }},
+                           interval=2000,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )

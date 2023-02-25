@@ -23,6 +23,7 @@ class ContrastiveLossPlus(nn.Module):
                  normalized_input=True,
                  iou_act='x',
                  iou_th=0.7,
+                 min_samples=10,
                  **kwargs):
         """ContrastiveLossPlus."""
         super(ContrastiveLossPlus, self).__init__()
@@ -37,6 +38,7 @@ class ContrastiveLossPlus(nn.Module):
         self.normalized_input = normalized_input
         self.iou_act = iou_act
         self.iou_th = iou_th
+        self.min_samples = min_samples
         self.kwargs = kwargs
 
         if self.memory > 0:
@@ -77,7 +79,7 @@ class ContrastiveLossPlus(nn.Module):
             cont_feats = F.normalize(cont_feats, dim=1)
         # Default: contrastive loss v1.0 all, fg and bg
         # feats_: [2048, 256], lables_: [2048, ]
-        loss = self.loss(cont_feats, labels, temper=self.temperature, min_samples=10,
+        loss = self.loss(cont_feats, labels, temper=self.temperature, min_samples=self.min_samples,
                          fg_iou=fg_iou, iou_act=self.iou_act, iou_th=self.iou_th)
         # hard anchor sampling: deprecated
         # # just split with fixed dim 512
