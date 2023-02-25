@@ -29,7 +29,7 @@ model = dict(
                 loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
                                additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
                 loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.001, num_views=num_views,
-                               memory=0, num_classes=7, dim=256)
+                               memory=0, num_classes=7, dim=256, min_samples=5)
             ),
         ),
     train_cfg=dict(
