@@ -287,8 +287,9 @@ def main():
                 elif '/coco-c/' in test_data_cfg['img_prefix']:
                     test_data_cfg['img_prefix'] = f"{test_data_cfg['img_prefix']}{corruption}/{corruption_severity}/"
                 else:
-                    raise NotImplementedError(
-                        "set load_dataset as 'corrupted' but use original dataset.")
+                    if not 'VOCdevkit' in test_data_cfg['img_prefix']:
+                        raise NotImplementedError(
+                            "set load_dataset as 'corrupted' but use original dataset.")
             else:
                 raise NotImplementedError(
                     "The types of load_dataset can be 'original' or 'corrupted'.")
@@ -321,6 +322,15 @@ def main():
                 model.CLASSES = checkpoint['meta']['CLASSES']
             else:
                 model.CLASSES = dataset.CLASSES
+
+            if args.load_dataset == 'corrupted':
+                if '/VOCdevkit/' in data_loader.dataset.img_prefix:
+                    data_loader.dataset.img_prefix = data_loader.dataset.img_prefix.replace('VOCdevkit', 'VOCdevkit-C')
+                    data_loader.dataset.img_prefix = f"{data_loader.dataset.img_prefix}{corruption}/{corruption_severity}/"
+                    data_loader.dataset.use_voc_c = True
+                elif '/VOCdevkit-C/' in data_loader.dataset.img_prefix:
+                    data_loader.dataset.img_prefix = f"{data_loader.dataset.img_prefix}{corruption}/{corruption_severity}/"
+                    data_loader.dataset.use_voc_c = True
 
             if not distributed:
                 model = MMDataParallel(model, device_ids=[0])

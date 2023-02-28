@@ -22,8 +22,28 @@ model = dict(
 ###############
 ### DATASET ###
 ###############
+custom_imports = dict(imports=['mmdet.datasets.pipelines.augmix_detection_faster'], allow_failed_imports=False)
+img_norm_cfg = dict(
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='RandomFlip', flip_ratio=0.5),
+    ### AugMix ###
+    dict(type='AugMixDetectionFaster', num_views=1, version='2.1',
+         aug_severity=3, mixture_depth=-1, **img_norm_cfg,
+         num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
+         pre_blur=True, fillmode='var_blur', sigma_ratio=1 / 6,
+         mixture_width=1, ),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='Pad', size_divisor=32),
+    dict(type='DefaultFormatBundle'),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+]
 data = dict(
-    samples_per_gpu=2, workers_per_gpu=4,
+    samples_per_gpu=4, workers_per_gpu=4,
+    train=dict(dataset=dict(pipeline=train_pipeline))
 )
 
 ################
@@ -47,14 +67,15 @@ custom_hooks = [
          layer_list=model['train_cfg']['wandb']['log']['features_list']),
 ]
 
+train_version = 'v4'
 dataset = 'voc'
-pipeline = 'none'
+pipeline = 'augmix.det2.1.5'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
 lambda_weight = ''
 
-name = f"{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
+name = f"{train_version}_{dataset}_{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
 
 print('++++++++++++++++++++')
 print(f"{name}")

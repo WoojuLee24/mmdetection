@@ -8,7 +8,7 @@ import sys
 import numpy as np
 
 
-def get_minimal_dictionary(dictionary):
+def get_minimal_dictionary_class(dictionary):
     minimal_dictionary = {}
     minimal_dictionary['mAP'] = []
     minimal_dictionary['mPC'] = []
@@ -52,6 +52,30 @@ def get_minimal_dictionary(dictionary):
     return minimal_dictionary
 
 
+def get_minimal_dictionary_corruption(dictionary):
+    minimal_dictionary = {}
+
+    # Corruption types
+    corruptions = []
+    for corruption in dictionary.keys():
+        corruptions.append(corruption)
+        minimal_dictionary[corruption] = []
+    minimal_dictionary['clean'] = []
+
+    for corruption, severities  in dictionary.items():
+        if corruption == 'gaussian_noise':
+            minimal_dictionary['clean'].append(float(severities['severity0']['mAP']))
+        for severity, results in severities.items():
+            if severity == 'severity0':
+                continue
+            minimal_dictionary[corruption].append(float(results['mAP']))
+
+    for key, value in minimal_dictionary.items():
+        minimal_dictionary[key] = np.mean(value)
+
+    return minimal_dictionary
+
+
 def get_dictionary(file_path):
 
     dictionary = {}
@@ -67,26 +91,28 @@ def get_dictionary(file_path):
                 if not "severity" + str(severity) in dictionary[corruption_type]:
                     dictionary[corruption_type]["severity" + str(severity)] = {}
 
-            '''time'''
-            if line.startswith('| class       | gts  | dets  | recall | ap    |'):
-                _line = file.readline()
-                while True:
-                    _line = file.readline()
-                    if _line.startswith('+'):
+                for line in file:
+                    '''time'''
+                    if line.startswith('|'):
                         _line = file.readline()
-                        _items = _line.replace(' ', '').split('|')
-                        mAP = _items[-2]
-                        dictionary[corruption_type]["severity" + str(severity)]['mAP'] = mAP
+                        while True:
+                            _line = file.readline()
+                            if _line.startswith('+'):
+                                _line = file.readline()
+                                _items = _line.replace(' ', '').split('|')
+                                mAP = _items[-2]
+                                dictionary[corruption_type]["severity" + str(severity)]['mAP'] = mAP
+                                break
+                            _items = _line.replace(' ', '').split('|')[1:]
+                            class_name = _items[0]
+                            gts = _items[1]
+                            dets = _items[2]
+                            recall = _items[3]
+                            ap = _items[4]
+                            dictionary[corruption_type]["severity" + str(severity)][class_name] = {
+                                'gts': gts, 'dets': dets, 'recall': recall, 'ap': ap
+                            }
                         break
-                    _items = _line.replace(' ', '').split('|')[1:]
-                    class_name = _items[0]
-                    gts = _items[1]
-                    dets = _items[2]
-                    recall = _items[3]
-                    ap = _items[4]
-                    dictionary[corruption_type]["severity" + str(severity)][class_name] = {
-                        'gts': gts, 'dets': dets, 'recall': recall, 'ap': ap
-                    }
 
     return dictionary
 
@@ -132,9 +158,12 @@ def main():
     print('config file path : ' + config_file_path)
 
     dictionary = get_dictionary(txt_file_path)
-    minimal_dictionary = get_minimal_dictionary(dictionary)
-    for key in minimal_dictionary.keys():
-        print('key:', key, ' value:', minimal_dictionary[key] * 100)
+
+    minimal_dictionary_class = get_minimal_dictionary_class(dictionary)
+    print(f"mAP: {minimal_dictionary_class['mAP']:.2f}, mPC: {minimal_dictionary_class['mPC']:.2f}")
+    minimal_dictionary_corruption = get_minimal_dictionary_corruption(dictionary)
+    for key in minimal_dictionary_corruption.keys():
+        print('key:', key, ' value:', minimal_dictionary_corruption[key] * 100)
 
 if __name__ == '__main__':
     main()

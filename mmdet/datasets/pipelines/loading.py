@@ -69,6 +69,8 @@ class LoadImageFromFile:
         if 'stylized' in filename and self.use_stylized_data:
             dataset_type = results['img_prefix'].split('/ws/data/')[-1].split('/')[0]
             filename = filename.replace(dataset_type, f'stylized-{dataset_type}')
+        if 'VOCdevkit-C' in filename and '.jpg' in filename:
+            filename = filename.replace('.jpg', '.png')
 
         img_bytes = self.file_client.get(filename)
         img = mmcv.imfrombytes(img_bytes, flag=self.color_type, channel_order=self.channel_order)

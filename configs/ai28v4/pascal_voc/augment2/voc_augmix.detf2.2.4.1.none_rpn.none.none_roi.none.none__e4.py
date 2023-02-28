@@ -12,9 +12,9 @@ model = dict(
                 vars=['log_vars']),
         ),
         analysis_list=[
-            # dict(type='loss_weight', outputs=dict()),
-            # dict(type='bbox_head_loss',
-            #      log_list=['acc_pos', 'acc_neg', 'acc_orig', 'consistency']),
+            dict(type='loss_weight', outputs=dict()),
+            dict(type='bbox_head_loss',
+                 log_list=['acc_pos', 'acc_neg', 'acc_orig', 'consistency']),
         ]
     )
 )
@@ -32,7 +32,7 @@ train_pipeline = [
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
     dict(type='AugMixDetectionFaster', num_views=1, version='2.2',
-         aug_severity=3, mixture_depth=-1, **img_norm_cfg,
+         aug_severity=3, mixture_depth=(1,6), **img_norm_cfg,
          num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
          pre_blur=True, fillmode='var_blur', sigma_ratio=1 / 8,
          mixture_width=1, ),
@@ -69,7 +69,7 @@ custom_hooks = [
 
 train_version = 'v4'
 dataset = 'voc'
-pipeline = 'augmix.det2.2.4'
+pipeline = 'augmix.det2.2.4.1'
 loss_type = 'none'
 rpn_loss = 'none.none'
 roi_loss = 'none.none'
@@ -84,22 +84,22 @@ print('++++++++++++++++++++')
 log_config = dict(interval=100,
                   hooks=[
                       dict(type='TextLoggerHook'),
-                      # dict(type='WandbLogger',
-                      #      wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
-                      #                         'name': name,
-                      #                         'config': {
-                      #                             # data pipeline
-                      #                             'data pipeline': f"{pipeline}",
-                      #                             # losses
-                      #                             'loss type(rpn)': f"{rpn_loss}",
-                      #                             'loss type(roi)': f"{roi_loss}",
-                      #                             # parameters
-                      #                             'epoch': runner['max_epochs'],
-                      #                             'lambda_weight': lambda_weight,
-                      #                         }},
-                      #      interval=500,
-                      #      log_checkpoint=True,
-                      #      log_checkpoint_metadata=True,
-                      #      num_eval_images=5),
+                      dict(type='WandbLogger',
+                           wandb_init_kwargs={'project': "AI28", 'entity': "kaist-url-ai28",
+                                              'name': name,
+                                              'config': {
+                                                  # data pipeline
+                                                  'data pipeline': f"{pipeline}",
+                                                  # losses
+                                                  'loss type(rpn)': f"{rpn_loss}",
+                                                  'loss type(roi)': f"{roi_loss}",
+                                                  # parameters
+                                                  'epoch': runner['max_epochs'],
+                                                  'lambda_weight': lambda_weight,
+                                              }},
+                           interval=500,
+                           log_checkpoint=True,
+                           log_checkpoint_metadata=True,
+                           num_eval_images=5),
                   ]
                   )
