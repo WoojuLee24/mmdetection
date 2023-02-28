@@ -68,7 +68,8 @@ def get_dictionary(file_path):
                     dictionary[corruption_type]["severity" + str(severity)] = {}
 
             '''time'''
-            if line.startswith('| class       | gts  | dets  | recall | ap    |'):
+            if 'class' in line and 'gts' in line:
+            # if line.startswith('| class       | gts  | dets  | recall | ap    |'):
                 _line = file.readline()
                 while True:
                     _line = file.readline()
@@ -134,7 +135,11 @@ def main():
     dictionary = get_dictionary(txt_file_path)
     minimal_dictionary = get_minimal_dictionary(dictionary)
     for key in minimal_dictionary.keys():
-        print('key:', key, ' value:', minimal_dictionary[key] * 100)
+        if isinstance(minimal_dictionary[key], dict):
+            for k, v in minimal_dictionary[key].items():
+                print('key:', k, ' value:', v * 100)
+        else:
+            print('key:', key, 'value:', minimal_dictionary[key] * 100)
 
 if __name__ == '__main__':
     main()
