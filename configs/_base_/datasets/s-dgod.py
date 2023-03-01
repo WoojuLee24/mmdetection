@@ -66,7 +66,7 @@ data = dict(
         type=dataset_type,
         ann_file=[
             # data_root + 'Daytime_Sunny/daytime_clear/VOC2007/ImageSets/Main/test.txt',
-            data_root + 'Daytime-Foggy/daytime_foggy/VOC2007/ImageSets/Main/train.txt',
+            # data_root + 'Daytime-Foggy/daytime_foggy/VOC2007/ImageSets/Main/train.txt',
             # data_root + 'Dusk-rainy/dusk_rainy/VOC2007/ImageSets/Main/train.txt',
             # data_root + 'Night_rainy/night_rainy/VOC2007/ImageSets/Main/train.txt',
             data_root + 'Night-Sunny/night_sunny/VOC2007/ImageSets/Main/train.txt',
