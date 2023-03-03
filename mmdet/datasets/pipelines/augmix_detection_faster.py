@@ -132,6 +132,23 @@ def _apply_bboxes_only_augmentation(img, bboxes_xy, aug_func, return_bbox=False,
         else:
             return img, new_bboxes_xy
     else:
+        if (blur_bboxes is None) and (kwargs['fillmode'] == 'var_blur'):
+            blur_bboxes = []
+            for i in range(len(bboxes_xy)):
+                bbox_xy = bboxes_xy[i]
+                x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+                if x2 - x1 < 1 or y2 - y1 < 1:
+                    blur_bboxes.append(None)
+                    continue
+                mask = np.zeros_like(img)
+                mask[y1: y2 + 1, x1:x2 + 1, :] = 255
+                sigma_x, sigma_y = (x2 - x1) * kwargs['sigma_ratio'] / 3 * 2, (y2 - y1) * kwargs['sigma_ratio'] / 3 * 2
+                if sigma_x <= 0 or sigma_y <= 0:
+                    blur_bboxes.append(None)
+                    continue
+                mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
+                blur_bboxes.append(mask)
+
         for i in range(len(bboxes_xy)):
             blur_bbox = None if blur_bboxes == None else blur_bboxes[i]
             img = _apply_bbox_only_augmentation(img, bboxes_xy[i], aug_func, blur_bbox=blur_bbox, **kwargs)
@@ -301,6 +318,23 @@ def _apply_bg_only_augmentation(img, bboxes_xy, aug_func, fillmode=None, fillcol
             fillmode = f"{fillmode}_margin"
         else:
             raise ValueError
+
+    if (blur_bboxes is None) and (fillmode == 'var_blur'):
+        blur_bboxes = []
+        for i in range(len(bboxes_xy)):
+            bbox_xy = bboxes_xy[i]
+            x1, y1, x2, y2 = int(bbox_xy[0]), int(bbox_xy[1]), int(bbox_xy[2]), int(bbox_xy[3])
+            if x2 - x1 < 1 or y2 - y1 < 1:
+                blur_bboxes.append(None)
+                continue
+            mask = np.zeros_like(img)
+            mask[y1: y2 + 1, x1:x2 + 1, :] = 255
+            sigma_x, sigma_y = (x2 - x1) * sigma_ratio / 3 * 2, (y2 - y1) * sigma_ratio / 3 * 2
+            if sigma_x <= 0 or sigma_y <= 0:
+                blur_bboxes.append(None)
+                continue
+            mask = cv2.GaussianBlur(mask, (0, 0), sigma_x, sigmaY=sigma_y)
+            blur_bboxes.append(mask)
 
     if fillmode in ['blur_margin', 'box_blur_margin', 'gaussian_blur_margin']:
         h, w = img.shape[0], img.shape[1]
