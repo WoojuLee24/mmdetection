@@ -71,6 +71,8 @@ class LoadImageFromFile:
             filename = filename.replace(dataset_type, f'stylized-{dataset_type}')
         if 'VOCdevkit-C' in filename and '.jpg' in filename:
             filename = filename.replace('.jpg', '.png')
+        if 'coco-c' in filename and '.jpg' in filename:
+            filename = filename.replace('.jpg', '.png')
 
         img_bytes = self.file_client.get(filename)
         img = mmcv.imfrombytes(img_bytes, flag=self.color_type, channel_order=self.channel_order)
