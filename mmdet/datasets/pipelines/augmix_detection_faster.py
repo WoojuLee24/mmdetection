@@ -22,7 +22,7 @@ except ImportError:
 
 from PIL import Image, ImageDraw, ImageFilter
 from mmdet.datasets.pipelines.augmix import (autocontrast, equalize, posterize, solarize, color,
-                                             contrast, brightness, sharpness,
+                                             contrast, brightness, sharpness, invert,
                                              rotate, shear_x, shear_y, translate_x, translate_y,)
 
 
@@ -192,7 +192,7 @@ def bboxes_only_translate_xy(pil_img, bboxes_xy, level, img_size, **kwargs):
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
                               scales=(0.01, 0.2), ratios=(0.3, 1/0.3),
-                              max_iters=100, eps=1e-6, **kwargs):
+                              max_iters=100, eps=1e-6, allow_fg=False, **kwargs):
     # REF: mmdetection/mmdet/datasets/pipelines/transforms.py Cutout
     if isinstance(num_bboxes, tuple) or isinstance(num_bboxes, list):
         num_bboxes = np.random.randint(num_bboxes[0], num_bboxes[1] + 1)
@@ -213,7 +213,13 @@ def generate_random_bboxes_xy(img_size, num_bboxes, bboxes_xy=None,
         if bboxes_xy is not None:
             ious = bbox_overlaps(random_bbox, bboxes_xy)
             if np.sum(ious) > eps:
-                continue
+                if allow_fg:
+                    diff_bboxes = random_bbox - bboxes_xy
+                    diff_bboxes[:, :2] = (diff_bboxes[:, :2] > 0)
+                    diff_bboxes[:, 2:] = (diff_bboxes[:, 2:] < 0)
+                    diff_mask = diff_bboxes.sum(axis=1) < 4
+                    if diff_mask.all():
+                        continue
         random_bboxes_xy[total_bboxes, :] = random_bbox[0]
         total_bboxes += 1
     if total_bboxes != num_bboxes:
@@ -504,6 +510,12 @@ def get_aug_list(version):
     elif version in ['1.4.5', '1.4.5.1', '1.4.5.2', '1.4.5.1.1', '1.4.5.1.2', '1.4.5.1.3', '1.4.5.1.4',
                      '2.2', '2.2.1', '2.2.2', '2.2.4', '2.3']:
         aug_list = [autocontrast, equalize, posterize, solarize,  # color
+                    bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
+                    random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
+                    bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
+        return aug_list
+    elif version in ['2.7']:
+        aug_list = [autocontrast, equalize, posterize, solarize, invert, # color
                     bg_only_rotate, bg_only_shear_xy, bg_only_translate_xy,  # bg only transformation
                     random_bboxes_only_rotate, random_bboxes_only_shear_xy, random_bboxes_only_translate_xy, # random_bboxes only transformation
                     bboxes_only_rotate, bboxes_only_shear_xy, bboxes_only_translate_xy]  # bbox only transformation
