@@ -12,26 +12,19 @@ model = dict(
     rpn_head=dict(
             loss_cls=dict(
                 type='CrossEntropyLossPlus', use_sigmoid=True, loss_weight=1.0, num_views=num_views,
-                additional_loss='jsdv1_3_2aug', lambda_weight=0.001, wandb_name='rpn_cls'),
+                additional_loss='jsdv1_3_2aug', lambda_weight=0.01, wandb_name='rpn_cls'),
             loss_bbox=dict(type='L1LossPlus', loss_weight=1.0, num_views=num_views,
                            additional_loss="None", lambda_weight=0.0001, wandb_name='rpn_bbox')),
     roi_head=dict(
-            type='ContrastiveRoIHead',
-            bbox_head=dict(
-                num_classes=7,
-                type='Shared2FCContrastiveHead',
-                with_cont=True,
-                cont_predictor_cfg=dict(num_linear=2, feat_channels=256, return_relu=True),
-                out_dim_cont=256,
-                loss_cls=dict(
-                    type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
-                    additional_loss='jsdv1_3_2aug', lambda_weight=1, wandb_name='roi_cls', log_pos_ratio=True),
-                loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
-                               additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
-                loss_cont=dict(type='ContrastiveLossPlus', version='1.0', loss_weight=0.00001, num_views=num_views,
-                               memory=0, num_classes=7, dim=256, min_samples=5)
-            ),
+        bbox_head=dict(
+            num_classes=7,
+            loss_cls=dict(
+                type='CrossEntropyLossPlus', use_sigmoid=False, loss_weight=1.0, num_views=num_views,
+                additional_loss='jsdv1_3_2aug', lambda_weight=1, wandb_name='roi_cls', log_pos_ratio=True),
+            loss_bbox=dict(type='SmoothL1LossPlus', beta=1.0, loss_weight=1.0, num_views=num_views,
+                           additional_loss="None", lambda_weight=0.0001, wandb_name='roi_bbox'),
         ),
+    ),
     train_cfg=dict(
         wandb=dict(
             log=dict(
@@ -57,10 +50,8 @@ train_pipeline = [
         type='Resize', img_scale=[(2048, 800), (2048, 1024)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     ### AugMix ###
-    dict(type='AugMixDetectionFaster', num_views=num_views, version='2.7.all',
-         aug_severity=3, mixture_depth=-1, **img_norm_cfg,
-         num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1/0.3),
-         pre_blur=True, fillmode='var_blur', sigma_ratio=1/6, mixture_width=1,),
+    dict(type='AugMixDetection', num_views=num_views, version='1.4',
+         aug_severity=3, mixture_depth=-1, **img_norm_cfg),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
@@ -94,14 +85,13 @@ custom_hooks = [
          layer_list=model['train_cfg']['wandb']['log']['features_list']),
 ]
 
-pipeline = 'augmix.detf2.7.5'
+pipeline = 'augmix.det1.4'
 loss_type = 'plus'
 rpn_loss = 'jsdv1.3.none'
-roi_loss = 'jsdv1.3.none.contv1.0'
-lambda_weight = '1e-2.10.1e-3'
+roi_loss = 'jsdv1.3.none'
+lambda_weight = '1e-2.1'
 
-name = f"{pipeline}.{loss_type}_rpn.{rpn_loss}_roi.{roi_loss}__e{str(runner['max_epochs'])}_lw.{lambda_weight}"
-
+name = "faster_rcnn_r101_fpn_augmix.det1.4_jsdv1.3_lw1e-1.10_1x_s-dgod"
 
 print('++++++++++++++++++++')
 print(f"{name}")
