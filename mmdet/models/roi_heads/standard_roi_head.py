@@ -188,21 +188,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
             sampling_results = []
-            # edited by dnwn24
-            # assert divmod(num_imgs, 3)[1] == 0
-            # same proposal list -> different sampling results
-            # if divmod(num_imgs, 3)[1] !=0 :
-            #     for i in range(num_imgs):
-            #         assign_result = self.bbox_assigner.assign(
-            #             proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-            #             gt_labels[i])
-            #         sampling_result = self.bbox_sampler.sample(
-            #             assign_result,
-            #             proposal_list[i],
-            #             gt_bboxes[i],
-            #             gt_labels[i],
-            #             feats=[lvl_feat[i][None] for lvl_feat in x])
-            #         sampling_results.append(sampling_result)
+
             assign_result = self.bbox_assigner.assign(
                 proposal_list[0], gt_bboxes[0], gt_bboxes_ignore[0],
                 gt_labels[0])

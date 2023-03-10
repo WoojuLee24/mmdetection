@@ -9,7 +9,7 @@ from torchvision.transforms import ToTensor
 from matplotlib.patches import Rectangle
 
 
-dirname = '/ws/data/dshong/imgs'
+dirname = ''
 
 
 def imsave(image, title=None, save=None):

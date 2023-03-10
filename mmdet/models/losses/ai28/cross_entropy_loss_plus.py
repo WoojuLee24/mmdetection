@@ -5,10 +5,7 @@ import torch.nn.functional as F
 
 from ...builder import LOSSES
 from ..utils import weight_reduce_loss
-import mmdet.models.detectors.base as base
-from .contrastive_loss import supcontrast_clean_fg, supcontrast_clean_fg_bg, \
-    supcontrast_clean_fg_bg_tr, \
-    analyze_representations_1input, analyze_representations_2input, analyze_representations_3input
+from .contrastive_loss import analyze_representations_2input
 
 
 def cross_entropy(pred,
@@ -307,12 +304,10 @@ def jsdv1_3_2aug(pred,
     if pred_orig.shape[-1] == 1:  # if rpn
         p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=1), \
                                   torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=1)
-        neg_ind = 1 # WARN: only for cityscapes dataset
 
     else:  # else roi
         p_clean, p_aug1 = F.softmax(pred_orig, dim=1), \
                           F.softmax(pred_aug1, dim=1)
-        neg_ind = 8 # WARN: only for cityscapes dataset
 
     p_clean, p_aug1 = p_clean.reshape((1,) + p_clean.shape).contiguous(), \
                       p_aug1.reshape((1,) + p_aug1.shape).contiguous()
@@ -335,11 +330,6 @@ def jsdv1_3_2aug(pred,
             mask = (label == i)
             loss[mask] = loss[mask] * class_weight[i]
 
-    # ANALYSIS[CODE=004]: analysis pos_ratio: the ration of positive JSD loss over negative JSD loss
-    loss_neg = torch.sum(loss[(label == neg_ind)])
-    loss_pos = torch.sum(loss[(label != neg_ind)])
-    pos_ratio = loss_pos / loss_neg
-
     # Compute loss
     loss = torch.sum(loss) / len(p_aug1)
 
@@ -350,257 +340,10 @@ def jsdv1_3_2aug(pred,
     loss = weight_reduce_loss(
         loss, weight=weight, reduction=reduction, avg_factor=avg_factor)
 
-    p_distribution = {# 'p_clean': torch.clamp(p_clean, 1e-7, 1).log(),
-                      # 'p_aug1': torch.clamp(p_aug1, 1e-7, 1).log(),
-                      # 'p_aug2': torch.clamp(p_aug2, 1e-7, 1).log(),
-                      # 'p_mixture': p_mixture,
-                      'loss_pos': loss_pos,
-                      'loss_neg': loss_neg,
-                      'pos_ratio': pos_ratio, # ANALYSIS[CODE=004]
+    p_distribution = {
                       }
 
     return loss, p_distribution
-
-
-def analyze_shared_fcs_1input(pred,
-                        label,
-                        weight=None,
-                        reduction='mean',
-                        avg_factor=None,
-                        analysis=False,
-                        **kwargs):
-
-    """Calculate the ntxent loss
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    # avg_factor = None
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-    feature_analysis = {}
-    loss = 0
-
-    from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
-    feature = feature_cls_feats
-
-    feature_analysis = analyze_representations_1input(feature, label,)
-
-    return loss, feature_analysis
-
-
-def analyze_shared_fcs_2input(pred,
-                        label,
-                        weight=None,
-                        reduction='mean',
-                        avg_factor=None,
-                        analysis=False,
-                        **kwargs):
-
-    """Calculate the ntxent loss
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    # avg_factor = None
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-    feature_analysis = {}
-    loss = 0
-
-    from mmdet.models.roi_heads.standard_roi_head import feature_cls_feats
-    feature = feature_cls_feats
-    feature_clean, feature_aug1, _ = torch.chunk(feature, 3)
-    label, _, _ = torch.chunk(label, 3)
-    feature_analysis = analyze_representations_2input(feature_clean, feature_aug1, label,)
-
-    pred_clean, pred_aug1, _ = torch.chunk(pred, 3)
-    pred_analysis = analyze_representations_2input(pred_clean, pred_aug1, label,)
-    feature_analysis.update(pred_analysis)
-
-
-    return loss, feature_analysis
-
-
-def ntxent_clean_fg(pred,
-                    label,
-                    weight=None,
-                    reduction='mean',
-                    avg_factor=None,
-                    analysis=False,
-                    num_views=3,
-                    name='ntxent.clean.fg',
-                    **kwargs):
-    """Calculate the ntxent loss on the clean samples
-    Divide feature samples by torch.chunk
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    # avg_factor = None
-    temper = kwargs['temper']
-    add_act = kwargs['add_act']
-    temper_ratio = kwargs['temper_ratio']
-    # k = kwargs['kpositive']
-    # classes = kwargs['classes']
-    feature_analysis = {}
-    loss = 0
-
-    from mmdet.models.detectors.base import FEATURES
-
-    for key, feature in FEATURES.items():
-        k = feature[0]
-        if k.dim() == 4: # if rpn
-            ntxent_loss = 0
-            pass
-        elif k.dim() == 2: # if roi
-            features_orig = torch.chunk(k, num_views)[0]
-            label_orig = torch.chunk(label, num_views)[0]
-            label_orig = label_orig.unsqueeze(dim=1)
-            if name == 'ntxent.clean.fg':
-                ntxent_loss = supcontrast_clean_fg(features_orig, label_orig, temper=temper, min_samples=10)
-            elif name == 'ntxent.clean.fg.bg':
-                ntxent_loss = supcontrast_clean_fg_bg(features_orig, label_orig, temper=temper, min_samples=10)
-            elif name == 'ntxent.clean.fg.bg.tr':
-                ntxent_loss = supcontrast_clean_fg_bg_tr(features_orig, label_orig, temper=temper, temper_ratio=temper_ratio, min_samples=10)
-            # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
-
-        loss += ntxent_loss
-
-    return loss, feature_analysis
-
-
-def ntxent_all(pred,
-               label,
-               weight=None,
-               reduction='mean',
-               avg_factor=None,
-               analysis=False,
-               num_views=3,
-               name='ntxent.all.fg',
-               **kwargs):
-
-    """Calculate the ntxent loss on the clean samples
-    Divide feature samples by torch.chunk
-
-    Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the number
-            of classes.
-        label (torch.Tensor): The learning label of the prediction.
-        weight (torch.Tensor, optional): Sample-wise loss weight.
-        reduction (str, optional): The method used to reduce the loss.
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
-
-    Returns:
-        torch.Tensor: The calculated loss
-    """
-
-    # avg_factor = None
-    temper = kwargs['temper']
-    # add_act = kwargs['add_act']
-    # temper_ratio = kwargs['temper_ratio']
-    # k = kwargs['kpositive']
-    # classes = kwargs['classes']
-    feature_analysis = {}
-    loss = 0
-
-    from mmdet.models.detectors.base import FEATURES
-
-    for key, feature in FEATURES.items():
-        k = feature[0]
-        if k.dim() == 4: # if rpn
-            ntxent_loss = 0
-            pass
-        elif k.dim() == 2: # if roi
-            feature = k
-            label = label.unsqueeze(dim=1)
-            if name == 'ntxent.all.fg':
-                ntxent_loss = supcontrast_clean_fg(feature, label, temper=temper, min_samples=10)
-            elif name == 'ntxent.all.fg.bg':
-                ntxent_loss = supcontrast_clean_fg_bg(feature, label, temper=temper, min_samples=10)
-            # supcontrast_clean_kpositivev1_1, supcontrast_clean_kpositivev1_1, supcontrastv0_01, supcontrastv0_02, supcontrast_clean
-
-        loss += ntxent_loss
-
-    return loss, feature_analysis
-
-
-def assert_positive_loss(loss, **kwargs):
-    def print_kwargs(keyword, save=False):
-        if keyword in kwargs:
-            obj = kwargs[keyword]
-            if save:
-                path = f'{filename}_{keyword}.pt'
-                torch.save(obj, path)
-                if isinstance(obj, dict):
-                    f.write(f"{keyword} {obj.shape}: {path}\n")
-                elif isinstance(obj, list):
-                    f.write(f"{keyword} {len(obj)}: {path}\n")
-                elif torch.is_tensor(obj):
-                    f.write(f"{keyword} : {path}\n")
-            else:
-                f.write(f"{keyword} : {obj}\n")
-    try:
-        if loss <= 0:
-            raise ValueError
-        else:
-            return loss
-    except ValueError:
-        import time
-        if loss == 0:
-            filename = f"/ws/data/dshong/invalid_jsd_value/{time.strftime('%Y%m%d_%H%M%S')}"
-            f = open(f"{filename}.txt", 'w')
-            f.write(f"[1] Information \n")
-            print_kwargs('type')
-            print_kwargs('name')
-            f.write("\n\n")
-
-            f.write("[2] Value\n")
-            print_kwargs('pred_orig', True)
-            print_kwargs('label', True)
-            print_kwargs('weight', True)
-            print_kwargs('pred_aug1', True)
-            print_kwargs('pred_aug2', True)
-            print_kwargs('class_weight', True)
-
-            f.close()
-        else:
-            filename = f"/ws/data/dshong/invalid_jsd_value/negative_loss"
-            f = open(f"{filename}.txt", 'a')
-            f.write(f"{time.strftime('%Y%m%d_%H%M%S')}")
-            f.close()
-        return 0
 
 
 @LOSSES.register_module()
@@ -697,24 +440,6 @@ class CrossEntropyLossPlus(nn.Module):
         else:
             self.cls_additional = None
 
-        # additional loss2: (nt-xent)
-        if self.additional_loss2 == 'ntxent.clean.fg':
-            self.cls_additional2 = ntxent_clean_fg
-        elif self.additional_loss2 == 'ntxent.clean.fg.bg':
-            self.cls_additional2 = ntxent_clean_fg
-        elif self.additional_loss2 == 'ntxent.clean.fg.bg.tr':
-            self.cls_additional2 = ntxent_clean_fg
-        elif self.additional_loss2 == 'ntxent.all.fg':
-            self.cls_additional2 = ntxent_all
-        elif self.additional_loss2 == 'ntxent.all.fg.bg':
-            self.cls_additional2 = ntxent_all
-        elif self.additional_loss2 == 'analyze_shared_fcs_1input':
-            self.cls_additional2 = analyze_shared_fcs_1input
-        elif self.additional_loss2 == 'analyze_shared_fcs_2input':
-            self.cls_additional2 = analyze_shared_fcs_2input
-        else:
-            self.cls_additional2 = None
-
     def forward(self,
                 cls_score,
                 label,
@@ -798,79 +523,16 @@ class CrossEntropyLossPlus(nn.Module):
             for key, value in p_distribution.items():
                 self.wandb_features[f'{key}({self.wandb_name})'] = value
 
-        loss_additional2 = 0
-        if self.cls_additional2 is not None:
-            if self.additional_loss_weight_reduce == False:
-                weight = None
-            loss_additional2, p_distribution2 = self.cls_additional2(
-                cls_score,
-                label,
-                weight,
-                reduction=reduction,
-                avg_factor=avg_factor,
-                temper=self.temper,
-                temper_ratio=self.temper_ratio,
-                add_act=self.add_act,
-                ignore_index=ignore_index,
-                class_weight=class_weight,
-                lambda_weight=self.lambda_weight,
-                kpositive=self.kpositive,
-                classes=self.classes,
-                num_views=self.num_views,
-                name=self.additional_loss2,
-            )
-
-            # wandb for rpn
-            if self.use_sigmoid:
-                if len(self.wandb_features[f'ce_loss({self.wandb_name})']) == 5:
-                    self.wandb_features[f'additional_loss2({self.wandb_name})'].clear()
-                    self.wandb_features[f'lam_additional_loss2({self.wandb_name})'].clear()
-                self.wandb_features[f'additional_loss2({self.wandb_name})'].append(loss_additional2)
-                self.wandb_features[f'lam_additional_loss2({self.wandb_name})'].append(
-                    self.lambda_weight2 * loss_additional2)
-            else:
-                self.wandb_features[f'additional_loss2({self.wandb_name})'] = loss_additional2
-                self.wandb_features[f'lam_additional_loss2({self.wandb_name})'] = self.lambda_weight2 * loss_additional2
-
-            if any(self.sum_features) == False:
-                self.sum_features[f'iteration'] = 1
-                for key, value in p_distribution2.items():
-                    self.sum_features[f'{key}({self.wandb_name})'] = 0
-
-            for key, value in p_distribution2.items():
-                self.sum_features[f'{key}({self.wandb_name})'] += value
-
-            self.wandb_features.update(self.sum_features)
-
-                # self.wandb_features[f'{key}({self.wandb_name})'] = value
-
-
-        loss = loss_cls + self.lambda_weight * loss_additional + self.lambda_weight2 * loss_additional2
-        # self.wandb_features[f'loss({self.wandb_name})'] = loss
-        # self.wandb_features[f'additional_loss({self.wandb_name})'] = loss_additional
+        # loss_additional2 = 0
+        loss = loss_cls + self.lambda_weight * loss_additional
 
         # For analysis_cfg: loss_weight
         if not hasattr(self, 'outputs'):
             self.outputs = dict()
-            for key in ['loss_cls', 'loss_additional', 'loss_additional2']:
+            for key in ['loss_cls', 'loss_additional']:
                 self.outputs[key] = []
         self.outputs['loss_cls'].append(float(loss_cls))
         self.outputs['loss_additional'].append(float(self.lambda_weight * loss_additional))
-        self.outputs['loss_additional2'].append(float(self.lambda_weight2 * loss_additional2))
-
-        # ANALYSIS[CODE=005]: analysis relative pos and neg loss: The ration of positiv JSD loss over total loss
-        if 'loss_pos' in p_distribution:
-            rel_pos = p_distribution['loss_pos'] / float(loss)
-            rel_neg = p_distribution['loss_neg'] / float(loss)
-            if self.use_sigmoid:  # RPN
-                if len(self.wandb_features[f'rel_pos({self.wandb_name})']) == 5:
-                    self.wandb_features[f'rel_pos({self.wandb_name})'].clear()
-                    self.wandb_features[f'rel_neg({self.wandb_name})'].clear()
-                self.wandb_features[f'rel_pos({self.wandb_name})'].append(rel_pos)
-                self.wandb_features[f'rel_neg({self.wandb_name})'].append(rel_neg)
-            else:
-                self.wandb_features[f'rel_pos({self.wandb_name})'] = rel_pos
-                self.wandb_features[f'rel_neg({self.wandb_name})'] = rel_neg
 
         return loss
 

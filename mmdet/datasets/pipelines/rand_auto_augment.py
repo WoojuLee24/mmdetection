@@ -30,7 +30,7 @@ class RandAutoAugment:
     Strategies for Object Detection <https://arxiv.org/pdf/1906.11172>`_.
 
     TODO: Implement 'Sharpness' transforms
-    TODO: Implement 'posterize', 'solarize', 'zoom' (written by DSHONG)
+    TODO: Implement 'posterize', 'solarize', 'zoom'
 
     Args:
         policies (str): The policies of auto augmentation.

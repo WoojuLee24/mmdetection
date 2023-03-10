@@ -425,7 +425,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
             gt_labels_list=data['gt_labels'],
             label_channels=label_channels)
         del anchor_list, valid_flag_list
-        # edited by dnwn24
         labels_flatten, labels_flatten_weight = cls_reg_targets[0], cls_reg_targets[1] # {list:5} (num_types, H' * W' * num_priors)
         labels_flatten = cls_reg_targets[0]
 
@@ -438,7 +437,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         for i in range(5):
             label = labels_flatten[i] # (num_types, H' * W' * num_priors)
             label = label.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()  # (num_types, H', W', num_priors)
-            # edited by dnwn24
             label_weight = labels_flatten_weight[i]
             label_weight = label_weight.reshape(num_type, featmap_sizes[i][0], featmap_sizes[i][1], -1).contiguous()
             label = torch.ones_like(label) - label
@@ -466,11 +464,6 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         plt.figure(figsize=(5 * (num_type + 1), 4 * num_priors))
         for p in range(num_priors):         # [0, 1, 2]
             labels = labels_all[p]          # (num_type, num_lev, H, W)
-            # if torch.all(torch.all(torch.all(torch.eq(labels[0], labels[1]), dim=0), dim=0), dim=0):  # if equal
-            #     print('Right!')
-            # if torch.all(torch.all(torch.all(torch.eq(labels[0], labels[1]), dim=1), dim=0), dim=0):  # if equal
-            #     print('Right!')
-
             label = labels[0]  # (num_lev, H, W)
             # label = torch.clamp(label.sum(axis=0) / num_lev, min=0)  # (H,W), range=[0,1]
             label = label.sum(axis=0) / num_lev  # (H,W), range=[0,1]

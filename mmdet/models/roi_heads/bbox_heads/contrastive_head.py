@@ -21,16 +21,13 @@ class ContrastiveHead(BBoxHead):
                  with_cls=True,
                  with_reg=True,
                  with_cont=True,
-                 aug='None',
-                 aug_severity=0.01,
                  roi_feat_size=7,
                  in_channels=256,
                  num_classes=80,
-                 bbox_coder=dict(
-                     type='DeltaXYWHBBoxCoder',
-                     clip_border=True,
-                     target_means=[0., 0., 0., 0.],
-                     target_stds=[0.1, 0.1, 0.2, 0.2]),
+                 bbox_coder=dict(type='DeltaXYWHBBoxCoder',
+                                 clip_border=True,
+                                 target_means=[0., 0., 0., 0.],
+                                 target_stds=[0.1, 0.1, 0.2, 0.2]),
                  reg_class_agnostic=False,
                  reg_decoded_bbox=False,
                  reg_predictor_cfg=dict(type='Linear'),
@@ -54,8 +51,6 @@ class ContrastiveHead(BBoxHead):
                                               cls_predictor_cfg, loss_cls,
                                               loss_bbox, init_cfg)
         self.with_cont = with_cont
-        self.aug = aug
-        self.aug_severity = aug_severity
         self.cont_predictor_cfg = cont_predictor_cfg
         self.out_dim_cont = out_dim_cont
         self.loss_cont = build_loss(loss_cont)
@@ -93,7 +88,6 @@ class ContrastiveHead(BBoxHead):
                     losses.update(acc_)
                 else:
                     losses['acc'] = accuracy(cls_score, labels)
-
                     ### ANALYSIS CODE from here ###
                     if hasattr(self, 'analysis_list'):
                         type_list = [analysis['type'] for analysis in self.analysis_list]
@@ -142,9 +136,6 @@ class ContrastiveHead(BBoxHead):
                            labels[pos_inds.type(torch.bool)]]
         pos_bbox_absolute_targets = bbox_absolute_targets[pos_inds.type(torch.bool)]
         ious = bbox_overlaps(pos_bbox_absolute_pred, pos_bbox_absolute_targets, is_aligned=True).clamp(min=1e-6)
-
-        # if ious[ious < 0.7].float().sum() > 0:
-        #     print('iou lower than 0.7 found !')
         labels = labels.contiguous().view(-1, 1)
         inds, _ = (labels != labels.max()).nonzero(as_tuple=True)
         if (cont_feats is not None) \
@@ -356,10 +347,6 @@ class ConvFCContrastiveHead(ContrastiveHead):
         x_reg = x
         x_cont = x
 
-        if self.aug == 'unoise':
-            a = torch.rand_like(x_cont) * self.aug_severity
-            x_cont = x_cont + torch.rand_like(x_cont)
-
         for conv in self.cls_convs:
             x_cls = conv(x_cls)
         if x_cls.dim() > 2:
@@ -383,12 +370,7 @@ class ConvFCContrastiveHead(ContrastiveHead):
         cls_score = self.fc_cls(x_cls) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
         cont_feats = self.fc_cont(x_cont) if self.with_cont else None
-        # if self.with_cont:
-        #     for fc in self.fc_cont:
-        #         x_cont = fc(x_cont)
-        #     cont_feats = x_cont
-        # else:
-        #     cont_feats = None
+
         return cls_score, bbox_pred, cont_feats
 
 
