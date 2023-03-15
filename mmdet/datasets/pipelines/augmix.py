@@ -74,6 +74,10 @@ def posterize(pil_img, level, **kwargs):
   return ImageOps.posterize(pil_img, 4 - level)
 
 
+def invert(pil_img, **kwargs):
+  return ImageOps.invert(pil_img)
+
+
 def rotate(pil_img, level, img_size, fillcolor=None, center=None, mask=None, bbox_xy=None, return_bbox=False, **kwargs):
     degrees = int_parameter(sample_level(level), 30)
     if np.random.uniform() > 0.5:

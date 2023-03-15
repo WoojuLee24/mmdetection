@@ -363,9 +363,12 @@ def plot_matrix(cm,
     plt.figure(figsize=(len(classes), len(classes)))
     if normalize == 'None':
         pass
-    elif normalize == 'y':
+    elif normalize == 'x':
         cm = cm.astype('float') / (cm.sum(axis=0)[:, np.newaxis] + 1e-8)
-        print("Y Normalized confusion matrix")
+        print("x Normalized confusion matrix")
+    elif normalize == 'y':
+        cm = cm.astype('float') / (cm.sum(axis=1)[np.newaxis, :] + 1e-8)
+        print("y Normalized confusion matrix")
     elif normalize == 'xy':
         cm = cm.astype('float') / (cm.sum())
         print("XY Normalized confusion matrix")
