@@ -8,7 +8,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from mmcv.runner import BaseModule, auto_fp16
 
-from mmdet.core.visualization import imshow_det_bboxes
+from mmdet.core.visualization import imshow_det_bboxes, imshow_det_bboxes_filter
 
 # import wandb
 import matplotlib.pyplot as plt
@@ -646,7 +646,11 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                     win_name='',
                     show=False,
                     wait_time=0,
-                    out_file=None):
+                    out_file=None,
+                    filter_mode=False,
+                    gt_bboxes=None,
+                    gt_labels=None,
+                    **kwargs):
         """Draw `result` over `img`.
 
         Args:
@@ -701,22 +705,44 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         if out_file is not None:
             show = False
         # draw bounding boxes
-        img = imshow_det_bboxes(
-            img,
-            bboxes,
-            labels,
-            segms,
-            class_names=self.CLASSES,
-            score_thr=score_thr,
-            bbox_color=bbox_color,
-            text_color=text_color,
-            mask_color=mask_color,
-            thickness=thickness,
-            font_size=font_size,
-            win_name=win_name,
-            show=show,
-            wait_time=wait_time,
-            out_file=out_file)
+        if filter_mode:
+            img = imshow_det_bboxes_filter(
+                img,
+                bboxes,
+                labels,
+                gt_bboxes,
+                gt_labels,
+                segms,
+                class_names=self.CLASSES,
+                score_thr=score_thr,
+                bbox_color=bbox_color,
+                text_color=text_color,
+                mask_color=mask_color,
+                thickness=thickness,
+                font_size=font_size,
+                win_name=win_name,
+                show=show,
+                wait_time=wait_time,
+                out_file=out_file,
+                **kwargs)
+        else:
+            img = imshow_det_bboxes(
+                img,
+                bboxes,
+                labels,
+                segms,
+                class_names=self.CLASSES,
+                score_thr=score_thr,
+                bbox_color=bbox_color,
+                text_color=text_color,
+                mask_color=mask_color,
+                thickness=thickness,
+                font_size=font_size,
+                win_name=win_name,
+                show=show,
+                wait_time=wait_time,
+                out_file=out_file,
+                **kwargs)
 
         if not (show or out_file):
             return img
