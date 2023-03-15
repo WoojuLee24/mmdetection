@@ -193,7 +193,6 @@ class WandbMultiLogger(WandbLoggerHook):
                         else:
                             results = multi_gpu_test(runner.model, self.val_dataloader)
 
-                        print(f"[dshong] : results' type is {type(results)} at rank {runner.rank}")
                         if runner.rank == 0:
                             eval_results = self.val_dataset.evaluate(results, logger='silent')
 

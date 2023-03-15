@@ -206,7 +206,6 @@ class WandbLogger(WandbLoggerHook):
                         # Log the table
                         self._log_eval_table()
 
-    # edited by dnwn24
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
