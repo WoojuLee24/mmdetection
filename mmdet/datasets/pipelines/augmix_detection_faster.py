@@ -682,6 +682,7 @@ class AugMixDetectionFaster:
 
 
     def __call__(self, results, *args, **kwargs):
+        results['img'] = results['img'].astype(np.uint8)  # for yolo
         if self.num_views == 1:
             if isinstance(self.aug_list, dict):
                 return_bbox_list = self.aug_list['return_bbox_list'] if 'return_bbox_list' in self.aug_list else [False] * len(self.aug_list['policies'])
