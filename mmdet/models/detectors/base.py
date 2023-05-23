@@ -582,6 +582,12 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
 
         data = integrate_data(data) # concatenate the original image and augmented images.
 
+        # imgs = data['img']
+        # for i, img in enumerate(imgs):
+        #     img = img.cpu().detach().numpy()
+        #     img = np.transpose(img, (1, 2, 0))
+        #     plt.imsave(f'/ws/data/log/ai28v4/debug/detf_wophoto/img{i}.png', img)
+
         losses = self(**data)
 
         # domain generalization in the fpn layer

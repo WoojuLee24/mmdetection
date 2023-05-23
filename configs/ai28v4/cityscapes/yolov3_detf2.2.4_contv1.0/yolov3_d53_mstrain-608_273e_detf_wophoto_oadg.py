@@ -17,7 +17,7 @@ model = dict(
         in_channels=[1024, 512, 256],
         out_channels=[512, 256, 128]),
     bbox_head=dict(
-        type='YOLOV3Head',
+        type='YOLOV3HeadCont',
         num_classes=8,
         in_channels=[512, 256, 128],
         out_channels=[1024, 512, 256],
@@ -44,7 +44,10 @@ model = dict(
             use_sigmoid=True,
             loss_weight=2.0,
             reduction='sum'),
-        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum')),
+        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
+        jsd_conf_weight=2.0,
+        jsd_cls_weight=1.0,
+        cont_weight=0.1),
     # training and testing settings
     train_cfg=dict(
         assigner=dict(
@@ -75,7 +78,7 @@ train_pipeline = [
         type='MinIoURandomCrop',
         min_ious=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         min_crop_size=0.3),
-    dict(type='Resize', img_scale=[(2048, 800), (2048, 1024)], # [(480, 480), (608, 608)],
+    dict(type='Resize', img_scale=[(480, 480), (608, 608)], # [(480, 480), (608, 608)],
          keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     # dict(type='PhotoMetricDistortion'), # include?
@@ -106,7 +109,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     train=dict(
         type=dataset_type,
