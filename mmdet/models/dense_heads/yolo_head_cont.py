@@ -17,6 +17,9 @@ from ..builder import HEADS, build_loss
 from .base_dense_head import BaseDenseHead
 from .dense_test_mixins import BBoxTestMixin
 
+from mmdet.models.losses.ai28.contrastive_loss import supcontrast_clean_fg_bg, supcontrastv0_2, \
+    supcontrastv1_0, supcontrastv1_1, supcontrastv1_2, supcontrastv1_3
+
 
 @HEADS.register_module()
 class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
@@ -78,7 +81,11 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
                  loss_wh=dict(type='MSELoss', loss_weight=1.0),
                  jsd_conf_weight=1.0,
                  jsd_cls_weight=1.0,
-                 cont_weight=0.1,
+                 cont_cfg=dict(
+                     type='1.0',
+                     loss_weight=0.1,
+                     dim=256,
+                     temperature=0.07),
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=dict(
@@ -120,7 +127,21 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
 
         self.jsd_conf_weight = jsd_conf_weight
         self.jsd_cls_weight = jsd_cls_weight
-        self.cont_weight = cont_weight
+        self.cont_weight = cont_cfg['loss_weight']
+        self.cont_dim = cont_cfg['dim']
+
+        if cont_cfg['type'] in ['0.1']:
+            self.loss_cont = supcontrast_clean_fg_bg
+        elif cont_cfg['type'] in ['0.2']:
+            self.loss_cont = supcontrastv0_2
+        elif cont_cfg['type'] in ['1.0']:
+            self.loss_cont = supcontrastv1_0
+        elif cont_cfg['type'] in ['1.1']:
+            self.loss_cont = supcontrastv1_1
+        elif cont_cfg['type'] in ['1.2']:
+            self.loss_cont = supcontrastv1_2
+        elif cont_cfg['type'] in ['1.3']:
+            self.loss_cont = supcontrastv1_3
 
         self.num_base_priors = self.prior_generator.num_base_priors[0]
         assert len(
@@ -172,7 +193,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             conv_pred = nn.Conv2d(self.out_channels[i],
                                   self.num_base_priors * self.num_attrib, 1)
             conv_cont = nn.Conv2d(self.out_channels[i],
-                                  self.num_base_priors * self.num_attrib, 1)
+                                  self.num_base_priors * self.cont_dim, 1) # TODO. Is the dim aligned?
 
             self.convs_bridge.append(conv_bridge)
             self.convs_pred.append(conv_pred)
@@ -218,7 +239,9 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             pred_maps.append(pred_map)
             cont_maps.append(cont_map)
 
-        return tuple(pred_maps),
+        # return tuple(pred_maps),
+        return tuple(pred_maps), tuple(cont_maps),
+
 
     @force_fp32(apply_to=('pred_maps', ))
     def get_bboxes(self,
@@ -314,6 +337,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
     @force_fp32(apply_to=('pred_maps', ))
     def loss(self,
              pred_maps,
+             cont_maps,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -355,7 +379,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             anchor_list, responsible_flag_list, gt_bboxes, gt_labels)
 
         losses_cls, losses_conf, losses_xy, losses_wh, jsd_cls, jsd_conf = multi_apply(
-            self.loss_single, pred_maps, target_maps_list, neg_maps_list)
+            self.loss_single, pred_maps, cont_maps, target_maps_list, neg_maps_list)
 
         return dict(
             loss_cls=losses_cls,
@@ -365,7 +389,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             jsd_cls=jsd_cls,
             jsd_conf=jsd_conf)
 
-    def loss_single(self, pred_map, target_map, neg_map):
+    def loss_single(self, pred_map, cont_map, target_map, neg_map):
         """Compute loss of a single image from a batch.
 
         Args:
@@ -408,8 +432,23 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         loss_xy = self.loss_xy(pred_xy, target_xy, weight=pos_mask)
         loss_wh = self.loss_wh(pred_wh, target_wh, weight=pos_mask)
 
+        # OA-DG
         jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label)
         jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
+
+        cont_feats = cont_map.permute(0, 2, 3, 1).reshape(-1, self.cont_dim)
+        targets = pos_mask.reshape(-1, 1) * target_label.reshape(-1, 8) # 8 : # of classes
+
+        a = pos_mask.reshape(-1, 1)
+        b = target_label.reshape(-1, 8)
+        targets = torch.ones_like(a) * 8
+        row, col = (b>0).nonzero(as_tuple=True)
+        targets[row, :] = col.float().reshape(-1, 1)
+
+        pos_inds = (pos_mask!=0).nonzero()
+        neg_inds = (neg_mask)
+
+        loss_cont = self.loss_cont(cont_feats, targets, temper=0.07, min_samples=10)
 
         return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf
 

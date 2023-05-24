@@ -586,7 +586,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         # for i, img in enumerate(imgs):
         #     img = img.cpu().detach().numpy()
         #     img = np.transpose(img, (1, 2, 0))
-        #     plt.imsave(f'/ws/data/log/ai28v4/debug/detf_wophoto/img{i}.png', img)
+        #     img = np.clip(img, 0, 1)
+        #     plt.imsave(f'/ws/data/log/ai28v4/debug/base/img{i}.png', img)
 
         losses = self(**data)
 
