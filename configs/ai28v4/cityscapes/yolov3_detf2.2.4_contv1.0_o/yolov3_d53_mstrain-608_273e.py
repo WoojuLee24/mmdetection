@@ -74,7 +74,7 @@ train_pipeline = [
         type='MinIoURandomCrop',
         min_ious=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         min_crop_size=0.3),
-    dict(type='Resize', img_scale=[(800, 800), (1024, 1024)], keep_ratio=True),
+    dict(type='Resize', img_scale=[(480, 480), (608, 608)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='PhotoMetricDistortion'), # include?
     dict(type='Normalize', **img_norm_cfg),

@@ -675,7 +675,6 @@ def supcontrastv1_0(logits_clean, labels=None, lambda_weight=0.1, temper=0.07, m
         mask_anchor_fg = mask_anchor_fg.detach()
         # mask_anchor_fg_np = mask_anchor_fg.detach().cpu().numpy()
         mask_contrast = torch.ones([batch_size, batch_size], dtype=torch.float32).to(device)
-        # mask_contrast_except_eye = mask_contrast - mask_eye
         mask_contrast_except_eye = mask_contrast - mask_eye
         mask_contrast_except_eye = mask_contrast_except_eye.detach()
         # mask_contrast_except_eye_np = mask_contrast_except_eye.detach().cpu().numpy()

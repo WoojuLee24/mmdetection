@@ -378,7 +378,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         target_maps_list, neg_maps_list = self.get_targets(
             anchor_list, responsible_flag_list, gt_bboxes, gt_labels)
 
-        losses_cls, losses_conf, losses_xy, losses_wh, jsd_cls, jsd_conf = multi_apply(
+        losses_cls, losses_conf, losses_xy, losses_wh, jsd_cls, jsd_conf, losses_cont = multi_apply(
             self.loss_single, pred_maps, cont_maps, target_maps_list, neg_maps_list)
 
         return dict(
@@ -387,7 +387,8 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             loss_xy=losses_xy,
             loss_wh=losses_wh,
             jsd_cls=jsd_cls,
-            jsd_conf=jsd_conf)
+            jsd_conf=jsd_conf,
+            loss_cont=losses_cont)
 
     def loss_single(self, pred_map, cont_map, target_map, neg_map):
         """Compute loss of a single image from a batch.
@@ -436,21 +437,32 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label)
         jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
 
-        cont_feats = cont_map.permute(0, 2, 3, 1).reshape(-1, self.cont_dim)
-        targets = pos_mask.reshape(-1, 1) * target_label.reshape(-1, 8) # 8 : # of classes
+        if self.cont_weight==0:
+            return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, torch.zeros_like(jsd_cls)
+        else:
+            cont_feats = cont_map.permute(0, 2, 3, 1).reshape(-1, self.cont_dim)
 
-        a = pos_mask.reshape(-1, 1)
-        b = target_label.reshape(-1, 8)
-        targets = torch.ones_like(a) * 8
-        row, col = (b>0).nonzero(as_tuple=True)
-        targets[row, :] = col.float().reshape(-1, 1)
+            a = pos_mask.reshape(-1, 1)
+            b = neg_mask.reshape(-1, 1)
+            c = target_label.reshape(-1, 8)
+            d = torch.argmax(c, dim=1).reshape(-1, 1)
 
-        pos_inds = (pos_mask!=0).nonzero()
-        neg_inds = (neg_mask)
+            targets = torch.ones_like(a, dtype=d.dtype) * 8  # init target with background label
+            pos_inds, _ = (a!=0).nonzero(as_tuple=True)
+            neg_inds, _ = (b!=0).nonzero(as_tuple=True)
+            k = len(neg_inds)
+            # len_neginds2 = min(max(len(neg_inds)//4, 2000), len(neg_inds))
+            len_neginds2 = min(2000, len(neg_inds))
+            neg_inds2 = torch.randint(k, (len_neginds2,)).cuda()
+            pos_neg_inds = torch.cat((pos_inds, neg_inds2), dim=0)
 
-        loss_cont = self.loss_cont(cont_feats, targets, temper=0.07, min_samples=10)
+            targets[pos_inds, :] = d[pos_inds, :]
+            targets2 = targets[pos_neg_inds, :]
+            cont_feats = cont_feats[pos_neg_inds, :]
 
-        return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf
+            loss_cont = self.cont_weight * self.loss_cont(cont_feats, targets2, temper=0.07, min_samples=10)
+
+            return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, loss_cont
 
     def get_targets(self, anchor_list, responsible_flag_list, gt_bboxes_list,
                     gt_labels_list):

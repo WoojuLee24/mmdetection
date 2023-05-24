@@ -2,6 +2,7 @@ _base_ = [
     '/ws/external/configs/_base_/default_runtime.py',
     # '/ws/external/configs/_base_/datasets/cityscapes_detection.py',
     ]
+num_views=2
 # model settings
 model = dict(
     type='YOLOV3',
@@ -9,14 +10,15 @@ model = dict(
         type='Darknet',
         depth=53,
         out_indices=(3, 4, 5),
-        init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://darknet53')),
+        init_cfg=None),
+        # init_cfg=dict(type='Pretrained', checkpoint='open-mmlab://darknet53')),
     neck=dict(
         type='YOLOV3Neck',
         num_scales=3,
         in_channels=[1024, 512, 256],
         out_channels=[512, 256, 128]),
     bbox_head=dict(
-        type='YOLOV3Head',
+        type='YOLOV3HeadCont',
         num_classes=8,
         in_channels=[512, 256, 128],
         out_channels=[1024, 512, 256],
@@ -43,7 +45,10 @@ model = dict(
             use_sigmoid=True,
             loss_weight=2.0,
             reduction='sum'),
-        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum')),
+        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
+        jsd_conf_weight=0.0,
+        jsd_cls_weight=1.0,
+        cont_cfg=dict(type='1.0', loss_weight=0.0, dim=256)),
     # training and testing settings
     train_cfg=dict(
         assigner=dict(
@@ -74,13 +79,20 @@ train_pipeline = [
         type='MinIoURandomCrop',
         min_ious=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
         min_crop_size=0.3),
-    dict(type='Resize', img_scale=[(800, 800), (1024, 1024)], keep_ratio=True),
+    dict(type='Resize', img_scale=[(800, 800), (1024, 1024)], # [(480, 480), (608, 608)],
+         keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='PhotoMetricDistortion'), # include?
+    # dict(type='PhotoMetricDistortion'), # include?
+    dict(type='AugMixDetectionFaster', num_views=num_views, version='2.2.4',
+         aug_severity=3, mixture_depth=-1, **img_norm_cfg,
+         num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
+         pre_blur=True, fillmode='var_blur', sigma_ratio=1 / 8, mixture_width=1, ),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
+    dict(type='Collect', keys=['img', 'img2',
+                               'gt_bboxes', 'gt_bboxes2',
+                               'gt_labels'])
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -98,7 +110,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     train=dict(
         type=dataset_type,
@@ -128,3 +140,4 @@ lr_config = dict(
 # runtime settings
 runner = dict(type='EpochBasedRunner', max_epochs=273)
 evaluation = dict(interval=1, metric=['bbox'])
+default_hooks=dict(checkpoint=dict(type='CheckpointHook', interval=20, save_best='auto'))
