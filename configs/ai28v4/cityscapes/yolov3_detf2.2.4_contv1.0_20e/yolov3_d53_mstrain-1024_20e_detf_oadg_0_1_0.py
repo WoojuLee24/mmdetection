@@ -98,7 +98,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1024, 1024),
+        img_scale=(608, 608),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -134,10 +134,12 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=2000,  # same as burn-in in darknet
-    warmup_ratio=0.1,
-    step=[218, 246])
+    warmup_iters=500,  # cityscapes set
+    warmup_ratio=0.001,
+    step=[10, 15])
 # runtime settings
-runner = dict(type='EpochBasedRunner', max_epochs=273)
+runner = dict(type='EpochBasedRunner', max_epochs=20)
 evaluation = dict(interval=1, metric=['bbox'])
-default_hooks=dict(checkpoint=dict(type='CheckpointHook', interval=20, save_best='auto'))
+default_hooks=dict(checkpoint=dict(type='CheckpointHook', interval=1, max_keep_ckpts=5))
+
+load_from = "/ws/external/pretrained/yolov3_d53_mstrain-608_273e_coco_20210518_115020-a2c3acb8.pth"

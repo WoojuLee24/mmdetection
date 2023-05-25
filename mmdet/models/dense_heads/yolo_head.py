@@ -76,6 +76,7 @@ class YOLOV3Head(BaseDenseHead, BBoxTestMixin):
                      use_sigmoid=True,
                      loss_weight=1.0),
                  loss_wh=dict(type='MSELoss', loss_weight=1.0),
+                 cont_cfg=None,
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=dict(
@@ -91,6 +92,7 @@ class YOLOV3Head(BaseDenseHead, BBoxTestMixin):
         self.featmap_strides = featmap_strides
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
+        self.cont_cfg = cont_cfg
         if self.train_cfg:
             self.assigner = build_assigner(self.train_cfg.assigner)
             if hasattr(self.train_cfg, 'sampler'):

@@ -34,6 +34,8 @@ class BBoxTestMixin(object):
                 with shape (n,)
         """
         outs = self.forward(feats)
+        if self.cont_cfg != None:
+            outs = outs[0:1]
         results_list = self.get_bboxes(
             *outs, img_metas=img_metas, rescale=rescale)
         return results_list

@@ -127,6 +127,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
 
         self.jsd_conf_weight = jsd_conf_weight
         self.jsd_cls_weight = jsd_cls_weight
+        self.cont_cfg = cont_cfg
         self.cont_weight = cont_cfg['loss_weight']
         self.cont_dim = cont_cfg['dim']
 
@@ -239,6 +240,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             pred_maps.append(pred_map)
             cont_maps.append(cont_map)
 
+        # self.cont_maps = tuple(cont_maps),
         # return tuple(pred_maps),
         return tuple(pred_maps), tuple(cont_maps),
 
@@ -428,17 +430,17 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         target_label = target_map[..., 5:]
 
         loss_cls = self.loss_cls(pred_label, target_label, weight=pos_mask)
-        loss_conf = self.loss_conf(
-            pred_conf, target_conf, weight=pos_and_neg_mask)
+        loss_conf = self.loss_conf(pred_conf, target_conf, weight=pos_and_neg_mask)
         loss_xy = self.loss_xy(pred_xy, target_xy, weight=pos_mask)
         loss_wh = self.loss_wh(pred_wh, target_wh, weight=pos_mask)
 
         # OA-DG
-        jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label)
+        jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
         jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
 
         if self.cont_weight==0:
-            return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, torch.zeros_like(jsd_cls)
+            loss_cont = torch.zeros_like(jsd_cls)
+            return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, loss_cont
         else:
             cont_feats = cont_map.permute(0, 2, 3, 1).reshape(-1, self.cont_dim)
 
