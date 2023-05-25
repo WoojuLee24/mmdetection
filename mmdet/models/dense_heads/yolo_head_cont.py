@@ -429,10 +429,10 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         target_conf = target_map[..., 4]
         target_label = target_map[..., 5:]
 
-        loss_cls = self.loss_cls(pred_label, target_label, weight=pos_mask)
-        loss_conf = self.loss_conf(pred_conf, target_conf, weight=pos_and_neg_mask)
-        loss_xy = self.loss_xy(pred_xy, target_xy, weight=pos_mask)
-        loss_wh = self.loss_wh(pred_wh, target_wh, weight=pos_mask)
+        loss_cls = self.loss_cls(pred_label[[0, 2]], target_label[[0, 2]], weight=pos_mask[[0, 2]]) # dshong
+        loss_conf = self.loss_conf(pred_conf[[0, 2]], target_conf[[0, 2]], weight=pos_and_neg_mask[[0, 2]])
+        loss_xy = self.loss_xy(pred_xy[[0, 2]], target_xy[[0, 2]], weight=pos_mask[[0, 2]])
+        loss_wh = self.loss_wh(pred_wh[[0, 2]], target_wh[[0, 2]], weight=pos_mask[[0, 2]])
 
         # OA-DG
         jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
