@@ -2,7 +2,7 @@ _base_ = [
     '/ws/external/configs/_base_/default_runtime.py',
     # '/ws/external/configs/_base_/datasets/cityscapes_detection.py',
     ]
-num_views=2
+num_views=1
 # model settings
 model = dict(
     type='YOLOV3',
@@ -18,7 +18,7 @@ model = dict(
         in_channels=[1024, 512, 256],
         out_channels=[512, 256, 128]),
     bbox_head=dict(
-        type='YOLOV3HeadCont',
+        type='YOLOV3Head',
         num_classes=8,
         in_channels=[512, 256, 128],
         out_channels=[1024, 512, 256],
@@ -45,10 +45,7 @@ model = dict(
             use_sigmoid=True,
             loss_weight=2.0,
             reduction='sum'),
-        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
-        jsd_conf_weight=1.0,
-        jsd_cls_weight=1.0,
-        cont_cfg=dict(type='1.0', loss_weight=1.0, dim=256)),
+        loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum')),
     # training and testing settings
     train_cfg=dict(
         assigner=dict(
@@ -82,7 +79,7 @@ train_pipeline = [
     dict(type='Resize', img_scale=[(800, 800), (1024, 1024)], # [(480, 480), (608, 608)],
          keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='PhotoMetricDistortion'), # include?
+    # dict(type='PhotoMetricDistortion'), # include?
     dict(type='AugMixDetectionFaster', num_views=num_views, version='2.2.4',
          aug_severity=3, mixture_depth=-1, **img_norm_cfg,
          num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
@@ -90,8 +87,8 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'img2',
-                               'gt_bboxes', 'gt_bboxes2',
+    dict(type='Collect', keys=['img',
+                               'gt_bboxes',
                                'gt_labels'])
 ]
 test_pipeline = [
@@ -149,7 +146,7 @@ log_config = dict(
     dict(type='TextLoggerHook'),
     dict(type='WandbLogger',
          wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
-                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_1_1_1_wphoto",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oamix_wophoto",
                             },
          log_map_every_iter=False,
          log_checkpoint=True,

@@ -46,9 +46,9 @@ model = dict(
             loss_weight=2.0,
             reduction='sum'),
         loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
-        jsd_conf_weight=1.0,
-        jsd_cls_weight=1.0,
-        cont_cfg=dict(type='1.0', loss_weight=1.0, dim=256)),
+        jsd_conf_weight=0.0,
+        jsd_cls_weight=100.0,
+        cont_cfg=dict(type='1.0', loss_weight=0.0, dim=256)),
     # training and testing settings
     train_cfg=dict(
         assigner=dict(
@@ -82,7 +82,7 @@ train_pipeline = [
     dict(type='Resize', img_scale=[(800, 800), (1024, 1024)], # [(480, 480), (608, 608)],
          keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='PhotoMetricDistortion'), # include?
+    # dict(type='PhotoMetricDistortion'), # include?
     dict(type='AugMixDetectionFaster', num_views=num_views, version='2.2.4',
          aug_severity=3, mixture_depth=-1, **img_norm_cfg,
          num_bboxes=(3, 10), scales=(0.01, 0.2), ratios=(0.3, 1 / 0.3),
@@ -149,7 +149,7 @@ log_config = dict(
     dict(type='TextLoggerHook'),
     dict(type='WandbLogger',
          wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
-                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_1_1_1_wphoto",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_0_100_0",
                             },
          log_map_every_iter=False,
          log_checkpoint=True,

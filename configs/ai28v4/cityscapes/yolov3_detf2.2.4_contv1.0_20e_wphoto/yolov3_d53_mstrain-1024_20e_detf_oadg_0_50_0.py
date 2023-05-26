@@ -149,7 +149,7 @@ log_config = dict(
     dict(type='TextLoggerHook'),
     dict(type='WandbLogger',
          wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
-                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_0_50_0",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_0_50_0_wphoto",
                             },
          log_map_every_iter=False,
          log_checkpoint=True,
