@@ -210,7 +210,9 @@ class WandbLogger(WandbLoggerHook):
     def after_train_iter(self, runner):
         from mmdet.apis.test import single_gpu_test
         super(WandbLogger, self).after_train_iter(runner)
-        if self.every_n_iters(runner, self.interval):
+        if 'yolo' in  self.init_kwargs['name']:
+            pass
+        elif self.every_n_iters(runner, self.interval):
             # save the wandb_features
             self.log_wandb_feature(runner, split='train/')
             if self.log_map_every_iter:

@@ -143,3 +143,16 @@ evaluation = dict(interval=1, metric=['bbox'])
 default_hooks=dict(checkpoint=dict(type='CheckpointHook', interval=1, max_keep_ckpts=5))
 
 load_from = "/ws/external/pretrained/yolov3_d53_mstrain-608_273e_coco_20210518_115020-a2c3acb8.pth"
+
+log_config = dict(
+    hooks=[
+    dict(type='TextLoggerHook'),
+    dict(type='WandbLogger',
+         wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_0_20_0",
+                            },
+         log_map_every_iter=False,
+         log_checkpoint=True,
+         log_checkpoint_metadata=True
+         ),
+])

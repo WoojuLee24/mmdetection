@@ -589,6 +589,7 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
         #     img = np.clip(img, 0, 1)
         #     plt.imsave(f'/ws/data/log/ai28v4/debug/detf/img{i}.png', img)
 
+
         losses = self(**data)
 
         # domain generalization in the fpn layer
