@@ -140,6 +140,6 @@ lr_config = dict(
 # runtime settings
 runner = dict(type='EpochBasedRunner', max_epochs=20)
 evaluation = dict(interval=1, metric=['bbox'])
-default_hooks=dict(checkpoint=dict(type='CheckpointHook', interval=1, max_keep_ckpts=5))
+checkpoint_config = dict(interval=1, max_keep_ckpts=5)
 
 load_from = "/ws/external/pretrained/yolov3_d53_mstrain-608_273e_coco_20210518_115020-a2c3acb8.pth"
