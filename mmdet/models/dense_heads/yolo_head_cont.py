@@ -90,7 +90,10 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
                  test_cfg=None,
                  init_cfg=dict(
                      type='Normal', std=0.01,
-                     override=dict(name='convs_pred'))):
+                     override=dict(name='convs_pred')),
+                 wo_pos=False,
+                 use_squeeze=False,
+                 jsd_reduction='batchmean',):
         super(YOLOV3HeadCont, self).__init__(init_cfg)
         # Check params
         assert (len(in_channels) == len(out_channels) == len(featmap_strides))
@@ -127,6 +130,9 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
 
         self.jsd_conf_weight = jsd_conf_weight
         self.jsd_cls_weight = jsd_cls_weight
+        self.wo_pos = wo_pos
+        self.use_squeeze = use_squeeze
+        self.jsd_reduction = jsd_reduction
         self.cont_cfg = cont_cfg
         self.cont_weight = cont_cfg['loss_weight']
         self.cont_dim = cont_cfg['dim']
@@ -235,8 +241,8 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         for i in range(self.num_levels):
             x = feats[i]
             x = self.convs_bridge[i](x)
-            pred_map = self.convs_pred[i](x)
-            cont_map = self.convs_cont[i](x)
+            pred_map = self.convs_pred[i](x)  # [Conv2d(1024, 39, (1, 1)), Conv2d(512, 39, (1, 1), Conv2d(256, 39, (1, 1))]
+            cont_map = self.convs_cont[i](x)  # [Conv2d(1024, 768, (1, 1)), Conv2d(512, 768, (1, 1)), Conv2d(256, 768, (1, 1))]
             pred_maps.append(pred_map)
             cont_maps.append(cont_map)
 
@@ -435,7 +441,8 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         loss_wh = self.loss_wh(pred_wh[[0, 1]], target_wh[[0, 1]], weight=pos_mask[[0, 1]])
 
         # OA-DG
-        jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
+        jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label) if self.wo_pos else \
+            self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
         jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
 
         if self.cont_weight==0:
@@ -714,7 +721,10 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             pred_orig, pred_aug1 = pred_orig.reshape(pred_orig.shape + (1,)).contiguous(), pred_aug1.reshape(pred_aug1.shape + (1,)).contiguous()
             p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=-1), torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=-1)
         else:
-            p_clean, p_aug1= F.softmax(pred_orig, dim=-1), F.softmax(pred_aug1, dim=-1)
+            if self.use_squeeze:
+                pred_orig = pred_orig.reshape(-1, pred_orig.shape[-1])
+                pred_aug1 = pred_aug1.reshape(-1, pred_orig.shape[-1])
+            p_clean, p_aug1 = F.softmax(pred_orig, dim=-1), F.softmax(pred_aug1, dim=-1)
 
         # p_clean, p_aug1 = p_clean.reshape((1,) + p_clean.shape).contiguous(), p_aug1.reshape((1,) + p_aug1.shape).contiguous()
 
@@ -722,7 +732,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
 
         # log_pos_ratio
-        loss = (F.kl_div(p_mixture, p_clean, reduction='batchmean') +
-                F.kl_div(p_mixture, p_aug1, reduction='batchmean')) / 2.
+        loss = (F.kl_div(p_mixture, p_clean, reduction=self.jsd_reduction) +
+                F.kl_div(p_mixture, p_aug1, reduction=self.jsd_reduction)) / 2.
 
         return loss
