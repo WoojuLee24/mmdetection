@@ -46,9 +46,9 @@ model = dict(
             loss_weight=2.0,
             reduction='sum'),
         loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
-        jsd_conf_weight=1000.0,
+        jsd_conf_weight=0.0,
         jsd_cls_weight=0.0,
-        cont_cfg=dict(type='1.0', loss_weight=0.0, dim=256)),
+        cont_cfg=dict(type='1.0', loss_weight=100.0, dim=256, temperature=0.07)),
     # training and testing settings
     train_cfg=dict(
         assigner=dict(
@@ -149,7 +149,7 @@ log_config = dict(
     dict(type='TextLoggerHook'),
     dict(type='WandbLogger',
          wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
-                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_1000_0_0_wphotov2",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_0_0_100_wphotov2",
                             },
          log_map_every_iter=False,
          log_checkpoint=True,
