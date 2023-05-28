@@ -79,6 +79,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
                      use_sigmoid=True,
                      loss_weight=1.0),
                  loss_wh=dict(type='MSELoss', loss_weight=1.0),
+                 loss_const='jsd',
                  jsd_conf_weight=1.0,
                  jsd_cls_weight=1.0,
                  cont_cfg=dict(
@@ -128,6 +129,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         self.loss_xy = build_loss(loss_xy)
         self.loss_wh = build_loss(loss_wh)
 
+        self.loss_const = loss_const
         self.jsd_conf_weight = jsd_conf_weight
         self.jsd_cls_weight = jsd_cls_weight
         self.wo_pos = wo_pos
@@ -136,6 +138,10 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         self.cont_cfg = cont_cfg
         self.cont_weight = cont_cfg['loss_weight']
         self.cont_dim = cont_cfg['dim']
+        if 'temperature' in cont_cfg.keys():
+            self.cont_temperature = cont_cfg['temperature']
+        else:
+            self.cont_temperature = 0.07
 
         if cont_cfg['type'] in ['0.1']:
             self.loss_cont = supcontrast_clean_fg_bg
@@ -386,7 +392,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         target_maps_list, neg_maps_list = self.get_targets(
             anchor_list, responsible_flag_list, gt_bboxes, gt_labels)
 
-        losses_cls, losses_conf, losses_xy, losses_wh, jsd_cls, jsd_conf, losses_cont = multi_apply(
+        losses_cls, losses_conf, losses_xy, losses_wh, loss_cscls, loss_csconf, losses_cont = multi_apply(
             self.loss_single, pred_maps, cont_maps, target_maps_list, neg_maps_list)
 
         return dict(
@@ -394,8 +400,8 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             loss_conf=losses_conf,
             loss_xy=losses_xy,
             loss_wh=losses_wh,
-            jsd_cls=jsd_cls,
-            jsd_conf=jsd_conf,
+            loss_cscls=loss_cscls,
+            loss_csconf=loss_csconf,
             loss_cont=losses_cont)
 
     def loss_single(self, pred_map, cont_map, target_map, neg_map):
@@ -441,11 +447,15 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         loss_wh = self.loss_wh(pred_wh[[0, 1]], target_wh[[0, 1]], weight=pos_mask[[0, 1]])
 
         # OA-DG
-        jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label) if self.wo_pos else \
-            self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
-        jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
+        # jsd_cls = self.jsd_cls_weight * self.jsdv1_3(pred_label, target_label) if self.wo_pos else \
+        #     self.jsd_cls_weight * self.jsdv1_3(pred_label * pos_mask, target_label)
+        # jsd_conf = self.jsd_conf_weight * self.jsdv1_3(pred_conf, target_conf)
 
-        if self.cont_weight==0:
+        jsd_cls = self.jsd_cls_weight * self.loss_consistency(self.loss_const, pred_label, target_label) if self.wo_pos else \
+            self.jsd_cls_weight * self.loss_consistency(self.loss_const, pred_label * pos_mask, target_label)
+        jsd_conf = self.jsd_conf_weight * self.loss_consistency(self.loss_const, pred_conf, target_conf)
+
+        if self.cont_weight == 0:
             loss_cont = torch.zeros_like(jsd_cls)
             return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, loss_cont
         else:
@@ -469,7 +479,7 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             targets2 = targets[pos_neg_inds, :]
             cont_feats = cont_feats[pos_neg_inds, :]
 
-            loss_cont = self.cont_weight * self.loss_cont(cont_feats, targets2, temper=0.07, min_samples=10)
+            loss_cont = self.cont_weight * self.loss_cont(cont_feats, targets2, temper=self.cont_temperature, min_samples=10)
 
             return loss_cls, loss_conf, loss_xy, loss_wh, jsd_cls, jsd_conf, loss_cont
 
@@ -700,6 +710,20 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
             return batch_mlvl_bboxes, batch_mlvl_scores
 
     ## ai28
+
+
+    def loss_consistency(self, loss_name, pred, label, **kwargs):
+        if loss_name == 'jsd':
+            loss = self.jsdv1_3(pred, label)
+        elif loss_name == 'jsdv1.4':
+            loss = self.jsdv1_4(pred, label)
+        elif loss_name == 'kl':
+            loss = self.kl(pred, label)
+        elif loss_name == 'mse':
+            loss = self.mse(pred, label)
+
+        return loss
+
     def jsdv1_3(self, pred, label, **kwargs):
         """Calculate the jsdv1.3 loss.
         jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
@@ -734,5 +758,111 @@ class YOLOV3HeadCont(BaseDenseHead, BBoxTestMixin):
         # log_pos_ratio
         loss = (F.kl_div(p_mixture, p_clean, reduction=self.jsd_reduction) +
                 F.kl_div(p_mixture, p_aug1, reduction=self.jsd_reduction)) / 2.
+
+        return loss
+
+    def jsdv1_4(self, pred, label, **kwargs):
+        """Calculate the jsdv1.3 loss.
+        jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+        divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+        reduction parameter does not affect the loss
+
+        Args:
+            pred (torch.Tensor): The prediction with shape (N, C), C is the number
+                of classes.
+            label (torch.Tensor): The learning label of the prediction.
+
+        Returns:
+            torch.Tensor: The calculated loss
+        """
+
+        pred_orig, pred_aug1 = torch.chunk(pred, 2)
+
+        if pred_orig.dim() == 2: # pred_orig.shape[-1] == 1:  # if confidence
+            pred_orig, pred_aug1 = pred_orig.reshape(pred_orig.shape + (1,)).contiguous(), pred_aug1.reshape(pred_aug1.shape + (1,)).contiguous()
+            p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=-1), torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=-1)
+        else:
+            if self.use_squeeze:
+                pred_orig = pred_orig.reshape(-1, pred_orig.shape[-1])
+                pred_aug1 = pred_aug1.reshape(-1, pred_orig.shape[-1])
+            p_clean, p_aug1 = F.softmax(pred_orig, dim=-1), F.softmax(pred_aug1, dim=-1)
+
+        # p_clean, p_aug1 = p_clean.reshape((1,) + p_clean.shape).contiguous(), p_aug1.reshape((1,) + p_aug1.shape).contiguous()
+
+        # Clamp mixture distribution to avoid exploding KL divergence
+        p_clean = torch.clamp(p_clean, 1e-7, 1).log()
+        p_aug1 = torch.clamp(p_aug1, 1e-7, 1).log()
+        p_mixture = torch.clamp((p_clean + p_aug1) / 2., 1e-7, 1).log()
+
+        # log_pos_ratio
+        loss = (F.kl_div(p_mixture, p_clean, reduction=self.jsd_reduction) +
+                F.kl_div(p_mixture, p_aug1, reduction=self.jsd_reduction)) / 2.
+
+        return loss
+
+
+
+    def kl(self, pred, label, **kwargs):
+        """Calculate the jsdv1.3 loss.
+        jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+        divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+        reduction parameter does not affect the loss
+
+        Args:
+            pred (torch.Tensor): The prediction with shape (N, C), C is the number
+                of classes.
+            label (torch.Tensor): The learning label of the prediction.
+
+        Returns:
+            torch.Tensor: The calculated loss
+        """
+
+        pred_orig, pred_aug1 = torch.chunk(pred, 2)
+
+        if pred_orig.dim() == 2: # pred_orig.shape[-1] == 1:  # if confidence
+            pred_orig, pred_aug1 = pred_orig.reshape(pred_orig.shape + (1,)).contiguous(), pred_aug1.reshape(pred_aug1.shape + (1,)).contiguous()
+            p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=-1), torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=-1)
+        else:
+            if self.use_squeeze:
+                pred_orig = pred_orig.reshape(-1, pred_orig.shape[-1])
+                pred_aug1 = pred_aug1.reshape(-1, pred_orig.shape[-1])
+            p_clean, p_aug1 = F.softmax(pred_orig, dim=-1), F.softmax(pred_aug1, dim=-1)
+
+        p_clean = torch.clamp(p_clean, 1e-7, 1).log()
+        p_aug1 = torch.clamp(p_aug1, 1e-7, 1).log()
+
+        # log_pos_ratio
+        loss = F.kl_div(p_clean, p_aug1, reduction=self.jsd_reduction)
+
+        return loss
+
+
+    def mse(self, pred, label, **kwargs):
+        """Calculate the jsdv1.3 loss.
+        jsd loss (sigmoid, 1-sigmoid) for rpn head, softmax for roi head
+        divided by batchmean, divided by 768 (256*3) for rpn, 1056 (352*3) for roi
+        reduction parameter does not affect the loss
+
+        Args:
+            pred (torch.Tensor): The prediction with shape (N, C), C is the number
+                of classes.
+            label (torch.Tensor): The learning label of the prediction.
+
+        Returns:
+            torch.Tensor: The calculated loss
+        """
+
+        pred_orig, pred_aug1 = torch.chunk(pred, 2)
+
+        if pred_orig.dim() == 2: # pred_orig.shape[-1] == 1:  # if confidence
+            pred_orig, pred_aug1 = pred_orig.reshape(pred_orig.shape + (1,)).contiguous(), pred_aug1.reshape(pred_aug1.shape + (1,)).contiguous()
+            p_clean, p_aug1 = torch.cat((torch.sigmoid(pred_orig), 1 - torch.sigmoid(pred_orig)), dim=-1), torch.cat((torch.sigmoid(pred_aug1), 1 - torch.sigmoid(pred_aug1)), dim=-1)
+        else:
+            if self.use_squeeze:
+                pred_orig = pred_orig.reshape(-1, pred_orig.shape[-1])
+                pred_aug1 = pred_aug1.reshape(-1, pred_orig.shape[-1])
+            p_clean, p_aug1 = F.softmax(pred_orig, dim=-1), F.softmax(pred_aug1, dim=-1)
+
+        loss = F.mse_loss(p_clean, p_aug1, reduction='sum')     # not batchmean
 
         return loss

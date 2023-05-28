@@ -129,7 +129,7 @@ data = dict(
         pipeline=test_pipeline))
 # optimizer
 optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0005)
-optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=50, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
@@ -149,7 +149,7 @@ log_config = dict(
     dict(type='TextLoggerHook'),
     dict(type='WandbLogger',
          wandb_init_kwargs={'project': "AI28v4", 'entity': "kaist-url-ai28",
-                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_1000_0_0_wphoto",
+                            'name': "yolov3_d53_mstrain-1024_20e_detf_oadg_1000_0_0_wphoto_g50",
                             },
          log_map_every_iter=False,
          log_checkpoint=True,
