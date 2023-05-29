@@ -47,7 +47,7 @@ model = dict(
             reduction='sum'),
         loss_wh=dict(type='MSELoss', loss_weight=2.0, reduction='sum'),
         jsd_conf_weight=10.0,
-        jsd_cls_weight=0.0,
+        jsd_cls_weight=10.0,
         cont_cfg=dict(type='1.0', loss_weight=0.0, dim=256)),
     # training and testing settings
     train_cfg=dict(
